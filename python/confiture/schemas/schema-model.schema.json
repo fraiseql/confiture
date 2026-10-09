@@ -163,6 +163,7 @@
         "type_key",
         "raw_sql_type",
         "not_null",
+        "not_null_validated",
         "default",
         "identity",
         "generated",
@@ -201,6 +202,10 @@
         },
         "not_null": {
           "type": "boolean"
+        },
+        "not_null_validated": {
+          "type": "boolean",
+          "description": "False for a NOT NULL PostgreSQL 18 holds NOT VALID: rows from before it may be NULL. True for every other column."
         },
         "default": {
           "type": [
@@ -267,7 +272,10 @@
         "operators",
         "method",
         "where",
-        "key_options"
+        "key_options",
+        "nulls_not_distinct",
+        "temporal",
+        "enforced"
       ],
       "properties": {
         "kind": {
@@ -352,6 +360,18 @@
           "items": {
             "type": "string"
           }
+        },
+        "nulls_not_distinct": {
+          "type": "boolean",
+          "description": "A UNIQUE's `NULLS NOT DISTINCT`: two rows holding NULL in a key column collide. False for every other kind."
+        },
+        "temporal": {
+          "type": "boolean",
+          "description": "A PRIMARY KEY or UNIQUE whose last key is `WITHOUT OVERLAPS`, or a foreign key whose last column pair is `PERIOD` (PostgreSQL 18): an exclusion over a period, not a btree uniqueness."
+        },
+        "enforced": {
+          "type": "boolean",
+          "description": "False for a CHECK or foreign key declared `NOT ENFORCED` (PostgreSQL 18). True for every other constraint."
         }
       }
     },
@@ -368,7 +388,8 @@
         "method",
         "backs_constraint",
         "key_options",
-        "expressions"
+        "expressions",
+        "nulls_not_distinct"
       ],
       "properties": {
         "name": {
@@ -420,6 +441,10 @@
             "type": "boolean"
           },
           "description": "Alongside `columns`: whether each key is an expression rather than a column; null where the reader recorded nothing."
+        },
+        "nulls_not_distinct": {
+          "type": "boolean",
+          "description": "The index's `NULLS NOT DISTINCT` (`pg_index.indnullsnotdistinct`), recorded on any index, constraining only a unique one."
         }
       }
     },

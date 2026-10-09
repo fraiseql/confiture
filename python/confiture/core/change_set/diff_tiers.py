@@ -39,6 +39,7 @@ from confiture.core.schema_change import (
     ColumnChange,
     ColumnDefaultChanged,
     ColumnDropped,
+    ColumnNotNullValidityChanged,
     ColumnNullabilityChanged,
     ColumnOrderChanged,
     ColumnRenamed,
@@ -106,6 +107,14 @@ def _type_change_tier(old: Column, new: Column) -> RiskTier | None:
     return tier_for_type_change(direction, rewrites_table=lock.rewrites_table)
 
 
+def _validity_tier(*, validated: bool) -> RiskTier | None:
+    """``SET NOT NULL`` scans the table to validate; the other way drops the NOT NULL
+    and adds it back NOT VALID, a metadata lock each and no scan."""
+    if validated:
+        return _TIER_BY_KIND["set_not_null"]
+    return worst_tier((_TIER_BY_KIND["drop_not_null"], tier_for_add_constraint(not_valid=True)))
+
+
 def _column_tier(change: ColumnChange) -> RiskTier | None:
     match change:
         case ColumnAdded(_, column):
@@ -120,6 +129,8 @@ def _column_tier(change: ColumnChange) -> RiskTier | None:
             return _type_change_tier(old, new)
         case ColumnNullabilityChanged(nullable=nullable):
             return _TIER_BY_KIND["drop_not_null" if nullable else "set_not_null"]
+        case ColumnNotNullValidityChanged(validated=validated):
+            return _validity_tier(validated=validated)
         case ColumnDefaultChanged(new=new):
             return _TIER_BY_KIND["set_column_default" if new else "drop_column_default"]
         case ColumnOrderChanged():
@@ -209,6 +220,7 @@ def tier_of(change: SchemaChange) -> RiskTier | None:
             | ColumnRenamed()
             | ColumnTypeChanged()
             | ColumnNullabilityChanged()
+            | ColumnNotNullValidityChanged()
             | ColumnDefaultChanged()
             | ColumnOrderChanged()
         ):

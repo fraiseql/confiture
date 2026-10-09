@@ -55,6 +55,7 @@
           "line": 4,
           "name": "id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "UUID",
           "type_key": "uuid",
@@ -71,6 +72,7 @@
           "line": 5,
           "name": "pk_manufacturer",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": true,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -87,6 +89,7 @@
           "line": 6,
           "name": "name",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -103,6 +106,7 @@
           "line": 7,
           "name": "country_code",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "VARCHAR(2)",
           "type_key": "varchar(2)",
@@ -115,16 +119,19 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -132,16 +139,19 @@
             "pk_manufacturer"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -157,6 +167,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_name",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_manufacturer",
             "schema": "catalog"
@@ -175,6 +186,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_manufacturer",
             "schema": "catalog"
@@ -199,6 +211,7 @@
           "line": 4,
           "name": "id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": true,
           "raw_sql_type": "UUID",
           "type_key": "uuid",
@@ -215,6 +228,7 @@
           "line": 5,
           "name": "name",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -231,6 +245,7 @@
           "line": 6,
           "name": "country_code",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "VARCHAR(2)",
           "type_key": "varchar(2)",
@@ -243,16 +258,19 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -268,6 +286,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_prep_tb_manufacturer_name",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_manufacturer",
             "schema": "prep_seed"

@@ -213,7 +213,7 @@
             {
               "name": "qty",
               "type": "INTEGER",
-              "nullable": true,
+              "nullable": false,
               "default": null
             },
             {
@@ -352,7 +352,7 @@
     "ok": true,
     "command": "diff",
     "parser": {
-      "pglast": "8.4",
+      "pglast": "8.5",
       "pg_major": 18
     }
   }

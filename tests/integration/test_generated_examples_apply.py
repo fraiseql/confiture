@@ -31,6 +31,17 @@ TREES = sorted(
 #: asserted to still fail; the day it applies, the entry goes.
 UNDONE: dict[str, str] = {}
 
+#: A pair whose down file needs a newer server than the oldest one confiture
+#: supports: the major it needs, and why. Before that major the down is asserted
+#: to fail; from it on, the pair applies, undoes and applies again.
+NEEDS_SERVER: dict[str, tuple[int, str]] = {
+    "every-change": (
+        18,
+        "its down puts a NOT NULL back NOT VALID (`ADD NOT NULL qty NOT VALID`), "
+        "which only PostgreSQL 18 can hold",
+    ),
+}
+
 
 def _apply(conn: psycopg.Connection, path: Path) -> None:
     for statement in sql_lexer.split_statements(path.read_text()):
@@ -62,7 +73,7 @@ def test_the_pair_applies_on_its_before(fresh_database: str, pair: str) -> None:
     with psycopg.connect(fresh_database, autocommit=True) as conn:
         _apply(conn, GOLDENS / f"{pair}.old.up.sql")
         _apply(conn, GOLDENS / f"{pair}.up.sql")
-        if pair in UNDONE:
+        if pair in UNDONE or _server_major(conn) < NEEDS_SERVER.get(pair, (0, ""))[0]:
             with pytest.raises(psycopg.Error):
                 _apply(conn, GOLDENS / f"{pair}.down.sql")
             return
@@ -70,5 +81,12 @@ def test_the_pair_applies_on_its_before(fresh_database: str, pair: str) -> None:
         _apply(conn, GOLDENS / f"{pair}.up.sql")
 
 
+def _server_major(conn: psycopg.Connection) -> int:
+    row = conn.execute("SHOW server_version_num").fetchone()
+    assert row is not None
+    return int(row[0]) // 10000
+
+
 def test_every_undone_entry_is_a_pair() -> None:
     assert set(UNDONE) <= set(PAIRS)
+    assert set(NEEDS_SERVER) <= set(PAIRS)

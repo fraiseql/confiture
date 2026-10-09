@@ -52,6 +52,7 @@ _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _AT_DROP_CONSTRAINT = _pg_member("AlterTableType", "AT_DropConstraint")
+_AT_VALIDATE_CONSTRAINT = _pg_member("AlterTableType", "AT_ValidateConstraint")
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
 
 _LIKE_DEFAULTS = _pg_member("TableLikeOption", "CREATE_TABLE_LIKE_DEFAULTS")
@@ -514,6 +515,11 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`storage_pinned` reads `RESET (fillfactor)` into a TVIEW's pinned option (100, as "
         "pg_tviews' registry reads it back); a plain table's storage options are not modelled"
     ),
+    "AT_ValidateConstraint": (
+        "`validated_constraint` names the constraint, and the inventory validates a "
+        "NOT NULL the tree added `NOT VALID` under that name (PostgreSQL 18); a CHECK's "
+        "or a foreign key's validity is not modelled, so validating one changes nothing"
+    ),
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
         "read from the live catalogue rather than folded out of DDL"
@@ -538,11 +544,6 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "AT_ReAddComment",
             "AT_ReAddStatistics",
         ),
-    ),
-    (
-        "`VALIDATE CONSTRAINT` turns a `NOT VALID` constraint valid, and the model holds "
-        "no validity: a constraint is the same constraint either way",
-        ("AT_ValidateConstraint",),
     ),
     (
         "`ALTER CONSTRAINT` changes a foreign key's deferrability, which the model holds "
@@ -1189,6 +1190,13 @@ class ColumnFact:
     default expression's text; ``identity`` the kind of ``AS IDENTITY``;
     ``generated`` the expression of a ``GENERATED ALWAYS AS (…)`` column and
     ``generated_kind`` whether it is stored or, from PostgreSQL 18, virtual.
+
+    PostgreSQL 18 also writes a ``NOT NULL`` at table level, naming its column —
+    ``CONSTRAINT nn_a NOT NULL a``, or ``ALTER TABLE … ADD NOT NULL a NOT VALID``.
+    Such a fact names that ``column`` and the ``constraint`` (empty when unnamed),
+    and ``not_null_validated`` is false when it was written ``NOT VALID``; whether
+    PostgreSQL keeps it unvalidated depends on where it was written, which the
+    caller knows (a new table is empty, so ``CREATE TABLE`` validates it).
     """
 
     not_null: bool = False
@@ -1197,12 +1205,18 @@ class ColumnFact:
     generated: str | None = None
     generated_kind: GeneratedKind | None = None
     default_kind: DefaultKind | None = None
+    not_null_validated: bool = True
+    column: str | None = None
+    constraint: str = ""
 
     def merged(self, other: ColumnFact) -> ColumnFact:
         """This fact with *other*'s clauses applied after it, as the grammar reads them."""
         later = other.default is not None
         return ColumnFact(
             not_null=self.not_null or other.not_null,
+            not_null_validated=self.not_null_validated and other.not_null_validated,
+            column=other.column or self.column,
+            constraint=other.constraint or self.constraint,
             default=other.default if later else self.default,
             default_kind=other.default_kind if later else self.default_kind,
             identity=other.identity or self.identity,
@@ -1212,11 +1226,16 @@ class ColumnFact:
 
 
 @dataclass(frozen=True)
-class _Deferrable:
-    """A sibling ``DEFERRABLE`` / ``INITIALLY …`` node, for the constraint before it."""
+class _Attribute:
+    """A sibling attribute node, for the constraint before it.
+
+    ``DEFERRABLE`` / ``INITIALLY …`` set the deferral, ``[NOT] ENFORCED`` the
+    enforcement; ``None`` is a node that says nothing of it.
+    """
 
     deferrable: bool | None = None
     initially_deferred: bool | None = None
+    enforced: bool | None = None
 
 
 #: PostgreSQL's referential-action codes. ``ON DELETE`` and ``ON UPDATE`` are
@@ -1328,6 +1347,15 @@ def _deferral(node: Any) -> Deferral | None:
     return "deferred" if getattr(node, "initdeferred", False) else "immediate"
 
 
+def _enforced(node: Any) -> bool:
+    """Whether a CHECK or foreign key node is enforced: only ``NOT ENFORCED`` says no.
+
+    pglast fills ``is_enforced`` on these two kinds alone, and a node built by hand
+    may leave it unset, which is PostgreSQL's default.
+    """
+    return getattr(node, "is_enforced", None) is not False
+
+
 def _covered(nodes: Any, column: str | None) -> tuple[str, ...]:
     """The columns a constraint covers: the ones it names, or the one it sits on."""
     if column is not None:
@@ -1352,6 +1380,8 @@ def _read_foreign_key(node: Any, column: str | None) -> Constraint:
         on_delete=_fk_action(node.fk_del_action),
         on_update=_fk_action(node.fk_upd_action),
         deferrable=_deferral(node),
+        temporal=bool(node.fk_with_period),
+        enforced=_enforced(node),
     )
 
 
@@ -1364,6 +1394,7 @@ def _read_check(node: Any, _column: str | None) -> Constraint | None:
         name=node.conname or "",
         expression=RawStream()(node.raw_expr),
         deferrable=_deferral(node),
+        enforced=_enforced(node),
     )
 
 
@@ -1399,6 +1430,8 @@ def _read_unique(node: Any, column: str | None) -> Constraint:
         name=node.conname or "",
         columns=_covered(node.keys, column),
         deferrable=_deferral(node),
+        nulls_not_distinct=bool(node.nulls_not_distinct),
+        temporal=bool(node.without_overlaps),
     )
 
 
@@ -1408,11 +1441,21 @@ def _read_primary_key(node: Any, column: str | None) -> Constraint:
         name=node.conname or "",
         columns=_covered(node.keys, column),
         deferrable=_deferral(node),
+        temporal=bool(node.without_overlaps),
     )
 
 
-def _read_not_null(_node: Any, _column: str | None) -> ColumnFact:
-    return ColumnFact(not_null=True)
+def _read_not_null(node: Any, column: str | None) -> ColumnFact:
+    """``NOT NULL``, on its column or naming it at table level, validated unless ``NOT VALID``."""
+    if column is not None:
+        return ColumnFact(not_null=True)
+    named = _covered(getattr(node, "keys", None), None)
+    return ColumnFact(
+        not_null=True,
+        not_null_validated=not getattr(node, "skip_validation", False),
+        column=named[0] if named else None,
+        constraint=getattr(node, "conname", None) or "",
+    )
 
 
 def _read_default(node: Any, _column: str | None) -> ColumnFact:
@@ -1436,23 +1479,31 @@ def _read_generated(node: Any, _column: str | None) -> ColumnFact:
     )
 
 
-def _read_deferrable(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(deferrable=True)
+def _read_deferrable(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(deferrable=True)
 
 
-def _read_not_deferrable(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(deferrable=False)
+def _read_not_deferrable(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(deferrable=False)
 
 
-def _read_initially_deferred(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(initially_deferred=True)
+def _read_initially_deferred(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(initially_deferred=True)
 
 
-def _read_initially_immediate(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(initially_deferred=False)
+def _read_initially_immediate(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(initially_deferred=False)
 
 
-_Read = Constraint | ColumnFact | _Deferrable | None
+def _read_enforced(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(enforced=True)
+
+
+def _read_not_enforced(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(enforced=False)
+
+
+_Read = Constraint | ColumnFact | _Attribute | None
 
 #: What each ``ConstrType`` member becomes in the schema model, by member name so
 #: nothing here compares against a literal ordinal (#192). Every name is also in
@@ -1468,13 +1519,15 @@ MODELLED_CONSTRAINTS: dict[str, Callable[[Any, str | None], _Read]] = {
     "CONSTR_DEFAULT": _read_default,
     "CONSTR_IDENTITY": _read_identity,
     "CONSTR_GENERATED": _read_generated,
-    # On a column, deferrability arrives as sibling nodes after the constraint it
-    # qualifies (`DEFERRABLE INITIALLY DEFERRED` is two of them); at table level
-    # the grammar folds it into the constraint's own fields instead.
+    # On a column, deferrability and enforcement arrive as sibling nodes after the
+    # constraint they qualify (`DEFERRABLE INITIALLY DEFERRED` is two of them); at
+    # table level the grammar folds them into the constraint's own fields instead.
     "CONSTR_ATTR_DEFERRABLE": _read_deferrable,
     "CONSTR_ATTR_NOT_DEFERRABLE": _read_not_deferrable,
     "CONSTR_ATTR_DEFERRED": _read_initially_deferred,
     "CONSTR_ATTR_IMMEDIATE": _read_initially_immediate,
+    "CONSTR_ATTR_ENFORCED": _read_enforced,
+    "CONSTR_ATTR_NOT_ENFORCED": _read_not_enforced,
 }
 
 #: The kinds the model does not carry, and why — a table of **reasons**, so a
@@ -1485,13 +1538,6 @@ NOT_MODELLED_CONSTRAINTS: dict[str, str] = {
     "CONSTR_NULL": (
         "an explicit NULL restates the default; a column is nullable already, and "
         "recording it would make `c INT NULL` and `c INT` compare unequal"
-    ),
-    "CONSTR_ATTR_ENFORCED": (
-        "NOT ENFORCED arrives as a sibling node like deferrability, and the model holds "
-        "no enforcement yet; tracked in #603"
-    ),
-    "CONSTR_ATTR_NOT_ENFORCED": (
-        "the other half of the ENFORCED pair: the model holds no enforcement yet; tracked in #603"
     ),
 }
 
@@ -1513,32 +1559,30 @@ def read_constraint(node: Any, *, column: str | None = None) -> Constraint | Col
     columns for a form that names none; ``None`` for a constraint written at
     table level or added by ``ALTER TABLE``. ``None`` comes back for a kind the
     model declines (see :data:`NOT_MODELLED_CONSTRAINTS`) and for a lone
-    deferrability node, which qualifies a sibling — read a column's clauses
+    attribute node (deferrability, enforcement), which qualifies a sibling — read a column's clauses
     together with :func:`read_column_constraints`.
     """
     read = _read(node, column)
-    return None if isinstance(read, _Deferrable) else read
+    return None if isinstance(read, _Attribute) else read
 
 
 def model_holds(node: Any) -> bool:
     """Whether what :func:`read_constraint` reads from *node* is all the node says.
 
-    The model carries a foreign key's columns, target, actions and deferral. It
-    does not carry a ``MATCH`` other than ``SIMPLE`` (the default), the column
-    list of ``ON DELETE SET NULL (…)``, or ``NOT ENFORCED``: a key rewritten from
-    the model would silently lose them.
+    The model carries a foreign key's columns, target, actions, deferral and
+    ``PERIOD`` and enforcement. It does not carry a ``MATCH`` other than ``SIMPLE``
+    (the default) or the column list of ``ON DELETE SET NULL (…)``: a key rewritten
+    from the model would silently lose them.
     """
     if getattr(node, "pktable", None) is None:
         return True
-    return (
-        node.fk_matchtype in ("s", "", None)
-        and not node.fk_del_set_cols
-        and getattr(node, "is_enforced", True) is not False
-    )
+    return node.fk_matchtype in ("s", "", None) and not node.fk_del_set_cols
 
 
-def _deferred(constraint: Constraint, attribute: _Deferrable) -> Constraint:
-    """*constraint* as a sibling ``DEFERRABLE`` / ``INITIALLY …`` node leaves it."""
+def _qualified(constraint: Constraint, attribute: _Attribute) -> Constraint:
+    """*constraint* as a sibling attribute node leaves it."""
+    if attribute.enforced is not None:
+        constraint = replace(constraint, enforced=attribute.enforced)
     deferrable = constraint.deferrable is not None
     initially = constraint.deferrable == "deferred"
     if attribute.deferrable is not None:
@@ -1555,7 +1599,7 @@ def _deferred(constraint: Constraint, attribute: _Deferrable) -> Constraint:
 def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, ...]]:
     """Every clause written on one column: what it says of the column, and of the table.
 
-    The clauses are read in order, because a deferrability node qualifies the
+    The clauses are read in order, because an attribute node qualifies the
     constraint written before it. ``is_not_null`` and ``raw_default`` — the
     fields a ``ColumnDef`` built by hand may carry instead of clause nodes — are
     read too.
@@ -1574,8 +1618,8 @@ def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, 
             fact = fact.merged(read)
         elif isinstance(read, Constraint):
             constraints.append(read)
-        elif isinstance(read, _Deferrable) and constraints:
-            constraints[-1] = _deferred(constraints[-1], read)
+        elif isinstance(read, _Attribute) and constraints:
+            constraints[-1] = _qualified(constraints[-1], read)
     return fact, tuple(constraints)
 
 
@@ -1600,6 +1644,7 @@ def read_index(stmt: Any, *, table: RelationName) -> Index:
         method=stmt.accessMethod,
         key_options=options if any(options) else (),
         expressions=tuple(not elem.name for elem in elements),
+        nulls_not_distinct=bool(stmt.nulls_not_distinct),
     )
 
 
@@ -1651,6 +1696,14 @@ def dropped_constraint(cmd: Any) -> str | None:
     dependency graph, which :class:`ObjectEdit` does not model either.
     """
     if enum_int(getattr(cmd, "subtype", None)) != _AT_DROP_CONSTRAINT:
+        return None
+    name = getattr(cmd, "name", None)
+    return str(name) if name else None
+
+
+def validated_constraint(cmd: Any) -> str | None:
+    """The constraint an ``ALTER TABLE … VALIDATE CONSTRAINT`` names, else ``None``."""
+    if enum_int(getattr(cmd, "subtype", None)) != _AT_VALIDATE_CONSTRAINT:
         return None
     name = getattr(cmd, "name", None)
     return str(name) if name else None

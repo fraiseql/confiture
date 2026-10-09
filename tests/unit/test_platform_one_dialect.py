@@ -64,6 +64,12 @@ EXAMPLES: dict[type, tuple[Callable[[], object], platform.ObjectRef]] = {
         ),
         ITEM,
     ),
+    platform.ColumnNotNullValidityChanged: (
+        lambda: platform.ColumnNotNullValidityChanged(
+            RelationName("app", "item"), "label", validated=True
+        ),
+        ITEM,
+    ),
     platform.ColumnDefaultChanged: (
         lambda: platform.ColumnDefaultChanged(RelationName("app", "item"), "label", None, "'x'"),
         ITEM,

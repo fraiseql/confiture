@@ -26,7 +26,7 @@ CREATE TABLE things (
     status TEXT DEFAULT 'open',
     pid INT,
     code TEXT,
-    qty INT,
+    qty INT NOT NULL,
     span TSRANGE,
     CONSTRAINT things_new_fk FOREIGN KEY (pid) REFERENCES parent (id) ON DELETE CASCADE,
     CONSTRAINT things_new_ck CHECK (qty >= 0),

@@ -195,6 +195,12 @@ class Column:
     set it. ``default`` is the default expression's text, ``identity`` the kind
     of ``GENERATED … AS IDENTITY``, ``generated`` the expression of a
     ``GENERATED ALWAYS AS (…)`` column and ``generated_kind`` how it is held.
+    ``not_null_validated`` is false for a ``NOT NULL`` PostgreSQL 18 holds ``NOT
+    VALID`` (``ALTER TABLE … ADD NOT NULL c NOT VALID``): ``attnotnull`` is set, yet
+    the rows that were there may hold NULLs. It is true for every other column —
+    a nullable one has no NOT NULL to validate, and a server before 18 cannot
+    hold one unvalidated. The constraint's *name* is not read: the guarantee is
+    what a reader trusts, and most NOT NULLs are unnamed.
     """
 
     name: str
@@ -204,6 +210,7 @@ class Column:
     type_key: str | None = None
     raw_sql_type: str | None = None
     not_null: bool = False
+    not_null_validated: bool = True
     default: str | None = None
     identity: IdentityKind | None = None
     generated: str | None = None
@@ -247,6 +254,20 @@ class Constraint:
     on :class:`Index`; ``operators`` runs alongside too, the operator each element
     is compared with (``&&``, ``OPERATOR(pg_catalog.=)``). ``method`` is its index
     access method and ``where`` its partial predicate, rendered.
+
+    ``nulls_not_distinct`` is a ``UNIQUE … NULLS NOT DISTINCT``: two rows holding
+    ``NULL`` in a key column collide. No other kind can say it.
+
+    ``temporal`` is set on a PRIMARY KEY or UNIQUE whose last key is ``WITHOUT
+    OVERLAPS``, and on a foreign key whose last column pair is ``PERIOD``
+    (PostgreSQL 18): such a key is an exclusion over its period, not a btree
+    uniqueness — two rows may share the other keys when their periods do not
+    overlap — so a temporal key and a plain one on the same columns are two
+    constraints.
+
+    ``enforced`` is false for a CHECK or foreign key declared ``NOT ENFORCED``
+    (PostgreSQL 18): the database then guarantees nothing it says. Every other
+    constraint, and every one a server before 18 holds, is enforced.
     """
 
     kind: ConstraintKind
@@ -262,6 +283,9 @@ class Constraint:
     method: str | None = None
     where: str | None = None
     key_options: tuple[str, ...] = ()
+    nulls_not_distinct: bool = False
+    temporal: bool = False
+    enforced: bool = True
 
 
 @dataclass(frozen=True)
@@ -277,6 +301,8 @@ class Index:
     ``columns``: what each key's element writes after the key — its collation,
     operator class and ordering (``gin_trgm_ops``, ``DESC NULLS LAST``), ``""``
     for a key that writes none, and ``()`` when no key writes any.
+    ``nulls_not_distinct`` is its ``NULLS NOT DISTINCT``, which PostgreSQL records on
+    any index and which constrains only a unique one.
     """
 
     name: str | None
@@ -291,6 +317,7 @@ class Index:
     #: column. ``None`` where the reader recorded nothing (a model written
     #: before it did), and a key shaped like an identifier is then a column.
     expressions: tuple[bool, ...] | None = None
+    nulls_not_distinct: bool = False
 
 
 @dataclass(frozen=True)
@@ -811,7 +838,11 @@ def _relation_from(data: dict[str, Any] | str | None) -> RelationName | None:
 
 
 def _constraint_from(data: dict[str, Any]) -> Constraint:
-    """A constraint from its wire; one written before EXCLUDE was modelled reads without it."""
+    """A constraint from its wire.
+
+    One written before EXCLUDE was modelled reads without it, and one written
+    before enforcement was reads as enforced: the model's default.
+    """
     return Constraint(
         **{
             **data,

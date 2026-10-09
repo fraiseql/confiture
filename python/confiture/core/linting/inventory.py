@@ -29,6 +29,7 @@ from pglast.stream import RawStream
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
     ColumnEdit,
+    ColumnFact,
     ObjectEdit,
     added_constraint,
     column_edit,
@@ -47,6 +48,7 @@ from confiture.core.ddl_walk import (
     storage_pinned,
     tview_calls,
     tview_options,
+    validated_constraint,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -174,6 +176,9 @@ class SchemaObject:
     #: grammar allowed them to be written — on a column, at table level, or in a
     #: later ``ALTER TABLE … ADD CONSTRAINT``.
     constraints: list[Constraint] = field(default_factory=list)
+    #: The NOT NULL constraints written at table level (PostgreSQL 18), name -> the
+    #: column each covers: what ``ALTER TABLE … VALIDATE CONSTRAINT`` names.
+    not_null_constraints: dict[str, str] = field(default_factory=dict)
     #: A table's indexes, folded on from their own ``CREATE INDEX`` statements.
     indexes: list[Index] = field(default_factory=list)
     #: The file and line each of those statements begins on — where a finding
@@ -497,7 +502,9 @@ def _mark_primary_key(table: SchemaObject, constraint: Constraint) -> None:
     table.has_primary_key = True
     covered = set(constraint.columns)
     table.columns = [
-        replace(column, primary_key=True, not_null=True) if column.folded in covered else column
+        replace(column, primary_key=True, not_null=True, not_null_validated=True)
+        if column.folded in covered
+        else column
         for column in table.columns
     ]
 
@@ -506,8 +513,21 @@ def _drop_constraint(table: SchemaObject, name: str) -> None:
     """Remove the constraint named *name*; a primary key's columns stay ``NOT NULL``.
 
     Measured on PostgreSQL 18.4: dropping a primary key leaves its columns'
-    not-null constraints in place.
+    not-null constraints in place, and dropping a not-null constraint — by the name
+    the tree gave it or PostgreSQL's ``<table>_<column>_not_null`` — makes its column
+    nullable.
     """
+    column = table.not_null_constraints.pop(name, None) or next(
+        (
+            c.folded
+            for c in table.columns
+            if c.not_null and name == f"{table.folded_name}_{c.folded}_not_null"
+        ),
+        None,
+    )
+    if column is not None:
+        _edited(table, column, not_null=False, not_null_validated=True)
+        return
     dropped = [c for c in table.constraints if c.name == name]
     if not dropped:
         return
@@ -515,6 +535,24 @@ def _drop_constraint(table: SchemaObject, name: str) -> None:
     if any(c.kind == "primary_key" for c in dropped):
         table.has_primary_key = False
         table.columns = [replace(column, primary_key=False) for column in table.columns]
+
+
+def _not_null_written(table: SchemaObject, fact: ColumnFact, *, validated: bool) -> None:
+    """A ``NOT NULL`` written at table level (PostgreSQL 18), on the column it names.
+
+    It is recorded under its name — PostgreSQL's ``<table>_<column>_not_null`` when
+    the tree wrote none — for a later ``VALIDATE CONSTRAINT``. On a column that is
+    ``NOT NULL`` already it changes nothing: PostgreSQL keeps the one it has.
+    """
+    if fact.column is None or not fact.not_null:
+        return
+    held = next((c for c in table.columns if c.folded == fact.column), None)
+    if held is None:
+        return
+    name = fact.constraint or f"{table.folded_name}_{fact.column}_not_null"
+    table.not_null_constraints[name] = fact.column
+    if not held.not_null:
+        _edited(table, fact.column, not_null=True, not_null_validated=validated)
 
 
 def _append_column(sql: str, table: SchemaObject, node: Any, *, file: str | None = None) -> None:
@@ -640,6 +678,7 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         parent=_parent_name(stmt),
         inherits=_inherited_names(stmt),
     )
+    not_nulls: list[ColumnFact] = []
     for elt in stmt.tableElts or []:
         kind = type(elt).__name__
         if kind == "ColumnDef":
@@ -648,6 +687,11 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
             read = read_constraint(elt)
             if isinstance(read, Constraint):
                 _add_constraints(table, (read,))
+            elif isinstance(read, ColumnFact):
+                not_nulls.append(read)
+    for fact in not_nulls:
+        # A new table is empty: PostgreSQL validates a `NOT VALID` written here.
+        _not_null_written(table, fact, validated=True)
     return table
 
 
@@ -887,11 +931,12 @@ def _edited(table: SchemaObject, column_name: str | None, **changes: Any) -> Non
 
 
 def _set_not_null(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
-    _edited(table, edit.column, not_null=True)
+    """``SET NOT NULL`` scans the table: on PostgreSQL 18 it validates a ``NOT VALID`` one."""
+    _edited(table, edit.column, not_null=True, not_null_validated=True)
 
 
 def _drop_not_null(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
-    _edited(table, edit.column, not_null=False)
+    _edited(table, edit.column, not_null=False, not_null_validated=True)
 
 
 def _set_default(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
@@ -945,6 +990,12 @@ def _apply_alter(parsed: ParsedFile, stmt: Any, inventory: Inventory) -> None:
             read = read_constraint(node)
             if isinstance(read, Constraint):
                 _add_constraints(table, (read,))
+            elif isinstance(read, ColumnFact):
+                _not_null_written(table, read, validated=read.not_null_validated)
+            continue
+        if (validated := validated_constraint(cmd)) is not None:
+            if (column := table.not_null_constraints.get(validated)) is not None:
+                _edited(table, column, not_null_validated=True)
             continue
         dropped = dropped_constraint(cmd)
         if dropped is not None:

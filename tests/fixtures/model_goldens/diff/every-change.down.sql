@@ -29,6 +29,10 @@ ALTER TABLE things ALTER COLUMN status SET DEFAULT 'new';
 
 ALTER TABLE things ALTER COLUMN size TYPE VARCHAR(50);
 
+-- confiture:tier reversible
+ALTER TABLE things ALTER COLUMN qty DROP NOT NULL;
+ALTER TABLE things ADD NOT NULL qty NOT VALID;
+
 -- confiture:tier lock_risky
 ALTER TABLE things ALTER COLUMN note SET NOT NULL;
 

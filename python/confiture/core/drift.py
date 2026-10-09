@@ -39,6 +39,7 @@ from confiture.core.schema_change import (
     ColumnAdded,
     ColumnDefaultChanged,
     ColumnDropped,
+    ColumnNotNullValidityChanged,
     ColumnNullabilityChanged,
     ColumnOrderChanged,
     ColumnRenamed,
@@ -548,6 +549,8 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, DriftSeverity] | str]
     ColumnRenamed: "a database renames nothing by similarity: drift's policy pairs no rename",
     ColumnTypeChanged: (DriftType.TYPE_MISMATCH, DriftSeverity.WARNING),
     ColumnNullabilityChanged: (DriftType.NULLABLE_MISMATCH, DriftSeverity.WARNING),
+    # A NOT NULL the database holds NOT VALID may hold NULLs: still a nullability.
+    ColumnNotNullValidityChanged: (DriftType.NULLABLE_MISMATCH, DriftSeverity.WARNING),
     ColumnDefaultChanged: (DriftType.DEFAULT_MISMATCH, DriftSeverity.WARNING),
     ColumnOrderChanged: (DriftType.COLUMN_ORDER_MISMATCH, DriftSeverity.WARNING),
     IndexAdded: (DriftType.MISSING_INDEX, DriftSeverity.WARNING),
@@ -603,6 +606,7 @@ _ON_TABLE = (
     ColumnDropped,
     ColumnTypeChanged,
     ColumnNullabilityChanged,
+    ColumnNotNullValidityChanged,
     ColumnDefaultChanged,
     ColumnOrderChanged,
     IndexAdded,
@@ -974,6 +978,21 @@ def _column_finding(
             expected=f"nullable={nullable}",
             actual=f"nullable={not nullable}",
             message=f"Column '{name}' nullable mismatch: expected {nullable}, got {not nullable}",
+        )
+    if isinstance(change, ColumnNotNullValidityChanged) and change.column == col:
+        validated = change.validated
+        return DriftItem(
+            drift_type=DriftType.NULLABLE_MISMATCH,
+            severity=DriftSeverity.WARNING,
+            object_name=name,
+            subject=subject,
+            expected=f"not_null_validated={validated}",
+            actual=f"not_null_validated={not validated}",
+            message=(
+                f"Column '{name}' NOT NULL is not validated: it may hold NULLs"
+                if validated
+                else f"Column '{name}' NOT NULL is validated, where the DDL adds it NOT VALID"
+            ),
         )
     if isinstance(change, ColumnDefaultChanged) and change.column == col:
         return DriftItem(

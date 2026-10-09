@@ -26,6 +26,7 @@ from confiture.core.schema_change import (
     ColumnAdded,
     ColumnDefaultChanged,
     ColumnDropped,
+    ColumnNotNullValidityChanged,
     ColumnNullabilityChanged,
     ColumnOrderChanged,
     ColumnRenamed,
@@ -113,6 +114,7 @@ def _rank(change: SchemaChange) -> int:
             | ColumnRenamed()
             | ColumnTypeChanged()
             | ColumnNullabilityChanged()
+            | ColumnNotNullValidityChanged()
             | ColumnDefaultChanged()
             | ColumnOrderChanged()
             | IndexAdded()
@@ -161,6 +163,7 @@ _EDITS = (
     ColumnRenamed,
     ColumnTypeChanged,
     ColumnNullabilityChanged,
+    ColumnNotNullValidityChanged,
     ColumnDefaultChanged,
     ColumnOrderChanged,
 )
