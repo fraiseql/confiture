@@ -7,8 +7,6 @@ neither form, so a key that gained or lost the clause was the same key to
 statement that changes the clause in place, so a change is the key's drop and add.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -10,8 +10,6 @@ NULL`` validate it. Two sides that differ in it alone are one
 the ``nullable_mismatch`` the column's nullability already uses.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from unittest.mock import MagicMock
 

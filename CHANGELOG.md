@@ -14,6 +14,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **⚠️ The schema model holds what PostgreSQL 18 says of a constraint** (#623, #603, #604,
+  #605). Four facts the model had nowhere to hold, so two schemas that differ in them compared
+  equal. The model's wire (`SchemaModel.to_json()`, `schema-model.schema.json`) gains five
+  required booleans: `Constraint.nulls_not_distinct`, `Constraint.temporal`,
+  `Constraint.enforced`, `Index.nulls_not_distinct` and `Column.not_null_validated`; a wire
+  written before them reads with each default (`false`, `false`, `true`, `false`, `true`). The
+  model goldens and the platform pins move for these keys alone; no drift kind or severity
+  changes, and `migrate diff` gains one change, `CHANGE_COLUMN_NOT_NULL_VALIDITY`.
+
+  - **`NULLS NOT DISTINCT` is in the schema model** (#623). `Constraint.nulls_not_distinct` and `Index.nulls_not_distinct` are read from DDL and
+    from a live database (`pg_get_constraintdef` / `pg_get_indexdef`, i.e. `pg_index.indnullsnotdistinct`),
+    so a unique key that gains or loses the clause is a change to `migrate diff` and to `confiture
+    drift`. No PostgreSQL statement changes it in place, so the change is the key's drop and
+    re-creation (`DROP_INDEX` + `ADD_INDEX`, or `DROP_UNIQUE_CONSTRAINT` + `ADD_UNIQUE_CONSTRAINT`),
+    and drift reports it with the kinds it already has (`constraint_mismatch`, `missing_index` +
+    `extra_index`). Generated DDL writes the clause. The model's wire gains `nulls_not_distinct` on
+    every constraint and index (`schema-model.schema.json`, the model goldens); a wire written
+    before it reads as `false`. `softdel_002` reads the flag from the model.
+
+  - **Temporal keys are modelled: `WITHOUT OVERLAPS` and `PERIOD` (#604).** PostgreSQL 18's
+    `PRIMARY KEY (id, valid WITHOUT OVERLAPS)` is an exclusion over the period, not a btree
+    uniqueness, and was read as `PRIMARY KEY (id, valid)`: drift saw no change between the two,
+    a reader of the model saw a uniqueness that is not there, and generated DDL (and
+    `build.two_pass`) wrote the plain key. `Constraint.temporal` is read from the tree and,
+    through `pg_get_constraintdef`, from the catalog; `migrate diff` replaces a key that gains or
+    loses its period, and drift reports it as `constraint_mismatch` (critical), as it does any
+    other key that says something else under its name. The model's wire gains `temporal` on every
+    constraint, so every model golden and `schema-model.schema.json` change; a change payload's
+    `details` carry `"temporal": true` on a temporal key only, so no payload golden changes.
+
+  - **A NOT ENFORCED CHECK or foreign key is no longer the enforced one** (#603). PostgreSQL 18
+    lets either be declared `NOT ENFORCED`; the model now holds it as `Constraint.enforced`
+    (`true` by default), read from the tree wherever the grammar puts the clause and from the
+    catalog through `pg_get_constraintdef`, by the one constraint reader. A constraint that stops
+    or starts being enforced is replaced by `migrate diff` (drop, then add with the clause) and
+    reported by `confiture drift` as the existing `constraint_mismatch` (critical). `build.two_pass`
+    now moves a `NOT ENFORCED` key like any other. **Model wire:** every constraint in
+    `SchemaModel.to_json()` carries `"enforced"`, and `schema-model.schema.json` requires it; a
+    model written before reads as enforced. The model goldens are refreshed for that key alone.
+
+  - **A `NOT NULL … NOT VALID` column reads as one (#605).** PostgreSQL 18 keeps
+    `attnotnull` true for a NOT NULL added `NOT VALID` while the rows before it may still be
+    NULL, so the model said a guarantee held that did not. `Column.not_null_validated` (true
+    unless the NOT NULL is held unvalidated) is read live from the constraint's own row
+    (`contype = 'n'`, `convalidated`; before 18 there is none and every NOT NULL reads
+    validated) and from the tree: `ALTER TABLE … ADD [CONSTRAINT n] NOT NULL c NOT VALID`
+    leaves it false, `VALIDATE CONSTRAINT n` and `SET NOT NULL` validate it, and a table-level
+    `NOT NULL c` — ignored until now — makes the column NOT NULL. Two sides that differ in it
+    alone are a `ColumnNotNullValidityChanged` (`CHANGE_COLUMN_NOT_NULL_VALIDITY`, `VALID` /
+    `NOT VALID`): `SET NOT NULL` validates, the other way drops the NOT NULL and adds it back
+    `NOT VALID`. Drift reports it as the column's `nullable_mismatch` (warning), the kind and
+    severity a nullability change already has. The constraint's name is not modelled. The
+    model goldens and `schema-model.schema.json` carry the new field.
+
+### Changed
+
+- **pglast 8.5** (`uv.lock`; the floor stays `>=8.1`). Every JSON payload's `parser` key
+  reads `"pglast": "8.5"`, so the integration goldens move for that key alone. 8.5's
+  libpg_query writes a trigger function's implicit `TG_*` datums as valid JSON, so
+  `plpgsql_parse`'s brace repair no longer fires on it; it stays for 8.1–8.4, and the five
+  tests that need the defect skip on 8.5.
+
 ## [1.32.0] - 2026-10-09
 
 **Seeds that lose rows, translations that miss, projections that store a session.** Level 5
@@ -152,16 +216,6 @@ resolves TVIEWs. pg_tviews 0.1.0-beta.25: the backing view is the registry's (�
   `error`, which refuses at create a TVIEW reading a table no cascade reaches unless it declares a
   policy; a policy set with `SET pg_tviews.uncascaded_policy` before a `CREATE TABLE … AS` is a
   session setting confiture does not model, and pins nothing.
-- **`NULLS NOT DISTINCT` is in the schema model** (#623; ⚠️ owner-gated: moves fraisier
-  contracts). `Constraint.nulls_not_distinct` and `Index.nulls_not_distinct` are read from DDL and
-  from a live database (`pg_get_constraintdef` / `pg_get_indexdef`, i.e. `pg_index.indnullsnotdistinct`),
-  so a unique key that gains or loses the clause is a change to `migrate diff` and to `confiture
-  drift`. No PostgreSQL statement changes it in place, so the change is the key's drop and
-  re-creation (`DROP_INDEX` + `ADD_INDEX`, or `DROP_UNIQUE_CONSTRAINT` + `ADD_UNIQUE_CONSTRAINT`),
-  and drift reports it with the kinds it already has (`constraint_mismatch`, `missing_index` +
-  `extra_index`). Generated DDL writes the clause. The model's wire gains `nulls_not_distinct` on
-  every constraint and index (`schema-model.schema.json`, the model goldens); a wire written
-  before it reads as `false`. `softdel_002` reads the flag from the model.
 
 - **`soft_delete: {tables: written}`: judge the tables the tree tombstones** (#640). The `softdel`
   rules judged every table that *has* the tombstone column; a tree that puts the audit columns on
@@ -229,30 +283,6 @@ itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#59
 `build --list-files --compare-to` (#580). CI runs on PostgreSQL 16 and 18.
 
 ### Added
-
-- **Temporal keys are modelled: `WITHOUT OVERLAPS` and `PERIOD` (#604).** PostgreSQL 18's
-  `PRIMARY KEY (id, valid WITHOUT OVERLAPS)` is an exclusion over the period, not a btree
-  uniqueness, and was read as `PRIMARY KEY (id, valid)`: drift saw no change between the two,
-  a reader of the model saw a uniqueness that is not there, and generated DDL (and
-  `build.two_pass`) wrote the plain key. `Constraint.temporal` is read from the tree and,
-  through `pg_get_constraintdef`, from the catalog; `migrate diff` replaces a key that gains or
-  loses its period, and drift reports it as `constraint_mismatch` (critical), as it does any
-  other key that says something else under its name. The model's wire gains `temporal` on every
-  constraint, so every model golden and `schema-model.schema.json` change; a change payload's
-  `details` carry `"temporal": true` on a temporal key only, so no payload golden changes.
-- **A `NOT NULL … NOT VALID` column reads as one (#605).** PostgreSQL 18 keeps
-  `attnotnull` true for a NOT NULL added `NOT VALID` while the rows before it may still be
-  NULL, so the model said a guarantee held that did not. `Column.not_null_validated` (true
-  unless the NOT NULL is held unvalidated) is read live from the constraint's own row
-  (`contype = 'n'`, `convalidated`; before 18 there is none and every NOT NULL reads
-  validated) and from the tree: `ALTER TABLE … ADD [CONSTRAINT n] NOT NULL c NOT VALID`
-  leaves it false, `VALIDATE CONSTRAINT n` and `SET NOT NULL` validate it, and a table-level
-  `NOT NULL c` — ignored until now — makes the column NOT NULL. Two sides that differ in it
-  alone are a `ColumnNotNullValidityChanged` (`CHANGE_COLUMN_NOT_NULL_VALIDITY`, `VALID` /
-  `NOT VALID`): `SET NOT NULL` validates, the other way drops the NOT NULL and adds it back
-  `NOT VALID`. Drift reports it as the column's `nullable_mismatch` (warning), the kind and
-  severity a nullability change already has. The constraint's name is not modelled. The
-  model goldens and `schema-model.schema.json` carry the new field.
 
 - **`build --list-files --compare-to <ref>` proves a renumbering kept the build order** (#580).
   A renumbering that arrives by merge, vendoring or a hand `git mv` was checked by diffing two
@@ -336,7 +366,6 @@ itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#59
   masked, control characters written as escapes) unless it is `Markup` confiture built; ty
   refuses a computed `str` handed to the printer anywhere under `cli/`. `--help` output is
   byte-identical; the output fixes are below.
-
 
 - ⚠️ **The backup hook's dump is zstd-compressed by `pg_dump` and never passes through
   confiture's memory: the default file is `<migration>.sql.zst`, no longer `.sql.gz`.**
@@ -496,7 +525,6 @@ itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#59
 - **Values printed as markup are printed as data**: an idempotency finding's SQL snippet,
   three of the seed applier's lines, and `migrate generate`'s template preview (a `[…]` in
   them was eaten); the lock-timeout tip no longer multiplies an unset timeout.
-
 
 - **`--format csv` on stdout is the CSV, byte for byte (#602).** It was printed through a
   Rich console, which read `[legacy]` in a value as a markup tag and dropped it, and wrapped
@@ -888,7 +916,6 @@ than 0.1.0-beta.19 where it reads TVIEWs live (`CONFIG_014`).
   `--fail-on-warning` failed on a database built from its own tree. The
   TVIEW's backing view and the triggers pg_tviews puts on each base table are no
   longer read as the tree's either.
-
 
 - **`build.two_pass` moves each foreign key without changing it** (#511). Two-pass
   builds read foreign keys with regexes, and five ordinary shapes came out wrong.

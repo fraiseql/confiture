@@ -35,6 +35,7 @@
           "line": 4,
           "name": "id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": true,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -51,6 +52,7 @@
           "line": 7,
           "name": "pk_comment",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "UUID",
           "type_key": "uuid",
@@ -67,6 +69,7 @@
           "line": 10,
           "name": "post_id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -83,6 +86,7 @@
           "line": 11,
           "name": "user_id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -99,6 +103,7 @@
           "line": 14,
           "name": "content",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -115,6 +120,7 @@
           "line": 17,
           "name": "created_at",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -131,6 +137,7 @@
           "line": 18,
           "name": "updated_at",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -143,16 +150,19 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -160,16 +170,19 @@
             "pk_comment"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -177,11 +190,13 @@
             "post_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -192,6 +207,7 @@
             "name": "posts",
             "schema": null
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -199,11 +215,13 @@
             "user_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -214,6 +232,7 @@
             "name": "users",
             "schema": null
           },
+          "temporal": false,
           "where": null
         }
       ],
@@ -229,6 +248,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_pk_comment",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -247,6 +267,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_post_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -265,6 +286,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_user_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -285,6 +307,7 @@
           ],
           "method": "btree",
           "name": "idx_comments_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -309,6 +332,7 @@
           "line": 4,
           "name": "id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": true,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -325,6 +349,7 @@
           "line": 7,
           "name": "pk_post",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "UUID",
           "type_key": "uuid",
@@ -341,6 +366,7 @@
           "line": 10,
           "name": "slug",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -357,6 +383,7 @@
           "line": 13,
           "name": "user_id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -373,6 +400,7 @@
           "line": 16,
           "name": "title",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -389,6 +417,7 @@
           "line": 17,
           "name": "content",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -405,6 +434,7 @@
           "line": 20,
           "name": "published_at",
           "not_null": false,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -421,6 +451,7 @@
           "line": 21,
           "name": "created_at",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -437,6 +468,7 @@
           "line": 22,
           "name": "updated_at",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -449,16 +481,19 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -466,16 +501,19 @@
             "pk_post"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -483,16 +521,19 @@
             "slug"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -500,11 +541,13 @@
             "user_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -515,6 +558,7 @@
             "name": "users",
             "schema": null
           },
+          "temporal": false,
           "where": null
         }
       ],
@@ -530,6 +574,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_pk_post",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -548,6 +593,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_slug",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -566,6 +612,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_user_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -586,6 +633,7 @@
           ],
           "method": "btree",
           "name": "idx_posts_published_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -606,6 +654,7 @@
           ],
           "method": "btree",
           "name": "idx_posts_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -630,6 +679,7 @@
           "line": 4,
           "name": "id",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": true,
           "raw_sql_type": "BIGINT",
           "type_key": "bigint",
@@ -646,6 +696,7 @@
           "line": 7,
           "name": "pk_user",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "UUID",
           "type_key": "uuid",
@@ -662,6 +713,7 @@
           "line": 10,
           "name": "slug",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -678,6 +730,7 @@
           "line": 13,
           "name": "username",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -694,6 +747,7 @@
           "line": 14,
           "name": "email",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -710,6 +764,7 @@
           "line": 15,
           "name": "bio",
           "not_null": false,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TEXT",
           "type_key": "text",
@@ -726,6 +781,7 @@
           "line": 18,
           "name": "created_at",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -742,6 +798,7 @@
           "line": 19,
           "name": "updated_at",
           "not_null": true,
+          "not_null_validated": true,
           "primary_key": false,
           "raw_sql_type": "TIMESTAMPTZ",
           "type_key": "timestamptz",
@@ -754,16 +811,19 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -771,16 +831,19 @@
             "pk_user"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -788,16 +851,19 @@
             "slug"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -805,16 +871,19 @@
             "username"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -822,16 +891,19 @@
             "email"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -847,6 +919,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_pk_user",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -865,6 +938,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_slug",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -883,6 +957,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_username",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -901,6 +976,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -921,6 +997,7 @@
           ],
           "method": "btree",
           "name": "idx_users_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null

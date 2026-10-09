@@ -27,7 +27,7 @@
     "ok": true,
     "command": "migrate fix-signatures",
     "parser": {
-      "pglast": "8.4",
+      "pglast": "8.5",
       "pg_major": 18
     }
   }

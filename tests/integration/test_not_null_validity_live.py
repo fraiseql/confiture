@@ -9,8 +9,6 @@ before 18 cannot express it: there ``attnotnull`` is the whole answer and every
 NOT NULL reads validated.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

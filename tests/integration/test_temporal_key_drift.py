@@ -4,8 +4,6 @@ PostgreSQL 18 only: an older server cannot hold a temporal key, so there is
 nothing to drift from.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

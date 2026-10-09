@@ -8,8 +8,6 @@ holds is enforced — which is the model's default. Either way drift says when t
 tree and the database disagree about it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

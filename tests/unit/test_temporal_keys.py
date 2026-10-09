@@ -7,8 +7,6 @@ there was a uniqueness that is not there, drift saw no change between the two,
 and generated DDL wrote the plain key.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import replace
 from typing import Any

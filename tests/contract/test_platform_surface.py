@@ -220,6 +220,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("method", "str | None"),
         ("where", "str | None"),
         ("key_options", "tuple[str, ...]"),
+        ("nulls_not_distinct", "bool"),
         ("temporal", "bool"),
         ("enforced", "bool"),
     ),
@@ -233,6 +234,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("backs_constraint", "bool"),
         ("key_options", "tuple[str, ...]"),
         ("expressions", "tuple[bool, ...] | None"),
+        ("nulls_not_distinct", "bool"),
     ),
     "Table": (
         ("name", "str"),

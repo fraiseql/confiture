@@ -150,7 +150,7 @@
     "ok": true,
     "command": "diff",
     "parser": {
-      "pglast": "8.4",
+      "pglast": "8.5",
       "pg_major": 18
     }
   }

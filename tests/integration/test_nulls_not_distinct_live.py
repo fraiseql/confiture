@@ -6,8 +6,6 @@ writes it after the key list (``… (a, b) NULLS NOT DISTINCT WHERE …``) and
 which is what the one live reader parses.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

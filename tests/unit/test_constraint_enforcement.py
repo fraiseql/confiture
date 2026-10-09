@@ -9,8 +9,6 @@ reader. A constraint going from enforced to not, or back, is a change: the
 differ replaces it, and drift reports it as the ``constraint_mismatch`` it is.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from unittest.mock import MagicMock
 
