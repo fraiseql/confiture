@@ -36,11 +36,12 @@ dependencies = [
     "psycopg[binary,pool]>=3.1.0",
     "sqlglot>=28.0",
     # PostgreSQL's own parser (libpg_query) — the one parser since 0.50.0 (D13).
-    # One major, uncapped: 8.1 is the first pglast with a cp314 wheel on every
-    # platform confiture ships. Enum members are resolved by name through
+    # One major, uncapped: 8.5 is the first pglast whose libpg_query serialises a
+    # trigger body as valid JSON (#272), with a cp314 wheel on every platform
+    # confiture ships. Enum members are resolved by name through
     # `core/_pglast_enums.py` (`tests/unit/test_pglast_enum_binding.py`), so a
     # later major that renumbers them is caught at first use, not misread.
-    "pglast>=8.1",
+    "pglast>=8.5",
 ]
 
 [project.optional-dependencies]

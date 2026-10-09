@@ -62,35 +62,20 @@ still an expression, where the array *constructor* ``ARRAY[1]`` blanked to
 nothing is not — so the ``ARRAY`` keyword is a candidate only where it follows
 what can end a type name, which is the one place it is written as a suffix.
 
-The serialiser, second (#272).
+The serialiser, second (#272), was fixed upstream. libpg_query once wrote a
+trigger function's implicit ``TG_*`` datums as ``{}}`` — one closing brace too
+many each — so every ``RETURNS TRIGGER`` body went unread. pglast 8.5 serialises
+them as valid JSON, and confiture requires it, so nothing here edits a
+serialisation: one that does not decode raises, and the routine is named as
+unread rather than half-read.
 
-A trigger function's implicit ``TG_*`` datums are written ``{}}`` — one closing
-brace too many each — so ``json.loads`` never reaches the tree, and without the
-repair *every* ``RETURNS TRIGGER`` and ``RETURNS event_trigger`` body goes unread
-whatever it contains. Trigger functions are where a schema keeps its audit
-writes and its cross-table invariants, so that is not a corner.
-
-The same rule decides the repair. The decoder stops at the first character it
-cannot accept, so it names the stray brace exactly and nothing has to be
-guessed at — see :func:`_compile`, and note that a global replace of those
-three characters corrupts an ordinary ``RETURNS void`` body, because that is
-also how a legitimate implicit ``RETURN`` is written.
-
-What the two repairs share is the failure they refuse to become. A qualifier
-blanked too eagerly, or a brace deleted on a hunch, hands back a tree that is
-missing something without saying so — and a routine reported as clean because
-it was never read is the failure both repairs exist to prevent.
-
-Both are reported upstream as
-https://github.com/pganalyze/libpg_query/issues/337, and neither is repaired
-here for want of a better place: confiture depends on ``pglast>=8.1``
-uncapped and confiture cannot ship libpg_query, so a fix that lands upstream
-lands in a future wheel and never in the one an installed environment already
-has. Both repairs are written to retire themselves rather than to be removed —
-a qualifier is blanked only after the compiler refuses the statement as
-written, and a brace is deleted only after the decode fails — so on a
-libpg_query that has neither defect this module compiles once and returns
-``Compiled(tree, statement, (), 0)``.
+The compiler's defect is reported upstream as
+https://github.com/pganalyze/libpg_query/issues/337, and is worked around here
+for want of a better place: confiture cannot ship libpg_query. The workaround is
+written to retire itself rather than to be removed — a qualifier is blanked only
+after the compiler refuses the statement as written — so on a libpg_query
+without the defect this module compiles once and returns
+``Compiled(tree, statement, ())``.
 
 That issue lists a **third** regression which is deliberately *not* repaired
 here: ``RETURN <bare variable>`` comes back with no ``expr`` and no
@@ -139,11 +124,6 @@ _NO_KEYWORD = "NO_KEYWORD"
 #: :data:`_IDENT` by name, and a reserved word's.
 _NOT_A_TYPE_NAME_KIND = frozenset({_NO_KEYWORD, "RESERVED_KEYWORD"})
 
-#: The three characters a mis-serialised datum ends with: an empty object and
-#: one closing brace too many. Only ever deleted at the position the JSON
-#: decoder stopped at — the same three characters are how *valid* output
-#: writes an implicit ``RETURN``, and a global replace corrupts those.
-_STRAY = "{}}"
 _SEMICOLON = "ASCII_59"
 _PERCENT = "ASCII_37"
 #: What ends a declared variable's type: an initialiser (``:=``, ``=``,
@@ -175,13 +155,6 @@ class Compiled:
             ``ARRAY[3]``) and ``VARIADIC`` markers. Empty on every routine the
             compiler accepts as written, which is what makes "nothing was
             rewritten, so nothing was lost" checkable.
-        repaired: Stray closing braces deleted from ``libpg_query``'s
-            serialisation before it would decode — one per implicit datum it
-            mis-writes. Zero on every routine whose JSON is well formed, which
-            is what makes "nothing was deleted, so nothing was invented"
-            checkable. Each repaired datum decodes to ``{}``, so the array
-            keeps its length and its positions but those entries carry
-            nothing: **a datum index is not a fact this tree holds.**
         body: ``[start, end)`` of the body's own text in :attr:`text`, where the
             tree's ``lineno`` 1 begins; ``None`` when no body was found.
         substituted: The declared variables' types written as ``text`` instead,
@@ -196,7 +169,6 @@ class Compiled:
     tree: Any
     text: str
     neutralised: tuple[Span, ...]
-    repaired: int = 0
     body: Span | None = None
     substituted: tuple[Span, ...] = ()
 
@@ -213,40 +185,36 @@ def parse_body(statement: str, *, body_at: int | None = None) -> Compiled:
             by a longer route.
 
     Returns:
-        The tree, the text it came from, the spans blanked to get it, and
-        the stray braces deleted from the serialisation to decode it.
+        The tree, the text it came from, and the spans blanked to get it.
 
     Raises:
         pglast.parser.ParseError: The body is unreadable for a reason blanking
             a qualifier, an array suffix or a ``VARIADIC`` marker does not
             address. The **first** error is re-raised, not
             the rewritten run's: it is the one that describes the real body.
-        json.JSONDecodeError: The serialisation is malformed somewhere that is
-            not the stray brace described above, so what it holds is unknown
-            and the caller is told rather than handed a guess.
+        json.JSONDecodeError: The serialisation is malformed, so what it holds
+            is unknown and the caller is told rather than handed a guess.
     """
     try:
-        tree, repaired = _compile(statement)
+        tree = _compile(statement)
     except pglast.parser.ParseError as first:
         refused = first
     else:
-        return Compiled(tree, statement, (), repaired, _body_span(statement, body_at))
+        return Compiled(tree, statement, (), _body_span(statement, body_at))
 
     candidates = _candidate_spans(statement, body_at)
     blanked = _first_compiling(statement, [_guess(statement, candidates, body_at), candidates])
     if blanked is not None:
         kept = _minimised(statement, blanked)
         text = _edited(statement, kept)
-        tree, repaired = _compile(text)
-        return Compiled(tree, text, tuple(kept), repaired, _body_span(text, body_at))
+        return Compiled(_compile(text), text, tuple(kept), _body_span(text, body_at))
 
     substituted = _substituting(statement, candidates, _declared_types(statement, body_at))
     if substituted is None:
         raise refused
     blanks, types = substituted
     text = _edited(statement, blanks, types)
-    tree, repaired = _compile(text)
-    return Compiled(tree, text, tuple(blanks), repaired, _body_span(text, body_at), tuple(types))
+    return Compiled(_compile(text), text, tuple(blanks), _body_span(text, body_at), tuple(types))
 
 
 def _substituting(
@@ -277,38 +245,15 @@ def _substituting(
     return _minimised(statement, blanks, kept), kept
 
 
-def _compile(text: str) -> tuple[Any, int]:
-    """*text*'s PL/pgSQL tree, and the stray braces deleted to decode it.
+def _compile(text: str) -> Any:
+    """*text*'s PL/pgSQL tree: the one call to the compiler.
 
     ``pglast.parse_plpgsql`` is ``json.loads`` over ``libpg_query``'s
-    serialisation, and that serialisation is not always valid JSON: a trigger
-    function's implicit ``TG_`` datums are written ``{}}``, one closing brace
-    too many each, so unrepaired every ``RETURNS TRIGGER`` and
-    ``RETURNS event_trigger`` body fails to decode (issue #272).
-
-    The decoder is what says where the defect is. It stops at the first
-    character it cannot accept, so ``JSONDecodeError.pos`` names a stray brace
-    exactly, and the three characters ending there are checked before one byte
-    is deleted. That check is the whole design: ``{"PLpgSQL_stmt_return":{}}``
-    — the implicit ``RETURN`` appended to a body that falls off its end — is a
-    legitimate ``{}}`` in the output of very nearly every routine, and a global
-    replace corrupts an ordinary ``RETURNS void`` function outright.
-
-    A serialisation that decodes never enters the loop, so it is returned
-    byte-for-byte whatever it contains. One that does not, and whose defect is
-    not this one, raises: half a tree is not a body this module will hand back.
+    serialisation. A serialisation that does not decode raises
+    :class:`json.JSONDecodeError` and is never edited: half a tree is not a body
+    this module will hand back.
     """
-    raw = pglast.parser.parse_plpgsql_json(text)
-    repaired = 0
-    while True:
-        try:
-            return json.loads(raw), repaired
-        except json.JSONDecodeError as malformed:
-            at = malformed.pos
-            if at < len(_STRAY) - 1 or raw[at - len(_STRAY) + 1 : at + 1] != _STRAY:
-                raise
-            raw = raw[:at] + raw[at + 1 :]
-            repaired += 1
+    return pglast.parse_plpgsql(text)
 
 
 def _first_compiling(statement: str, attempts: list[list[Span]]) -> list[Span] | None:

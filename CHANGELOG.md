@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **pglast 8.5 is the floor** (`pglast>=8.5`). Its libpg_query writes a trigger function's
+  implicit `TG_*` datums as valid JSON, so the brace repair confiture carried since 1.8.0
+  (#272) is gone, with `Compiled.repaired`. A serialisation that does not decode now raises
+  and its routine is reported unread, as any other malformed one was. The compiler's
+  qualified-type and type-substitution workarounds stay: 8.5 still needs them.
+
 ## [1.33.0] - 2026-10-09
 
 **The schema model holds what PostgreSQL 18 says of a constraint.** ⚠️ The model's wire

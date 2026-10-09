@@ -570,7 +570,7 @@ the crate is not the start of a port.
 ### Decision 15: One interpreter, and what confiture executes or prints is a template
 
 **Choice**: confiture declares Python 3.14 alone (one wheel per platform, one CI
-interpreter, `pglast>=8.1`). SQL it composes *and executes* is a `t"…"` handed to
+interpreter, `pglast>=8.5`). SQL it composes *and executes* is a `t"…"` handed to
 psycopg — `{name:i}` an identifier, `{value:l}` a literal, `{fragment:q}` a nested
 template, a bare `{value}` a bound parameter, and raw text only through an explicit
 `Template(text)`. Text it prints goes through `cli.markup.Printer`, which takes a

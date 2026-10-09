@@ -300,7 +300,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         ),
         "severity": "error",
         "exit_code": 5,
-        "resolution_hint": ("Install a pglast release confiture supports (pglast>=8.1)"),
+        "resolution_hint": ("Install a pglast release confiture supports (pglast>=8.5)"),
     },
     {
         "code": "CONFIG_012",
