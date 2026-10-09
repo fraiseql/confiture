@@ -721,6 +721,34 @@ class DependencyCycleError(SchemaError)
 
 Tables whose foreign keys form a cycle: none of them can be loaded first.
 
+## pg_tviews
+
+### `require_supported_pg_tviews_on`
+
+```python
+def require_supported_pg_tviews_on(database: str | Connection) -> None
+```
+
+Refuse *database*'s pg_tviews where confiture cannot read its TVIEWs.
+
+The check every live read of TVIEWs makes first (drift, `migrate up` of a
+TVIEW migration, `introspect`), for a tool that asks it before a deploy:
+a database without pg_tviews passes; one whose `tviews.contract_version()`
+is not the contract confiture reads, or whose registry lacks a column it reads
+(pg_tviews before `MINIMUM_PG_TVIEWS`), is refused. A URL is connected
+to and closed here; a connection is the caller's.
+
+**Raises**
+
+- `ConfigurationError`: `CONFIG_014`, naming the release installed and what it lacks; `CONFIG_006` when the URL does not connect.
+- `TypeError`: a *database* that is neither a URL nor a `Connection`.
+
+### `MINIMUM_PG_TVIEWS`
+
+```python
+MINIMUM_PG_TVIEWS = '0.1.0-beta.26'
+```
+
 ## What a writer may supply
 
 ### `writable_columns`

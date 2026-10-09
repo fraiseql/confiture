@@ -59,6 +59,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
         ],
     ),
     ("Ordering", ["dependency_order", "DependencyCycleError"]),
+    ("pg_tviews", ["require_supported_pg_tviews_on", "MINIMUM_PG_TVIEWS"]),
     (
         "What a writer may supply",
         [
@@ -233,6 +234,8 @@ def _entry(name: str) -> list[str]:
         return [*lines, *_signature(name, obj), "", *_markdown(obj.__doc__)]
     if typing.get_args(obj):
         return [*lines, *_union(name, obj)]
+    if isinstance(obj, str):
+        return [*lines, "```python", f"{name} = {obj!r}", "```"]
     if isinstance(obj, type) and issubclass(obj, enum.Enum):
         members = ", ".join(f"`{member.value}`" for member in obj)
         return [*lines, *_markdown(obj.__doc__), "", f"Members: {members}."]

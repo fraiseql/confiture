@@ -62,3 +62,11 @@ def test_a_registry_without_the_columns_confiture_reads_is_refused(
     assert ", ".join(missing) in str(refused.value)
     assert live_catalog.MINIMUM_PG_TVIEWS == "0.1.0-beta.26"
     assert live_catalog.MINIMUM_PG_TVIEWS in str(refused.value)
+
+
+def test_the_seam_names_the_minimum_and_the_check() -> None:
+    """A deploy tool's doctor asks the question the drift gate asks, by public names."""
+    from confiture import platform
+
+    assert platform.MINIMUM_PG_TVIEWS == live_catalog.MINIMUM_PG_TVIEWS
+    assert callable(platform.require_supported_pg_tviews_on)

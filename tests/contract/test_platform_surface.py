@@ -130,8 +130,10 @@ SEEDS = (
 
 #: What every refusal is: confiture's own error, with a code and a hint.
 ERRORS = ("ConfiturError", "ConfigurationError")
+#: Whether confiture can read a database's pg_tviews: the check its live reads make.
+PG_TVIEWS = ("MINIMUM_PG_TVIEWS", "require_supported_pg_tviews_on")
 
-EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS + ERRORS)
+EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS + ERRORS + PG_TVIEWS)
 
 #: ``str(string_signature(...))`` of every callable the seam defines: each
 #: annotation as its source text (``annotationlib.Format.STRING``).
@@ -143,6 +145,7 @@ SIGNATURES: dict[str, str] = {
     "introspect": (
         "(database: 'str | Connection', *, schemas: 'Sequence[str] | None' = None) -> 'SchemaModel'"
     ),
+    "require_supported_pg_tviews_on": "(database: 'str | Connection') -> 'None'",
     "diff": (
         "(old: 'DiffSide | None', new: 'DiffSide | None', *, env: 'str | None' = None, "
         "project_dir: 'Path | None' = None) -> 'SchemaDiff'"

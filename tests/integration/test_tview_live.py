@@ -582,3 +582,19 @@ def test_a_materialised_pinned_option_changed_by_hand_is_drift(
     assert _materialised_drift(pinned_database, PINNED, test_db_url, tmp_path) == [
         ("tview_option_mismatch", "warning", "public.tv_post"),
     ]
+
+
+def test_the_seam_accepts_a_supported_pg_tviews_by_url_or_connection(reads_database: str) -> None:
+    from confiture import platform
+
+    assert platform.require_supported_pg_tviews_on(reads_database) is None
+    with psycopg.connect(reads_database) as conn:
+        assert platform.require_supported_pg_tviews_on(conn) is None
+
+
+def test_the_seam_accepts_a_database_without_pg_tviews(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    from confiture import platform
+
+    assert platform.require_supported_pg_tviews_on(fresh_database_factory("confiture_tv")) is None

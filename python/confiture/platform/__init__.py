@@ -32,6 +32,7 @@ from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.connection import Connection
 from confiture.core.ddl_objects import DDLObject
 from confiture.core.introspection.dependency_graph import DependencyCycleError, dependency_order
+from confiture.core.live_catalog import MINIMUM_PG_TVIEWS
 from confiture.core.model_facts import (
     NotInModelError,
     column_facts,
@@ -95,7 +96,14 @@ from confiture.core.schema_model import (
     ValueSource,
     View,
 )
-from confiture.core.schema_sources import DiffSide, SchemaSource, diff, introspect, parse_schema
+from confiture.core.schema_sources import (
+    DiffSide,
+    SchemaSource,
+    diff,
+    introspect,
+    parse_schema,
+    require_supported_pg_tviews_on,
+)
 from confiture.core.seed.applier import ApplyResult, apply_seeds
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
@@ -110,6 +118,7 @@ from confiture.models.introspection import TableHints
 from confiture.models.warnings import BuildWarning
 
 __all__ = [
+    "MINIMUM_PG_TVIEWS",
     "ApplyResult",
     "BuildWarning",
     "CheckConstraintAdded",
@@ -189,6 +198,7 @@ __all__ = [
     "introspect",
     "naming_hints",
     "parse_schema",
+    "require_supported_pg_tviews_on",
     "tier_of",
     "validate_seeds",
     "writable_columns",

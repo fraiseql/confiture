@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry qualifies them and spells argument types as `format_type` does. The model's wire
   (`schema-model.schema.json`) gains both keys, required, and a `FunctionRead` definition; a
   wire written before them reads as pinning nothing. No drift kind or severity changes.
+- **`confiture.platform.require_supported_pg_tviews_on(database)` and `MINIMUM_PG_TVIEWS`**: the
+  check every live read of TVIEWs makes, for a deploy tool's doctor to ask before a deploy (a URL
+  or a connection; passes without pg_tviews, `CONFIG_014` otherwise).
 - **`tview_004` and `tview_005` are on by default**: an undeclared function call and an
   undeclared time read in a TVIEW's chain are warnings, as pg_tviews now refuses them.
 
