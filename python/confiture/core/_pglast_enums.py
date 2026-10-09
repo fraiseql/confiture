@@ -169,6 +169,6 @@ def enums_are_usable() -> bool:
             f"pglast {metadata.version('pglast')} does not expose "
             f"{', '.join(MISSING_MEMBERS)}; confiture cannot walk DDL with it.",
             error_code="CONFIG_011",
-            resolution_hint="Install a pglast release confiture supports (pglast>=8.1).",
+            resolution_hint="Install a pglast release confiture supports (pglast>=8.5).",
         )
     return True

@@ -120,7 +120,7 @@ class TestPythonMatrix:
 
 class TestQualityGate:
     def test_one_pglast_major_needs_no_matrix(self) -> None:
-        """``pglast>=8.1`` is one major; the lock pins it and the suite runs it."""
+        """``pglast>=8.5`` is one major; the lock pins it and the suite runs it."""
         data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
         assert "pglast-matrix" not in data["jobs"]
 

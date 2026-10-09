@@ -357,7 +357,7 @@ requires-dist = [
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.26" },
-    { name = "pglast", specifier = ">=8.1" },
+    { name = "pglast", specifier = ">=8.5" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.1.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0" },

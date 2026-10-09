@@ -99,7 +99,7 @@ pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
-pglast = ">=8.1"          # PostgreSQL's own C parser (libpg_query) — the one parser
+pglast = ">=8.5"          # PostgreSQL's own C parser (libpg_query) — the one parser
 
 [project.optional-dependencies]
 ast = []                  # empty alias: an older `fraiseql-confiture[ast]` still resolves
@@ -158,21 +158,19 @@ stdin` block is **blanked, never stripped**: the text pglast reads keeps the fil
 parse cost that file rather than the build.
 
 **One PL/pgSQL compiler call** — `core/plpgsql_parse.parse_body()` returns
-`Compiled(tree, text, neutralised, repaired)`; `tests/unit/test_plpgsql_parse.py` pins
-the two shapes pglast 8 gets wrong. Its catalogue stub refuses any schema-qualified type
+`Compiled(tree, text, neutralised)`; `tests/unit/test_plpgsql_parse.py` pins the
+shapes pglast 8's compiler refuses, and the trigger shapes its serialiser wrote as
+invalid JSON before 8.5 (#272). Its catalogue stub refuses any schema-qualified type
 outside `pg_catalog`/`public` and resolves an array of an unknown type to `_record`,
 so the qualifier and the array suffix are blanked with spaces (offsets kept),
 and which ones to blank is the compiler's answer — each blank is tested by putting it
-back — never a model of PL/pgSQL's grammar. Its serialiser writes a trigger's implicit
-`TG_*` datums as `{}}`, so the stray brace is deleted at the position
-`json.JSONDecodeError.pos` names, only when the characters there are that defect; a
-serialisation that decodes is returned byte for byte. A body blanking cannot fix — on pglast 8 a type the stub does not know is a
+back — never a model of PL/pgSQL's grammar. A serialisation is never edited: one that
+does not decode raises, and the routine is named as unread. A body blanking cannot fix — on pglast 8 a type the stub does not know is a
 `record`, which a multi-target `INTO` refuses (#558) — may have a declared variable's
 type **substituted** with `text` (`Compiled.substituted`); the declaration sections say
 where a type is written, the compiler which substitutions are needed, one at a time,
 and `record` is never one. A substitution keeps every newline. Do not call
-`pglast.parse_plpgsql` directly; do not replace the oracle with a grammar; do not
-repair the JSON with a global replace.
+`pglast.parse_plpgsql` directly; do not replace the oracle with a grammar.
 
 **One PL/pgSQL fragment reader** — `core/plpgsql_fragments.py` reads the SQL a compiled
 body holds. How a `PLpgSQL_expr` is read depends on the slot it sits in — a statement,
@@ -459,9 +457,10 @@ a fourth resolver.
 
 #### pglast: one major
 
-Confiture depends on **`pglast>=8.1`, uncapped**: one major, verified on 8.4, which
-`uv.lock` pins. 8.1 is the first pglast with a cp314 wheel on every platform confiture
-ships, and 8 embeds PostgreSQL 18's grammar, so 18's constraint attributes are readable.
+Confiture depends on **`pglast>=8.5`, uncapped**: one major, which `uv.lock` pins. 8.5 is
+the first pglast whose libpg_query serialises a trigger body as valid JSON (#272), with a
+cp314 wheel on every platform confiture ships, and 8 embeds PostgreSQL 18's grammar, so
+18's constraint attributes are readable.
 
 **Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18 inserted a
 member into `AlterTableType`, so pglast 8 renumbered everything after it: a literal

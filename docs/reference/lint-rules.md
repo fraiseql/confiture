@@ -466,11 +466,9 @@ keeps its audit writes, its denormalisation maintenance and its cross-table
 invariants: bodies that reference plenty, and rarely covered by a call path a
 test exercises.
 
-Confiture deletes those braces before decoding, at the position the JSON decoder
-stops at and only when the characters there are that defect. A serialisation
-that decodes is never edited — the same three characters spell the implicit
-`RETURN` at the end of very nearly every body, so a global replace would break
-the routines that were never broken. Also pglast 8's alone.
+Confiture repaired those braces from 1.8.0 until pglast 8.5 fixed the
+serialiser; it now requires 8.5 and edits no serialisation. One that does not
+decode leaves its routine named as unread (see `degraded`, below).
 
 [#272]: https://github.com/fraiseql/confiture/issues/272
 

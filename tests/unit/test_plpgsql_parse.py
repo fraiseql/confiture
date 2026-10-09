@@ -1,7 +1,7 @@
-"""Compiling a PL/pgSQL body with libpg_query, which is wrong twice (#270, #272).
+"""Compiling a PL/pgSQL body with libpg_query, which was wrong twice (#270, #272).
 
 `pglast.parse_plpgsql` is the only thing that reads a PL/pgSQL body, and two
-different parts of it hand back nothing where a tree should be.
+different parts of it handed back nothing where a tree should be.
 
 The **compiler** stubs out PostgreSQL's catalogue. Its `LookupExplicitNamespace`
 resolves `pg_catalog` and `public`; every other schema is `Not implemented`, so
@@ -11,12 +11,14 @@ routines on the schema #270 was filed from, silently. The same stub resolves a
 type it does not know to `record` and an array of one to `_record`, which
 PL/pgSQL refuses as a parameter, a return type or a variable (#453).
 
-The **serialiser** writes a trigger function's implicit `TG_*` datums as `{}}`,
-one closing brace too many each, so `json.loads` never reaches the tree and
+The **serialiser** wrote a trigger function's implicit `TG_*` datums as `{}}`,
+one closing brace too many each, so `json.loads` never reached the tree and
 every `RETURNS TRIGGER` and `RETURNS event_trigger` body was unread whatever it
-contained (#272).
+contained (#272). pglast 8.5 fixed it, and confiture requires 8.5, so it is no
+longer repaired: `TRIGGER_BODIES` pins that every trigger shape is read, and a
+serialisation that does not decode raises.
 
-These tests pin three things. The `REFUSED` and `MIS_SERIALISED` tables are
+These tests pin three things. The `REFUSED` and `TRIGGER_BODIES` tables are
 *reach*: one row per shape, so a shape that stops being read fails the row that
 regressed. And one invariant per defect, both of them the reason this module
 asks rather than models:
@@ -25,16 +27,14 @@ asks rather than models:
   reduced to `tv_summary` is a name `build_003` declines to judge, which is
   #270's silent miss moved one step along — and neither is an array suffix it
   accepts, nor a subscript in the body;
-- **a serialisation that decodes is never edited** — the same three characters
-  spell a legitimate implicit `RETURN` in very nearly every body, so a global
-  replace breaks the routines that were never broken.
+- **a serialisation is never edited** — one that does not decode raises, so a
+  body is named as unread rather than half-read.
 
-Both defects are **pglast 8's alone**, measured: pglast 6.16 and 7.18 compile
-every shape in `REFUSED` and return a trigger body as
-valid JSON, and the `[ast]` extra accepts all three majors. So which facts hold
-is discovered by probing this interpreter's libpg_query, never from a version
-number — the same "ask the parser" rule the module itself follows, and the one
-that will quietly retire these skips if libpg_query ever fixes either.
+The compiler's defect is **pglast 8's alone**, measured: pglast 6.16 and 7.18
+compile every shape in `REFUSED`. So whether it holds is discovered by probing
+this interpreter's libpg_query, never from a version number — the same "ask the
+parser" rule the module itself follows, and the one that will quietly retire
+these skips if libpg_query ever fixes it.
 """
 
 import json
@@ -47,7 +47,7 @@ import pglast.parser
 import pytest
 
 from confiture.core.plpgsql_fragments import fragments
-from confiture.core.plpgsql_parse import _STRAY, Compiled, parse_body
+from confiture.core.plpgsql_parse import Compiled, parse_body
 
 #: The serialiser's name for a fragment of SQL, which is what a body is read for.
 _EXPR = "PLpgSQL_expr"
@@ -445,78 +445,38 @@ $$"""
         assert compiled.text.count("\n") == self.STATEMENT.count("\n")
 
 
-#: One row per body whose implicit datums `libpg_query` mis-serialises, with the
-#: number of stray closing braces each carries. The count is the shape's, not an
-#: implementation detail: it is one per datum PL/pgSQL synthesises, and a row
-#: whose number moves is libpg_query changing what it synthesises.
-MIS_SERIALISED: dict[str, tuple[str, int]] = {
+#: One row per body PL/pgSQL synthesises implicit `TG_*` datums for: the
+#: shapes libpg_query mis-serialised before pglast 8.5 (#272).
+TRIGGER_BODIES: dict[str, str] = {
     "returns trigger": (
         "CREATE FUNCTION app.f() RETURNS TRIGGER LANGUAGE plpgsql AS $$\n"
-        "BEGIN\n  PERFORM app.fn_log(NEW.id);\n  RETURN NEW;\nEND; $$",
-        10,
+        "BEGIN\n  PERFORM app.fn_log(NEW.id);\n  RETURN NEW;\nEND; $$"
     ),
     "returns pg_catalog.trigger": (
         "CREATE FUNCTION app.f() RETURNS pg_catalog.trigger LANGUAGE plpgsql AS $$\n"
-        "BEGIN\n  PERFORM app.fn_log(NEW.id);\n  RETURN NEW;\nEND; $$",
-        10,
+        "BEGIN\n  PERFORM app.fn_log(NEW.id);\n  RETURN NEW;\nEND; $$"
     ),
     "returns event_trigger": (
         "CREATE FUNCTION app.f() RETURNS event_trigger LANGUAGE plpgsql AS $$\n"
-        "BEGIN\n  PERFORM app.fn_log();\nEND; $$",
-        2,
+        "BEGIN\n  PERFORM app.fn_log();\nEND; $$"
     ),
 }
 
 
-def _serialisation_is_malformed(statement: str) -> bool:
-    """Whether *this* libpg_query writes JSON that does not decode. Probed.
-
-    True on pglast 8, false on 6.16 and 7.18 — which do not serialise the
-    implicit datums at all, so their output has nothing to repair.
-    """
-    try:
-        pglast.parse_plpgsql(statement)
-    except json.JSONDecodeError:
-        return True
-    except pglast.parser.ParseError:  # pragma: no cover - a different failure
-        return False
-    return False
+@pytest.mark.parametrize("shape", sorted(TRIGGER_BODIES))
+def test_libpg_query_serialises_the_shape_as_json(shape: str) -> None:
+    """The premise of the 8.5 floor: no stray brace, so nothing to repair."""
+    assert pglast.parse_plpgsql(TRIGGER_BODIES[shape])
 
 
-#: Whether *this* libpg_query is the one that mis-serialises a trigger
-#: function's implicit `TG_` datums. Probed, not looked up.
-STRAY_BRACES = _serialisation_is_malformed(MIS_SERIALISED["returns trigger"][0])
-
-needs_the_strays = pytest.mark.skipif(
-    not STRAY_BRACES,
-    reason="this libpg_query serialises a trigger function's datums as valid JSON",
-)
-
-
-@needs_the_strays
-@pytest.mark.parametrize("shape", sorted(MIS_SERIALISED))
-def test_libpg_query_mis_serialises_the_shape_on_its_own(shape: str) -> None:
-    """The premise, where it holds. A row that stops raising was fixed upstream."""
-    with pytest.raises(json.JSONDecodeError):
-        pglast.parse_plpgsql(MIS_SERIALISED[shape][0])
-
-
-@pytest.mark.parametrize("shape", sorted(MIS_SERIALISED))
-def test_every_mis_serialised_shape_compiles(shape: str) -> None:
-    statement = MIS_SERIALISED[shape][0]
+@pytest.mark.parametrize("shape", sorted(TRIGGER_BODIES))
+def test_every_trigger_shape_compiles(shape: str) -> None:
+    statement = TRIGGER_BODIES[shape]
 
     assert parse_body(statement, body_at=_as_at(statement)).tree
 
 
-@needs_the_strays
-@pytest.mark.parametrize("shape", sorted(MIS_SERIALISED))
-def test_the_repair_deletes_one_brace_per_synthesised_datum(shape: str) -> None:
-    statement, strays = MIS_SERIALISED[shape]
-
-    assert parse_body(statement, body_at=_as_at(statement)).repaired == strays
-
-
-def test_a_repaired_body_still_names_what_it_references() -> None:
+def test_a_trigger_body_names_what_it_references() -> None:
     """The point of reading it at all: the fragments come back, qualified."""
     statement = (
         "CREATE FUNCTION app.trg_audit() RETURNS TRIGGER LANGUAGE plpgsql AS $$\n"
@@ -542,8 +502,8 @@ def _queries(tree: object) -> set[str]:
     ``RETURN <bare variable>`` — ``RETURN NEW``, ``RETURN v_res`` — comes back
     as a ``PLpgSQL_expr`` on pglast 6.16 and 7.18 and, on 8.4, with no ``expr``
     and no ``retvarno`` at all: the third regression in
-    https://github.com/pganalyze/libpg_query/issues/337, alongside the two
-    confiture repairs in :mod:`confiture.core.plpgsql_parse`. It is **not**
+    https://github.com/pganalyze/libpg_query/issues/337, alongside the
+    compiler defect :mod:`confiture.core.plpgsql_parse` works around. It is **not**
     repaired here and does not need to be — a bare variable name is a local,
     which names no object this rule judges, and ``RETURN app.fn_x(1)`` or
     ``RETURN r.id`` still comes through on every major. What every major must
@@ -563,60 +523,8 @@ def _queries(tree: object) -> set[str]:
     return found
 
 
-class TestABlindReplaceIsWhatThisIsNot:
-    """The repair is positional because a global one corrupts ordinary bodies.
-
-    `{"PLpgSQL_stmt_return":{}}` — the implicit `RETURN` PL/pgSQL appends to a
-    body that falls off its end — is a legitimate `{}}` in the serialisation of
-    very nearly every routine. `raw.replace("{}}", "{}")` deletes that brace
-    too, and the result does not decode: the shortcut breaks the bodies that
-    were never broken.
-
-    So the deletion happens only at the position the JSON decoder stopped at,
-    and only when the three characters ending there are the defect. A
-    serialisation that decodes never enters the loop, whatever it contains.
-    """
-
-    #: An ordinary function with no explicit `RETURN`: one legitimate `{}}`,
-    #: no stray, and nothing for this module to do.
-    VOID = (
-        "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
-        "BEGIN PERFORM app.fn_log(); END; $$"
-    )
-
-    @staticmethod
-    def _raw(statement: str) -> str:
-        return pglast.parser.parse_plpgsql_json(statement)
-
-    def test_a_well_formed_serialisation_is_never_touched(self) -> None:
-        assert parse_body(self.VOID, body_at=_as_at(self.VOID)).repaired == 0
-
-    def test_even_though_it_contains_the_three_characters(self) -> None:
-        """The premise: without it the test above proves nothing."""
-        assert self._raw(self.VOID).count(_STRAY) == 1
-
-    def test_and_a_blind_replace_would_break_it(self) -> None:
-        with pytest.raises(json.JSONDecodeError):
-            json.loads(self._raw(self.VOID).replace(_STRAY, "{}"))
-
-    @needs_the_strays
-    def test_a_body_carrying_both_keeps_the_legitimate_one(self) -> None:
-        """An ``event_trigger``: three occurrences, two of them stray."""
-        statement = MIS_SERIALISED["returns event_trigger"][0]
-
-        assert self._raw(statement).count(_STRAY) == 3
-        assert parse_body(statement, body_at=_as_at(statement)).repaired == 2
-
-    @needs_the_strays
-    def test_and_a_blind_replace_would_break_that_too(self) -> None:
-        statement = MIS_SERIALISED["returns event_trigger"][0]
-
-        with pytest.raises(json.JSONDecodeError):
-            json.loads(self._raw(statement).replace(_STRAY, "{}"))
-
-
-class TestADefectThisModuleDoesNotKnow:
-    """Anything but the known stray brace raises, so the routine stays named.
+class TestAMalformedSerialisationRaises:
+    """A serialisation that does not decode raises, so the routine stays named.
 
     `libpg_query` does not emit these, so they are injected: a serialisation
     broken elsewhere must not be quietly half-decoded into a tree the caller
@@ -634,30 +542,19 @@ class TestADefectThisModuleDoesNotKnow:
         with pytest.raises(json.JSONDecodeError):
             parse_body(ACCEPTED["unqualified type"])
 
-    def test_a_stray_brace_that_is_not_the_defect_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """One brace too many, but not after an empty object: not this defect."""
-        self._with_serialisation(monkeypatch, '[{"PLpgSQL_function":{"datums":[1}},{}]}]')
-
-        with pytest.raises(json.JSONDecodeError):
-            parse_body(ACCEPTED["unqualified type"])
-
-    def test_a_defect_at_the_very_start_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """No room for three characters before the error: the slice must not wrap."""
-        self._with_serialisation(monkeypatch, "}")
+    def test_the_old_stray_brace_is_not_repaired(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#272's shape, injected: pglast 8.5 no longer writes it, so nothing edits it."""
+        self._with_serialisation(monkeypatch, '[{"PLpgSQL_function":{"datums":[{}}]}}]')
 
         with pytest.raises(json.JSONDecodeError):
             parse_body(ACCEPTED["unqualified type"])
 
 
-class TestTheTwoRepairsCompose:
+class TestATriggerBodyWithAQualifiedType:
     """A trigger body that also names a schema-qualified type is read.
 
     The compiler refuses it before serialising anything, so the qualifier is
-    blanked first and *then* the serialisation needs repairing — which only
-    works because the oracle that tests a blank set asks for a tree rather than
-    for the absence of one particular exception.
+    blanked first and the trigger's datums then serialise like any other.
     """
 
     STATEMENT = (
@@ -685,17 +582,12 @@ class TestTheTwoRepairsCompose:
         assert [self.STATEMENT[s:e] for s, e in compiled.neutralised] == ["app."]
         assert "app.tv_summary" in compiled.text
 
-    @needs_the_strays
-    def test_and_the_serialisation_still_needed_repairing(self) -> None:
-        assert parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT)).repaired == 10
 
+class TestATriggerBodyNumbersItsOwnLines:
+    """A trigger's `lineno`s are the lines its statements are written on.
 
-class TestARepairedBodyNumbersItsOwnLines:
-    """The repair edits the serialisation, never the statement.
-
-    A trigger's `lineno`s are the lines its statements are written on, and the
-    caller turns those into file lines. This is the pin against a future
-    "reconstruct the datums" that renumbers the tree to match.
+    The caller turns those into file lines, so the statement is handed over
+    unchanged and the tree numbers the body as its author wrote it.
     """
 
     STATEMENT = (
