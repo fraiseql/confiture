@@ -399,14 +399,14 @@ LINT_RULES: tuple[LintRule, ...] = (
         family="tview",
         title="A TVIEW calls a non-immutable function its function_reads does not declare",
         severity="warning",
-        default_on=False,
+        default_on=True,
     ),
     LintRule(
         code="tview_005",
         family="tview",
         title="A TVIEW's definition reads the time and declares no time_refresh",
         severity="warning",
-        default_on=False,
+        default_on=True,
     ),
     LintRule(
         code="session_001",

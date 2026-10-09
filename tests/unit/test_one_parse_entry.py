@@ -30,7 +30,8 @@ ALLOWED: dict[str, str] = {
         "re-parses one statement it rendered itself (an object's `create_sql`, a generated `DROP`)"
     ),
     "python/confiture/core/ddl_walk.py": (
-        "one expression (`SELECT <default>`) or one TVIEW query, never a file"
+        "one expression (`SELECT <default>`), one TVIEW query or one `function_reads` key "
+        "(`DROP FUNCTION <key>`), never a file"
     ),
     "python/confiture/core/fk_extractor.py": (
         "one statement span cut from text `build.two_pass` has already blanked"

@@ -717,7 +717,7 @@
     },
     "TView": {
       "type": "object",
-      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before its options were modelled has none of their keys and pins nothing.",
+      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `time_refresh` (`external`) and `function_reads` are what the TVIEW declares of the reads no write to a tracked table changes: the time, and the tables a non-immutable function reads (pg_tviews 0.1.0-beta.26). A tree pins them in a `pg_tviews_create_or_replace()` call's `options` alone; `function_reads` `[]` pins none. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before an option was modelled lacks its key and pins nothing.",
       "additionalProperties": false,
       "required": [
         "name",
@@ -725,7 +725,9 @@
         "definition",
         "logged",
         "fillfactor",
-        "uncascaded_policy"
+        "uncascaded_policy",
+        "time_refresh",
+        "function_reads"
       ],
       "properties": {
         "name": {
@@ -760,6 +762,41 @@
             "string",
             "null"
           ]
+        },
+        "time_refresh": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "function_reads": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/FunctionRead"
+          }
+        }
+      }
+    },
+    "FunctionRead": {
+      "type": "object",
+      "description": "A function a TVIEW's definition calls and the tables it reads: one entry of pg_tviews' `function_reads`. `function` is keyed as pg_tviews keys it, with its argument types (`public.label_suffix()`); `tables` are the tables it reads, `[]` for none. Both are spellings, the author's or the registry's; entries are sorted by `function`, tables sorted.",
+      "additionalProperties": false,
+      "required": [
+        "function",
+        "tables"
+      ],
+      "properties": {
+        "function": {
+          "type": "string"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

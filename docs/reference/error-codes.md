@@ -55,7 +55,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=8.5) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
 | `CONFIG_013` | 5 | error | {call} needs a connection {mode}: {reason} | Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open |
-| `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run a pg_tviews whose `tviews.contract_version()` is the contract confiture reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |
+| `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run pg_tviews 0.1.0-beta.26 or later, whose `tviews.contract_version()` is the contract confiture reads and whose registry holds every column it reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |

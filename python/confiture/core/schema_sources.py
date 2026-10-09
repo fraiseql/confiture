@@ -26,6 +26,9 @@ from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
 from confiture.core.live_catalog import catalogued_objects, read, user_schemas
+from confiture.core.live_catalog import (
+    require_supported_pg_tviews_on as _require_supported_pg_tviews_on,
+)
 from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import TVIEW_OPTIONS, SchemaModel, ref_for
@@ -156,6 +159,25 @@ def introspect(database: str | Connection, *, schemas: Sequence[str] | None = No
         else:
             wanted = [schemas] if isinstance(schemas, str) else list(schemas)
         return read(conn, schemas=wanted, routines=True, views=True, triggers=True)
+
+
+def require_supported_pg_tviews_on(database: str | Connection) -> None:
+    """Refuse *database*'s pg_tviews where confiture cannot read its TVIEWs.
+
+    The check every live read of TVIEWs makes first (drift, ``migrate up`` of a
+    TVIEW migration, ``introspect``), for a tool that asks it before a deploy:
+    a database without pg_tviews passes; one whose ``tviews.contract_version()``
+    is not the contract confiture reads, or whose registry lacks a column it reads
+    (pg_tviews before ``MINIMUM_PG_TVIEWS``), is refused. A URL is connected
+    to and closed here; a connection is the caller's.
+
+    Raises:
+        ConfigurationError: ``CONFIG_014``, naming the release installed and what it
+            lacks; ``CONFIG_006`` when the URL does not connect.
+        TypeError: a *database* that is neither a URL nor a :class:`Connection`.
+    """
+    with connection_for(database) as conn:
+        _require_supported_pg_tviews_on(conn)
 
 
 def database_side(

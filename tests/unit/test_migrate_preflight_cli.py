@@ -26,6 +26,7 @@ def _mock_session(against_result):
     mock_instance.__enter__ = lambda s: mock_instance
     mock_instance.__exit__ = MagicMock(return_value=False)
     mock_instance.run_against.return_value = against_result
+    mock_instance._conn = None  # no schema facts: the replay is what is under test
     return mock_instance
 
 

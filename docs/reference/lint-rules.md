@@ -44,8 +44,8 @@ Adopt a rule on a schema that already trips it with a
 | `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `tview_003` | tview | error | on | A TVIEW's definition reads session state: a setting or the session's identity |
-| `tview_004` | tview | warning | off | A TVIEW calls a non-immutable function its function_reads does not declare |
-| `tview_005` | tview | warning | off | A TVIEW's definition reads the time and declares no time_refresh |
+| `tview_004` | tview | warning | on | A TVIEW calls a non-immutable function its function_reads does not declare |
+| `tview_005` | tview | warning | on | A TVIEW's definition reads the time and declares no time_refresh |
 | `session_001` | session_reads | error | off | A view reads session state: a setting or the session's identity |
 | `session_002` | session_reads | warning | off | A view calls a non-immutable function outside pg_catalog |
 | `session_003` | session_reads | warning | off | A view reads the time |
@@ -1254,8 +1254,8 @@ a table and another TVIEW store their own rows, so a chain stops there.
 | Rule | Severity | Default | Reports |
 |---|---|---|---|
 | `tview_003` | error | on | a setting (`current_setting(…)`) or the session's identity (`CURRENT_USER`, `SESSION_USER`, `CURRENT_ROLE`, `USER`, `current_schema`) |
-| `tview_004` | warning | off | a non-immutable function outside `pg_catalog` that the TVIEW's `function_reads` option does not declare |
-| `tview_005` | warning | off | the time (`CURRENT_DATE`, `now()`, `clock_timestamp()`, `'today'::date`, `age(x)` …) with no `time_refresh` option |
+| `tview_004` | warning | on | a non-immutable function outside `pg_catalog` that the TVIEW's `function_reads` option does not declare |
+| `tview_005` | warning | on | the time (`CURRENT_DATE`, `now()`, `clock_timestamp()`, `'today'::date`, `age(x)` …) with no `time_refresh` option |
 | `session_001` | error | off | `tview_003`'s reads, in any view |
 | `session_002` | warning | off | `tview_004`'s, in any view |
 | `session_003` | warning | off | `tview_005`'s, in any view |
@@ -1272,9 +1272,8 @@ db/schema/20_views/v_product.sql:4  tview_003  tv_product reads current_setting(
 - **What pg_tviews refuses.** pg_tviews#193 refuses a time read without
   `"time_refresh": "external"` and a non-immutable function not declared in
   `"function_reads"` — under its `error` and `full_refresh` policies, so neither rule
-  reports a TVIEW declaring `uncascaded_policy: warn`. `tview_004` and `tview_005` are
-  off by default until confiture's pinned pg_tviews carries those options; select them
-  (`--select tview_004,tview_005`) to catch them at lint time. A `CREATE TABLE … AS`
+  reports a TVIEW declaring `uncascaded_policy: warn`; pg_tviews 0.1.0-beta.26 is the
+  first release that refuses them, and confiture's minimum. A `CREATE TABLE … AS`
   cannot pass options: write the TVIEW as a `pg_tviews_create_or_replace()` call, or
   waive the read. `tview_003` is on because pg_tviews does not refuse `current_setting`
   (a `pg_catalog` function), yet the stored row is wrong for every other reader.

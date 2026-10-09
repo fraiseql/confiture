@@ -17,10 +17,6 @@ SELECT data FROM tv_post` beside its TVIEW, and it is built, compared and diffed
 any other view. A TVIEW whose definition embeds another TVIEW reads that TVIEW's
 `tv_<entity>` table.
 
-Earlier releases kept the backing view as `v_<entity>` beside the table. Against a
-build whose registry has no `view` column (the first contract-1 betas), confiture
-still finds it by that name, which no view of the tree could hold there.
-
 ## What confiture does with one
 
 | Where | What |
@@ -32,14 +28,16 @@ still finds it by that name, which no view of the tree could hold there.
 | `migrate preflight --against` | the finding below |
 | `confiture lint --select tview` | the two storage rules below |
 
-Confiture reads pg_tviews through its **read contract 1**, which pg_tviews
-0.1.0-beta.20 and later offer: `tviews.registry` for what a database registers,
-`tviews.pg_tviews_create_or_replace()` and `tviews.pg_tviews_drop()` for what a
-migration writes, and `tviews.contract_version()` to say which contract they keep.
+Confiture reads pg_tviews through its **read contract 1**: `tviews.registry` for what
+a database registers, `tviews.pg_tviews_create_or_replace()` and
+`tviews.pg_tviews_drop()` for what a migration writes, and `tviews.contract_version()`
+to say which contract they keep. pg_tviews grows contract 1 by appending registry
+columns, and confiture reads four of them (`view`, `uncascaded_policy`,
+`function_reads`, `time_refresh`), so it needs **pg_tviews 0.1.0-beta.26** or later.
 Where confiture reads TVIEWs from a live database (drift, `schema dump-model`,
 `migrate preflight --against`, the platform's `introspect`), a pg_tviews that answers
-another contract, or has none, is refused with `CONFIG_014` (exit 5), naming the
-release installed. `migrate up` refuses the same way, before applying anything, when a
+another contract, has none, or whose registry lacks one of those columns is refused
+with `CONFIG_014` (exit 5), naming the release installed and what it lacks. `migrate up` refuses the same way, before applying anything, when a
 pending migration creates or drops a TVIEW. A migration that touches no TVIEW deploys
 as before.
 
@@ -60,7 +58,8 @@ reason.
 
 The TVIEW is named as the tree names it (`tv_x` or `app.tv_x`). `options` holds only
 what the tree pins: `UNLOGGED` is `"logged": false`, `WITH (fillfactor = n)` is
-`"fillfactor": n`, a call's `"uncascaded_policy"` is passed as written (below), and a later `ALTER TABLE tv_x SET LOGGED` (or `SET UNLOGGED`) is
+`"fillfactor": n`, a call's `"uncascaded_policy"`, `"time_refresh"` and
+`"function_reads"` are passed as written (below), and a later `ALTER TABLE tv_x SET LOGGED` (or `SET UNLOGGED`) is
 `"logged": true` (or `false`), the same pin drift compares and `tview_002` reads; a
 later `ALTER TABLE tv_x SET (fillfactor = n)` is `"fillfactor": n`, and `RESET
 (fillfactor)` is `"fillfactor": 100`, PostgreSQL's default, as pg_tviews' registry reads it. A key left out takes pg_tviews' default on
@@ -104,6 +103,38 @@ a policy set that way is no pin: drift does not compare it, and a migration
 `migrate diff --generate` writes for that TVIEW passes none, which pg_tviews refuses
 on a fresh database under the `error` default. Declare the policy in the call's
 `options` when the TVIEW reads an uncascaded table.
+
+### `time_refresh` and `function_reads`: reads no write changes
+
+Two reads change a TVIEW's rows with no write to a table it tracks
+(fraiseql/pg_tviews#193): the time (`CURRENT_DATE`, `now()`, …, in the definition or
+a view it reads), and a table read inside a non-immutable function outside
+`pg_catalog`. From pg_tviews 0.1.0-beta.26, under the `error` and `full_refresh`
+policies, a definition with either is refused at create unless it declares it:
+
+```sql
+SELECT tviews.pg_tviews_create_or_replace('tv_contract', $$SELECT …$$,
+    options => '{"time_refresh": "external",
+                 "uncascaded_policy": "full_refresh",
+                 "function_reads": {"public.label_suffix()": ["public.tb_setting"]}}');
+```
+
+`"time_refresh": "external"` says the application or pg_cron calls
+`tviews.pg_tviews_refresh_time_dependent()` at the boundary. `function_reads` names
+each function with its argument types and the tables it reads (`[]` for none); those
+tables are reads no cascade reaches, so the TVIEW's policy (or `uncascaded_tables`)
+decides what a write to one does.
+
+Confiture reads both keys as it reads `uncascaded_policy`: the tree pins them, `migrate
+diff --generate` passes them, and drift compares them with `tviews.registry` as
+`tview_option_mismatch`. The registry spells a declaration its own way (the function
+qualified and its argument types as `format_type` writes them, a table on the read path
+unqualified), so `function_reads` are compared by identity: `label_suffix()` and
+`public.label_suffix()`, `price(int8)` and `public.price(bigint)` are one function,
+`tb_setting` and `public.tb_setting` one table. A tree that declares neither pins
+neither, and `function_reads: {}` pins none. `confiture lint` reports an undeclared
+function (`tview_004`) and an undeclared time read (`tview_005`) before pg_tviews
+refuses them.
 
 ### Writing a TVIEW in the tree
 

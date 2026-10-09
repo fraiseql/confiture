@@ -3,9 +3,10 @@
 # pg_tviews is in no distribution, so it is built here from a pinned ref with the
 # pgrx version it pins (Cargo.toml: pgrx = "=0.17.0") against PGDG's PostgreSQL 18,
 # and the tree `cargo pgrx package` writes is copied onto the official image of the
-# same Debian release. The ref is the commit of the signed v0.1.0-beta.25 tag: the
-# `uncascaded_policy` option, the backing view in `tviews` with its TVIEW table's
-# SELECT grants, which this tree's TVIEW suites exercise. Fetched by SHA so a build
+# same Debian release. The ref is the commit of the signed v0.1.0-beta.26 tag: the
+# registry's `time_refresh` and `function_reads` (fraiseql/pg_tviews#193), beside
+# the `uncascaded_policy` option and the backing view in `tviews`, which this
+# tree's TVIEW suites exercise. Fetched by SHA so a build
 # reproduces and the layer cache never serves another tree under the same ref.
 FROM rust:1.91.1-slim-bookworm AS build
 RUN apt-get update \
@@ -17,7 +18,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked cargo-pgrx --version 0.17.0
 RUN cargo pgrx init --pg18 /usr/lib/postgresql/18/bin/pg_config
-ARG PG_TVIEWS_REF=ef096bc3515652969bffb69bac69db4e86325193
+ARG PG_TVIEWS_REF=ed9f9883ec85ab1f026c0b067b30d150bef3b9b3
 WORKDIR /src
 RUN git init -q \
  && git fetch -q --depth 1 https://github.com/fraiseql/pg_tviews "$PG_TVIEWS_REF" \

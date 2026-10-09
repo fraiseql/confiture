@@ -338,3 +338,59 @@ def test_a_changed_uncascaded_policy_is_a_change() -> None:
     warned = POLICY.replace("full_refresh", "warn")
     assert platform.diff(POLICY, warned).changes != []
     assert platform.diff(CALL, POLICY).changes != []
+
+
+READS = CALL.replace(
+    "$q$);",
+    """$q$, options => '{"time_refresh": "external",
+        "function_reads": {"public.label_suffix()": ["tb_setting", "app.tb_locale"],
+                           "now_utc()": []}}');""",
+)
+
+
+def test_a_call_pins_the_reads_it_declares() -> None:
+    """``time_refresh`` and ``function_reads`` as written, functions and tables sorted."""
+    from confiture.core.schema_model import FunctionRead
+
+    (tview,) = read_text(READS).model.tviews.values()
+
+    assert tview.time_refresh == "external"
+    assert tview.function_reads == (
+        FunctionRead("now_utc()", ()),
+        FunctionRead("public.label_suffix()", ("app.tb_locale", "tb_setting")),
+    )
+
+
+@pytest.mark.parametrize("tree", [CTAS, CALL], ids=["ctas", "call"])
+def test_a_tview_that_declares_no_reads_pins_none(tree: str) -> None:
+    (tview,) = read_text(tree).model.tviews.values()
+
+    assert (tview.time_refresh, tview.function_reads) == (None, None)
+
+
+def test_an_empty_function_reads_is_a_pin() -> None:
+    """``{}`` replaces what the registry holds; an absent key keeps it."""
+    tree = CALL.replace("$q$);", """$q$, options => '{"function_reads": {}}');""")
+    (tview,) = read_text(tree).model.tviews.values()
+
+    assert tview.function_reads == ()
+
+
+def test_a_generated_tview_passes_the_reads_its_tree_declares() -> None:
+    from confiture.core.ddl_walk import tview_calls
+
+    ((obj,),) = _tracked(READS).values()
+    (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    assert call.options["time_refresh"] == "external"
+    assert obj.create_sql.endswith(
+        """options => '{"function_reads": {"now_utc()": [], """
+        """"public.label_suffix()": ["app.tb_locale", "tb_setting"]}, """
+        """"time_refresh": "external"}')"""
+    )
+
+
+def test_a_changed_declared_read_is_a_change() -> None:
+    from confiture import platform
+
+    assert platform.diff(CALL, READS).changes != []
+    assert platform.diff(READS, READS.replace("now_utc()", "now_local()")).changes != []

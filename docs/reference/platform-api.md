@@ -653,6 +653,12 @@ to a table no cascade reaches does: what the tree pins (`UNLOGGED`, `WITH
 `options`), `None` where it pins nothing, or what the registry holds, every
 key set.
 
+`time_refresh` (`external`) and `function_reads` are what the TVIEW
+declares of the reads no write to a tracked table changes: the time, and the
+tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
+`pg_tviews_create_or_replace()` call's `options` alone; `function_reads`
+`()` pins none, functions and tables sorted.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
@@ -661,6 +667,26 @@ key set.
 | `logged` | `bool \| None` | `None` |
 | `fillfactor` | `int \| None` | `None` |
 | `uncascaded_policy` | `str \| None` | `None` |
+| `time_refresh` | `str \| None` | `None` |
+| `function_reads` | `tuple[FunctionRead, ...] \| None` | `None` |
+
+### `FunctionRead`
+
+```python
+class FunctionRead
+```
+
+A function a TVIEW's definition calls, and the tables it reads.
+
+One entry of pg_tviews' `function_reads` (fraiseql/pg_tviews#193):
+`function` keyed as pg_tviews keys it, with its argument types
+(`public.label_suffix()`), and `tables` the tables it reads, `()` for
+none. Both are spellings, the author's or the registry's.
+
+| Field | Type | Default |
+|---|---|---|
+| `function` | `str` | required |
+| `tables` | `tuple[str, ...]` | `()` |
 
 ## Ordering
 
@@ -694,6 +720,34 @@ class DependencyCycleError(SchemaError)
 ```
 
 Tables whose foreign keys form a cycle: none of them can be loaded first.
+
+## pg_tviews
+
+### `require_supported_pg_tviews_on`
+
+```python
+def require_supported_pg_tviews_on(database: str | Connection) -> None
+```
+
+Refuse *database*'s pg_tviews where confiture cannot read its TVIEWs.
+
+The check every live read of TVIEWs makes first (drift, `migrate up` of a
+TVIEW migration, `introspect`), for a tool that asks it before a deploy:
+a database without pg_tviews passes; one whose `tviews.contract_version()`
+is not the contract confiture reads, or whose registry lacks a column it reads
+(pg_tviews before `MINIMUM_PG_TVIEWS`), is refused. A URL is connected
+to and closed here; a connection is the caller's.
+
+**Raises**
+
+- `ConfigurationError`: `CONFIG_014`, naming the release installed and what it lacks; `CONFIG_006` when the URL does not connect.
+- `TypeError`: a *database* that is neither a URL nor a `Connection`.
+
+### `MINIMUM_PG_TVIEWS`
+
+```python
+MINIMUM_PG_TVIEWS = '0.1.0-beta.26'
+```
 
 ## What a writer may supply
 

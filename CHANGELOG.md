@@ -14,8 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **⚠️ A TVIEW's `time_refresh` and `function_reads` are in the model** (pg_tviews#193). pg_tviews
+  0.1.0-beta.26 refuses, under its `error` and `full_refresh` policies, a TVIEW that reads the
+  time or calls a non-immutable function outside `pg_catalog` unless it declares them in
+  `options`. `TView` gains `time_refresh` and `function_reads` (a tuple of the new
+  `FunctionRead(function, tables)`, re-exported by `confiture.platform`): read from a
+  `pg_tviews_create_or_replace()` call's `options`, passed in the call `migrate diff --generate`
+  writes, read live from `tviews.registry`, and compared by drift as `tview_option_mismatch`
+  (`subject.name` is the key). A function and a table are compared by identity, since the
+  registry qualifies them and spells argument types as `format_type` does. The model's wire
+  (`schema-model.schema.json`) gains both keys, required, and a `FunctionRead` definition; a
+  wire written before them reads as pinning nothing. No drift kind or severity changes.
+- **`confiture.platform.require_supported_pg_tviews_on(database)` and `MINIMUM_PG_TVIEWS`**: the
+  check every live read of TVIEWs makes, for a deploy tool's doctor to ask before a deploy (a URL
+  or a connection; passes without pg_tviews, `CONFIG_014` otherwise).
+- **`tview_004` and `tview_005` are on by default**: an undeclared function call and an
+  undeclared time read in a TVIEW's chain are warnings, as pg_tviews now refuses them.
+
 ### Changed
 
+- **⚠️ pg_tviews 0.1.0-beta.26 is the minimum.** Contract 1 grows by appended registry columns;
+  a pg_tviews whose `tviews.registry` lacks one confiture reads (`view`, `uncascaded_policy`,
+  `function_reads`, `time_refresh`) is refused with `CONFIG_014`, naming what it lacks, where
+  it was read as declaring nothing. The fallback that found the backing view by name on the
+  first contract-1 betas is gone. The `pg-tviews` CI leg builds the signed beta.26 tag.
 - **pglast 8.5 is the floor** (`pglast>=8.5`). Its libpg_query writes a trigger function's
   implicit `TG_*` datums as valid JSON, so the brace repair confiture carried since 1.8.0
   (#272) is gone, with `Compiled.repaired`. A serialisation that does not decode now raises

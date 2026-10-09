@@ -83,16 +83,6 @@ def _drift(url: str, ddl: str) -> list[tuple[str, str, str]]:
     return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items)
 
 
-def _registry_has(conn: psycopg.Connection, column: str) -> bool:
-    return bool(
-        conn.execute(
-            "SELECT 1 FROM pg_attribute WHERE attrelid = 'tviews.registry'::regclass"
-            " AND attname = %s AND NOT attisdropped",
-            (column,),
-        ).fetchone()
-    )
-
-
 def test_an_application_view_named_like_the_entity_is_the_trees(tview_database: str) -> None:
     """The registry names the backing view, which pg_tviews keeps in ``tviews``.
 
@@ -159,8 +149,6 @@ def uncascaded_database(fresh_database_factory: Callable[[str], str]) -> str:
         ).fetchone():
             pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
         create_supported_pg_tviews(conn)
-        if not _registry_has(conn, "uncascaded_policy"):
-            pytest.skip("this pg_tviews has no uncascaded_policy (0.1.0-beta.25)")
         conn.execute(UNCASCADED)
     return url
 
@@ -214,6 +202,85 @@ def test_a_generated_migration_carries_the_policy_the_tree_declares(
         (found,) = live_catalog.tviews(conn, ["public"])
 
     assert found.uncascaded_policy == "full_refresh"
+
+
+#: A TVIEW reading the time and a table inside a STABLE function, declaring both
+#: (fraiseql/pg_tviews#193): the function unqualified, its table on the path. A
+#: declared table is a read no cascade reaches, so its policy rebuilds the TVIEW.
+READS = """
+CREATE TABLE tb_setting (code text PRIMARY KEY, value text);
+CREATE TABLE tb_locale (code text PRIMARY KEY);
+CREATE FUNCTION label_suffix() RETURNS text STABLE LANGUAGE sql
+    AS $f$ SELECT value FROM tb_setting WHERE code = 'label_suffix' $f$;
+CREATE TABLE tb_contract (pk_contract bigint PRIMARY KEY, id uuid NOT NULL UNIQUE,
+                          name text, end_date date);
+SELECT tviews.pg_tviews_create_or_replace('tv_contract', $q$
+SELECT c.pk_contract, c.id,
+       jsonb_build_object('label', c.name || label_suffix(),
+                          'is_current', c.end_date >= CURRENT_DATE) AS data
+FROM tb_contract c$q$,
+    options => '{"time_refresh": "external", "uncascaded_policy": "full_refresh",
+                 "function_reads": {"label_suffix()": ["tb_setting"]}}');
+"""
+
+
+@pytest.fixture
+def reads_database(fresh_database_factory: Callable[[str], str]) -> str:
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(READS)
+    return url
+
+
+def test_the_live_side_reads_the_declared_reads(reads_database: str) -> None:
+    """``tviews.registry.time_refresh`` and ``function_reads``, as the registry spells them."""
+    from confiture.core.schema_model import FunctionRead
+
+    with psycopg.connect(reads_database) as conn:
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert found.time_refresh == "external"
+    assert found.function_reads == (FunctionRead("public.label_suffix()", ("tb_setting",)),)
+    assert _drift(reads_database, READS) == []
+
+
+def test_a_declared_read_changed_on_the_database_is_drift(reads_database: str) -> None:
+    with psycopg.connect(reads_database, autocommit=True) as conn:
+        (definition,) = conn.execute("SELECT query FROM tviews.registry").fetchone()
+        (answer,) = conn.execute(
+            "SELECT tviews.pg_tviews_create_or_replace('tv_contract', %s, options =>"
+            """ '{"function_reads": {"label_suffix()": ["tb_setting", "tb_locale"]}}')""",
+            (definition,),
+        ).fetchone()
+
+    assert answer == "altered"
+    assert _drift(reads_database, READS) == [("tview_option_mismatch", "warning", "tv_contract")]
+
+
+def test_a_generated_migration_carries_the_reads_the_tree_declares(
+    reads_database: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """The call ``migrate diff --generate`` writes passes pg_tviews' default ``error`` policy."""
+    from confiture.core.ddl_objects import objects_in
+    from confiture.core.sql_lexer import parse_file
+
+    tview = next(
+        obj for ref, (obj,) in objects_in([parse_file(READS)]).items() if ref.kind == "tview"
+    )
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        create_supported_pg_tviews(conn)
+        conn.execute(READS.split("SELECT tviews", maxsplit=1)[0])
+        conn.execute(tview.create_sql)
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert (found.time_refresh, len(found.function_reads or ())) == ("external", 1)
+    assert _drift(url, READS) == []
 
 
 def test_a_database_built_from_its_tree_has_no_drift(tview_database: str) -> None:
@@ -515,3 +582,19 @@ def test_a_materialised_pinned_option_changed_by_hand_is_drift(
     assert _materialised_drift(pinned_database, PINNED, test_db_url, tmp_path) == [
         ("tview_option_mismatch", "warning", "public.tv_post"),
     ]
+
+
+def test_the_seam_accepts_a_supported_pg_tviews_by_url_or_connection(reads_database: str) -> None:
+    from confiture import platform
+
+    assert platform.require_supported_pg_tviews_on(reads_database) is None
+    with psycopg.connect(reads_database) as conn:
+        assert platform.require_supported_pg_tviews_on(conn) is None
+
+
+def test_the_seam_accepts_a_database_without_pg_tviews(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    from confiture import platform
+
+    assert platform.require_supported_pg_tviews_on(fresh_database_factory("confiture_tv")) is None
