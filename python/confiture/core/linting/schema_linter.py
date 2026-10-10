@@ -295,11 +295,12 @@ class LintConfig:
             check_session_reads: The session-read codes to report (#656): the
                 ``tview`` family's ``tview_003``–``005`` and ``session_reads``'
                 ``session_001``–``003``. ``tview_003`` by default.
-            check_tree_walks: The ``treekey`` codes to report (#676): a view
-                walking a pg_treekey tree with ``WITH RECURSIVE`` over its parent
-                key (``treekey_001``) or by taking its path apart
-                (``treekey_002``). None by default; ``confiture lint`` selects
-                both.
+            check_tree_walks: The ``treekey`` and ``ancestry`` codes to report
+                (#676): a walk of a pg_treekey tree on a TVIEW's chain that
+                pg_tviews cannot trace (``treekey_001``, ``treekey_002``), and,
+                as a style, any view walking one (``ancestry_001``,
+                ``ancestry_002``). None by default; ``confiture lint`` selects
+                the ``treekey`` pair.
             server_url: The writable maintenance server the ``body`` family
                 builds its scratch database on (``--server-url``). ``None``
                 falls back to the environment's own URL, whose *database* is
@@ -524,12 +525,14 @@ class SchemaLinter:
             (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
             (self.config.check_tview_replicas, partial(self._check_tview, "tview_002"), "tview"),
             (bool(self.config.check_session_reads), self._check_session_reads, None),
-            (bool(self.config.check_tree_walks), self._check_tree_walks, "treekey"),
+            (bool(self.config.check_tree_walks), self._check_tree_walks, None),
         ):
             if enabled:
                 check(report)
                 if family is not None:
                     ran.add(family)
+        # The tree walks run once for both of their families, each only when selected.
+        ran |= {rule.family for rule in LINT_RULES if rule.code in self.config.check_tree_walks}
         self._report_blinded_rules(report, ran, rejected)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
@@ -773,15 +776,13 @@ class SchemaLinter:
             )
 
     def _check_tree_walks(self, report: LintReport) -> None:
-        """``treekey_001`` / ``treekey_002``: a view walks a pg_treekey tree (#676)."""
+        """``treekey_00x`` / ``ancestry_00x``: how a view walks a pg_treekey tree (#676)."""
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.tree_walks import RULE_NAMES, tree_walks
 
         severities = {rule.code: rule.severity for rule in LINT_RULES}
-        walks = tree_walks(self._files, self._inventory)
+        walks = tree_walks(self._files, self._inventory, self.config.check_tree_walks)
         for found in walks.findings:
-            if found.code not in self.config.check_tree_walks:
-                continue
             report.add_violation(
                 LintViolation(
                     rule_id=found.code,

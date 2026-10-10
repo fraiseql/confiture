@@ -30,39 +30,40 @@ SELECT treekey.manage_path('tenant.tb_organizational_unit', 'pk_organizational_u
 """
 
 
-def _findings(*texts: str) -> list[TreeWalkFinding]:
+#: The default ``treekey`` rules, and the ``ancestry`` style rules a test selects.
+_TREEKEY = frozenset({"treekey_001", "treekey_002"})
+_STYLE = frozenset({"ancestry_001", "ancestry_002"})
+
+
+def _findings(*texts: str, codes: frozenset[str] = _TREEKEY) -> list[TreeWalkFinding]:
     files = []
     base = 0
     for at, text in enumerate(texts):
         files.append(parse_file(text, f"{at:03}.sql", base))
         base += len(text) + 1
-    return tree_walk_findings(files, build_inventory(files))
+    return tree_walk_findings(files, build_inventory(files), codes)
 
 
 def _found(view: str) -> list[str]:
-    return [f.code for f in _findings(_TREES, view)]
+    return [f.code for f in _findings(_TREES, view, codes=_STYLE)]
 
 
-# -- src/lint.rs ---------------------------------------------------------------
+# -- ancestry: the style family, on every view (pg_treekey's src/lint.rs) ---------------------------------------------------------------
 
 
-def test_a_recursive_cte_over_the_parent_fk_on_a_plain_view_is_not_treekey_001() -> None:
-    """No TVIEW reads it, so pg_tviews never sees it."""
-    assert (
-        _found(
-            "CREATE VIEW v_category_names AS WITH RECURSIVE names(pk_item_category, name) AS (\n"
-            "  SELECT c.pk_item_category, c.name::text AS name\n"
-            "    FROM catalog.tb_item_category c\n"
-            "   WHERE c.fk_parent_item_category IS NULL\n"
-            "  UNION ALL\n"
-            "  SELECT c.pk_item_category, (n.name || ' > '::text) || c.name::text\n"
-            "    FROM catalog.tb_item_category c\n"
-            "      JOIN names n ON c.fk_parent_item_category = n.pk_item_category\n"
-            ")\n"
-            "SELECT pk_item_category, name FROM names;\n"
-        )
-        == []
-    )
+def test_a_recursive_cte_over_the_parent_fk_is_ancestry_001() -> None:
+    assert _found(
+        "CREATE VIEW v_category_names AS WITH RECURSIVE names(pk_item_category, name) AS (\n"
+        "  SELECT c.pk_item_category, c.name::text AS name\n"
+        "    FROM catalog.tb_item_category c\n"
+        "   WHERE c.fk_parent_item_category IS NULL\n"
+        "  UNION ALL\n"
+        "  SELECT c.pk_item_category, (n.name || ' > '::text) || c.name::text\n"
+        "    FROM catalog.tb_item_category c\n"
+        "      JOIN names n ON c.fk_parent_item_category = n.pk_item_category\n"
+        ")\n"
+        "SELECT pk_item_category, name FROM names;\n"
+    ) == ["ancestry_001"]
 
 
 def test_a_recursive_cte_over_something_else_is_fine() -> None:
@@ -80,54 +81,42 @@ def test_a_recursive_cte_over_something_else_is_fine() -> None:
     )
 
 
-def test_an_unnest_of_the_path_in_a_cte_on_a_plain_view_is_not_treekey_002() -> None:
-    assert (
-        _found(
-            "CREATE VIEW v_industry AS WITH p AS (\n"
-            "  SELECT i.pk_industry, unnest(string_to_array(i.path::text, '.'::text))::bigint AS anc\n"
-            "    FROM catalog.tb_industry i\n"
-            ")\n"
-            "SELECT p.pk_industry, array_agg(p.anc) AS ancestors FROM p GROUP BY p.pk_industry;\n"
-        )
-        == []
-    )
+def test_an_unnest_of_the_path_in_a_cte_is_ancestry_002() -> None:
+    assert _found(
+        "CREATE VIEW v_industry AS WITH p AS (\n"
+        "  SELECT i.pk_industry, unnest(string_to_array(i.path::text, '.'::text))::bigint AS anc\n"
+        "    FROM catalog.tb_industry i\n"
+        ")\n"
+        "SELECT p.pk_industry, array_agg(p.anc) AS ancestors FROM p GROUP BY p.pk_industry;\n"
+    ) == ["ancestry_002"]
 
 
-def test_an_unnest_of_the_path_in_a_scalar_subquery_on_a_plain_view_is_not_treekey_002() -> None:
-    assert (
-        _found(
-            "CREATE VIEW v_location AS SELECT l.pk_location,\n"
-            "  (SELECT array_agg(a.name) FROM tenant.tb_location a\n"
-            "    WHERE (a.pk_location::text) IN (\n"
-            "      SELECT unnest(string_to_array(l.path::text, '.'::text)) AS unnest)) AS names\n"
-            "  FROM tenant.tb_location l;\n"
-        )
-        == []
-    )
+def test_an_unnest_of_the_path_in_a_scalar_subquery_is_ancestry_002() -> None:
+    assert _found(
+        "CREATE VIEW v_location AS SELECT l.pk_location,\n"
+        "  (SELECT array_agg(a.name) FROM tenant.tb_location a\n"
+        "    WHERE (a.pk_location::text) IN (\n"
+        "      SELECT unnest(string_to_array(l.path::text, '.'::text)) AS unnest)) AS names\n"
+        "  FROM tenant.tb_location l;\n"
+    ) == ["ancestry_002"]
 
 
-def test_an_unnest_of_the_path_in_lateral_on_a_plain_view_is_not_treekey_002() -> None:
-    assert (
-        _found(
-            "CREATE VIEW v_location AS SELECT l.pk_location, x.label\n"
-            "  FROM tenant.tb_location l,\n"
-            "  LATERAL unnest(string_to_array(l.path::text, '.'::text)) x(label);\n"
-        )
-        == []
-    )
+def test_an_unnest_of_the_path_in_lateral_is_ancestry_002() -> None:
+    assert _found(
+        "CREATE VIEW v_location AS SELECT l.pk_location, x.label\n"
+        "  FROM tenant.tb_location l,\n"
+        "  LATERAL unnest(string_to_array(l.path::text, '.'::text)) x(label);\n"
+    ) == ["ancestry_002"]
 
 
-def test_any_of_string_to_array_of_the_path_on_a_plain_view_is_not_treekey_002() -> None:
-    assert (
-        _found(
-            "CREATE VIEW v_units AS SELECT o.pk_organizational_unit,\n"
-            "  (SELECT array_agg(a.name) FROM tenant.tb_organizational_unit a\n"
-            "    WHERE a.pk_organizational_unit::text = ANY (string_to_array(o.path::text, '.'::text)))\n"
-            "    AS names\n"
-            "  FROM tenant.tb_organizational_unit o;\n"
-        )
-        == []
-    )
+def test_any_of_string_to_array_of_the_path_is_ancestry_002() -> None:
+    assert _found(
+        "CREATE VIEW v_units AS SELECT o.pk_organizational_unit,\n"
+        "  (SELECT array_agg(a.name) FROM tenant.tb_organizational_unit a\n"
+        "    WHERE a.pk_organizational_unit::text = ANY (string_to_array(o.path::text, '.'::text)))\n"
+        "    AS names\n"
+        "  FROM tenant.tb_organizational_unit o;\n"
+    ) == ["ancestry_002"]
 
 
 def test_an_unnest_of_another_column_is_fine() -> None:
@@ -174,8 +163,9 @@ def test_quoted_names_are_matched_quoted_and_both_findings_reported() -> None:
         "SELECT treekey.manage_path('s.t', 'Pk', 'Fk_Up', 'Tree Path');\n",
         'CREATE VIEW s.v AS WITH RECURSIVE w AS (SELECT t."Fk_Up" FROM s.t t)\n'
         "SELECT unnest(string_to_array(t.\"Tree Path\"::text, '.'::text)) FROM s.t t;\n",
+        codes=_STYLE,
     )
-    assert [f.code for f in found] == []
+    assert [f.code for f in found] == ["ancestry_001", "ancestry_002"]
 
 
 def test_a_bare_name_does_not_match_a_quoted_column() -> None:
@@ -183,6 +173,7 @@ def test_a_bare_name_does_not_match_a_quoted_column() -> None:
         'CREATE TABLE s.t ("Pk" bigint PRIMARY KEY, "Fk_Up" bigint, "Tree Path" ltree);\n'
         "SELECT treekey.manage_path('s.t', 'Pk', 'Fk_Up', 'Tree Path');\n",
         "CREATE VIEW s.v AS WITH RECURSIVE w AS (SELECT t.Fk_Up FROM s.t t) SELECT 1 FROM w;\n",
+        codes=_STYLE,
     )
     assert found == []
 
@@ -240,8 +231,13 @@ CREATE VIEW lv.v_on_top AS SELECT * FROM lv.v_location;
 
 
 def test_the_regression_suite_reports_what_lint_views_reports() -> None:
-    found = _findings(_REGRESS_TREES, _REGRESS_VIEWS)
-    assert found == []
+    found = _findings(_REGRESS_TREES, _REGRESS_VIEWS, codes=_STYLE)
+    assert sorted((f.object_name, f.code) for f in found) == [
+        ("lv.mv_industry:lv.tb_industry", "ancestry_002"),
+        ("lv.v_category_names:lv.tb_item_category", "ancestry_001"),
+        ("lv.v_location:lv.tb_location", "ancestry_002"),
+        ("lv_other.v_location_names:lv.tb_location", "ancestry_002"),
+    ]
 
 
 # -- what the static rule adds -------------------------------------------------
@@ -249,7 +245,7 @@ def test_the_regression_suite_reports_what_lint_views_reports() -> None:
 
 def test_no_manage_path_call_means_no_tree_and_no_finding() -> None:
     tables = _REGRESS_TREES.split("SELECT treekey", maxsplit=1)[0]
-    assert _findings(tables, _REGRESS_VIEWS) == []
+    assert _findings(tables, _REGRESS_VIEWS, codes=_TREEKEY | _STYLE) == []
 
 
 def test_a_finding_is_placed_where_the_walk_is_written_and_says_what_to_do() -> None:
@@ -278,8 +274,9 @@ def test_named_arguments_and_an_unqualified_call_declare_a_tree() -> None:
         "    parent_fk_col => 'fk_up', path_col => 'lineage');\n",
         "CREATE VIEW v_node AS SELECT n.pk_node, unnest(string_to_array(n.lineage::text, '.'))\n"
         "  FROM public.tb_node n;\n",
+        codes=_STYLE,
     )
-    assert found == []
+    assert [(f.code, f.object_name) for f in found] == [("ancestry_002", "v_node:tb_node")]
 
 
 def test_a_tview_reading_the_tree_is_judged_too() -> None:
@@ -289,8 +286,9 @@ def test_a_tview_reading_the_tree_is_judged_too() -> None:
         "  SELECT l.pk_location, x.label\n"
         "  FROM lv.tb_location l, LATERAL unnest(string_to_array(l.path::text, '.')) AS x (label)\n"
         "$$);\n",
+        codes=_STYLE,
     )
-    assert found == []
+    assert [(f.code, f.object_type, f.line) for f in found] == [("ancestry_002", "tview", 3)]
 
 
 # -- treekey_001: a recursive walk on a TVIEW's chain (pg_tviews 0.1.0-beta.26) ------
@@ -594,3 +592,22 @@ def test_a_tree_registered_with_another_path_column_is_read() -> None:
     )
     assert [f.object_name for f in _ordinal(tree, query)] == ["tv_node:tb_node"]
     assert _ordinal(tree, query.replace("n.lineage", "n.name")) == []
+
+
+# -- the ancestry family is off unless selected ----------------------------------
+
+
+def test_the_default_run_reports_no_ancestry_finding() -> None:
+    assert _findings(_REGRESS_TREES, _REGRESS_VIEWS) == []
+
+
+def test_select_ancestry_selects_both_style_rules_and_the_default_selects_neither() -> None:
+    from confiture.core.linting.rule_registry import LINT_RULES, resolve_selection
+
+    assert resolve_selection(["ancestry"], ()) == frozenset({"ancestry_001", "ancestry_002"})
+    assert not {"ancestry_001", "ancestry_002"} & resolve_selection(None, ())
+    rules = {rule.code: rule for rule in LINT_RULES}
+    assert [(rules[c].severity, rules[c].default_on) for c in ("ancestry_001", "ancestry_002")] == [
+        ("info", False),
+        ("info", False),
+    ]
