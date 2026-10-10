@@ -46,7 +46,7 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.exceptions import GitError
+from confiture.exceptions import DifferError, GitError, SchemaError
 from confiture.models.git import MigrationAccompanimentReport
 
 _FUNC_CONTENT_RE = re.compile(
@@ -133,17 +133,21 @@ class MigrationAccompanimentChecker:
         ...     print(f"Error: DDL without migrations: {report.summary()}")
     """
 
-    def __init__(self, env: str, repo_path: Path | None = None):
+    def __init__(
+        self, env: str, repo_path: Path | None = None, *, differ: GitSchemaDiffer | None = None
+    ):
         """Initialize accompaniment checker.
 
         Args:
             env: Environment name (e.g., "local", "production")
             repo_path: Repository root directory (default: current directory)
+            differ: The differ to compare refs with — one shared with another
+                check reads each tree once; a new one by default.
         """
         self.env = env
         self.repo_path = repo_path or Path.cwd()
         self.git_repo = GitRepository(self.repo_path)
-        self.differ = GitSchemaDiffer(env, self.repo_path)
+        self.differ = differ or GitSchemaDiffer(env, self.repo_path)
 
     def check_accompaniment(
         self,
@@ -192,16 +196,16 @@ class MigrationAccompanimentChecker:
 
         try:
             diff = self.differ.compare_refs(base_ref, target_ref)
-        except Exception as exc:  # Reason: the parse failure is reported as a failed check, naming the statement, rather than raised
-            # pglast is the only parser, so what lands here is a
-            # schema PostgreSQL rejects — one `confiture build` would refuse too.
-            # It is reported rather than raised so the error names the statement,
-            # and `is_valid` is False because a check that could not run has not
-            # passed (#288).
+        except (SchemaError, DifferError) as exc:
+            # A schema PostgreSQL rejects (DIFFER_400), or one the differ cannot
+            # compare (a quoted name, an index read before its table): the check
+            # could not run. It is reported, under the error's own code, rather
+            # than raised, and `is_valid` is False because a check that could not
+            # run has not passed (#288). A git failure is not this, and propagates.
             return MigrationAccompanimentReport(
                 has_ddl_changes=False,
                 has_new_migrations=len(new_migrations) > 0,
-                migration_error=f"the schema does not parse: {exc}",
+                migration_error=f"{exc.error_code} {exc.message}",
                 base_ref=base_ref,
                 target_ref=target_ref,
             )

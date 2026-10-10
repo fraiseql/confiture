@@ -8,6 +8,7 @@ same text, file by file. Nothing here lists, orders or matches files itself.
 """
 
 import tempfile
+from functools import cached_property
 from pathlib import Path
 
 from confiture.config.environment import DirectoryConfig, Environment
@@ -75,8 +76,12 @@ class GitSchemaBuilder:
         self.env = env
         self.repo_path = repo_path or Path.cwd()
         self.git_repo = GitRepository(self.repo_path)
-        self.schema_builder = SchemaBuilder(env, self.repo_path)
         self._reads: dict[str, SchemaRead] = {}
+
+    @cached_property
+    def schema_builder(self) -> SchemaBuilder:
+        """The working tree's build: its environment is the one every ref is read with."""
+        return SchemaBuilder(self.env, self.repo_path)
 
     def segments_at_ref(self, ref: str) -> list[Segment]:
         """The files ``confiture build`` would select at *ref*, in build order, with their text.

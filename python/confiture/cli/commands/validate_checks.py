@@ -18,9 +18,10 @@ from typing import TYPE_CHECKING
 from confiture.cli.helpers import console
 from confiture.cli.idempotency import _validate_idempotency
 from confiture.core.validation.registry import CheckOutcome, ValidationCheck
-from confiture.exceptions import ConfigurationError, GitError
+from confiture.exceptions import ConfigurationError, ConfiturError, GitError
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from typing import Any
 
     from confiture.core.validation.context import ValidationContext
@@ -189,6 +190,17 @@ def validate_flag_dependencies(opts: ValidateOptions) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _git_check(name: str, run: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    """*run*'s result; a confiture error keeps its own code, anything else is a git error naming the check."""
+    try:
+        return run()
+    except ConfiturError:
+        raise
+    # Reason: an unexpected failure inside a git-backed check is reported as GitError naming the check
+    except Exception as e:
+        raise GitError(f"{name} check failed: {e}") from e
+
+
 def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
     """Run every requested git sub-check and report them together.
 
@@ -203,6 +215,9 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
         validate_grant_accompaniment,
         validate_migration_accompaniment,
     )
+
+    # Reason: CLI start-up: the ref reader is deferred with the git checks that use it
+    from confiture.core.git_schema import GitSchemaDiffer
 
     # NotAGitRepositoryError (GIT_002 → exit 7) propagates to fail().
     validate_git_flags_in_repo()
@@ -224,28 +239,35 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     requested: list[str] = []
     results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
+    # One differ for drift and accompaniment: each tree is read once.
+    differ = (
+        GitSchemaDiffer(opts.git_env)
+        if opts.check_drift or opts.require_migration or opts.require_migration_bodies
+        else None
+    )
 
     if opts.check_drift:
         requested.append("drift")
-        try:
-            drift_result = validate_git_drift(
+        drift_result = _git_check(
+            "Drift",
+            lambda: validate_git_drift(
                 env=opts.git_env,
                 base_ref=ctx.git_base_ref,
                 target_ref=ctx.git_target_ref,
                 console=console,
                 format_output=opts.format_output,
-            )
-        # Reason: any failure inside a git-backed check is reported as GitError naming the check
-        except Exception as e:
-            raise GitError(f"Drift check failed: {e}") from e
+                differ=differ,
+            ),
+        )
         results["drift"] = drift_result
         if not drift_result.get("passed"):
             failed.append("drift")
 
     if opts.require_migration or opts.require_migration_bodies:
         requested.append("accompaniment")
-        try:
-            acc_result = validate_migration_accompaniment(
+        acc_result = _git_check(
+            "Accompaniment",
+            lambda: validate_migration_accompaniment(
                 env=opts.git_env,
                 base_ref=ctx.git_base_ref,
                 target_ref=ctx.git_target_ref,
@@ -253,10 +275,9 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
                 format_output=opts.format_output,
                 check_bodies=opts.require_migration_bodies,
                 two_dot=opts.staged,
-            )
-        # Reason: any failure inside a git-backed check is reported as GitError naming the check
-        except Exception as e:
-            raise GitError(f"Accompaniment check failed: {e}") from e
+                differ=differ,
+            ),
+        )
         results["accompaniment"] = acc_result
         if not acc_result.get("is_valid"):
             failed.append("accompaniment")
