@@ -90,10 +90,11 @@ class FunctionSignatureChecker:
             List of violations (empty if all type changes have accompanying DROPs)
         """
         dropped, added = unpaired_routines(old_routines, new_routines)
+        overloads = by_name(old_routines)
         violations: list[FunctionSignatureViolation] = []
         for old, new in _retypes(dropped, added):
             fn_key = function_key(old)
-            if _migration_drops(old, migration_file_paths):
+            if _migration_drops(old, migration_file_paths, sole=len(overloads[fn_key]) == 1):
                 continue
             violations.append(
                 FunctionSignatureViolation(
@@ -127,24 +128,29 @@ def _retypes(dropped: list[Routine], added: list[Routine]) -> list[tuple[Routine
     ]
 
 
-def _migration_drops(old: Routine, migration_files: list[Path]) -> bool:
-    """Whether any migration drops *old* — its name and its argument types."""
+def _migration_drops(old: Routine, migration_files: list[Path], *, sole: bool) -> bool:
+    """Whether any migration drops *old* — its name and its argument types.
+
+    *sole*: *old* is the one routine of its name the base tree declares, so a
+    ``DROP FUNCTION`` naming no argument list drops it.
+    """
     for mig_path in migration_files:
         try:
             content = mig_path.read_text()
         except OSError, UnicodeDecodeError:
             continue
         for sql in migration_sql(mig_path, content):
-            if _drops(sql, old):
+            if _drops(sql, old, sole=sole):
                 return True
     return False
 
 
-def _drops(sql: str, routine: Routine) -> bool:
+def _drops(sql: str, routine: Routine, *, sole: bool) -> bool:
     """Whether *sql* holds a ``DROP FUNCTION`` / ``PROCEDURE`` / ``ROUTINE`` of *routine*.
 
     A drop that names no argument list drops the one routine of that name, so it
-    counts; a schema the drop leaves off matches any, as PostgreSQL resolves it
+    counts when *routine* is the *sole* one; with two, PostgreSQL refuses it (the
+    name is not unique). A schema the drop leaves off matches any, as PostgreSQL resolves it
     through ``search_path``. A migration pglast rejects drops nothing here; the
     migration's own checks report it.
     """
@@ -159,8 +165,9 @@ def _drops(sql: str, routine: Routine) -> bool:
         and edit.name == routine.name
         and edit.schema in (None, schema)
         and (
-            edit.arg_types is None
-            or signatures_match(signature_from_type_names(edit.arg_types), routine.signature_key)
+            sole
+            if edit.arg_types is None
+            else signatures_match(signature_from_type_names(edit.arg_types), routine.signature_key)
         )
         for raw in statements
         for edit in object_edits(raw.stmt)

@@ -95,3 +95,49 @@ class TestFunctionSignatureCheckerEdgeCases:
         mig.write_text("DROP FUNCTION IF EXISTS public.get_user(integer);")
         violations = _check(OLD_INTEGER, NEW_BIGINT, [mig])
         assert violations == []
+
+
+def _f(arg: str) -> str:
+    return f"CREATE FUNCTION public.f(p {arg}) RETURNS void AS $$ $$ LANGUAGE sql;\n"
+
+
+class TestOverloads:
+    def test_an_added_overload_is_not_a_retype(self):
+        assert _check(_f("integer"), _f("integer") + _f("text"), []) == []
+
+    def test_a_dropped_overload_beside_a_kept_one_is_the_accompaniment_checks(self):
+        assert _check(_f("integer") + _f("text"), _f("text"), []) == []
+
+    def test_each_retyped_overload_is_reported(self):
+        violations = _check(_f("integer") + _f("text"), _f("bigint") + _f("varchar"), [])
+        assert [(v.old_signature, v.new_signature) for v in violations] == [
+            ("public.f(integer)", "public.f(bigint)"),
+            ("public.f(text)", "public.f(character varying)"),
+        ]
+
+    def test_a_name_that_gained_fewer_pairs_the_rest_with_its_last(self):
+        violations = _check(_f("integer") + _f("text"), _f("bigint"), [])
+        assert [(v.old_signature, v.new_signature) for v in violations] == [
+            ("public.f(integer)", "public.f(bigint)"),
+            ("public.f(text)", "public.f(bigint)"),
+        ]
+
+    def test_routines_of_two_files_pair_across_them(self):
+        old = declared_routines(_f("integer"))
+        new = declared_routines("CREATE TABLE t (id int);\n") + declared_routines(_f("bigint"))
+        violations = FunctionSignatureChecker().check(old, new, [])
+        assert [v.old_signature for v in violations] == ["public.f(integer)"]
+
+
+class TestBareDrop:
+    def test_a_bare_drop_excuses_the_sole_routine_of_its_name(self, tmp_path):
+        mig = tmp_path / "001.up.sql"
+        mig.write_text("DROP FUNCTION public.f;\n" + _f("bigint"))
+        assert _check(_f("integer"), _f("bigint"), [mig]) == []
+
+    def test_a_bare_drop_does_not_excuse_one_of_two_overloads(self, tmp_path):
+        # PostgreSQL refuses it: "function name "public.f" is not unique".
+        mig = tmp_path / "001.up.sql"
+        mig.write_text("DROP FUNCTION public.f;\n" + _f("bigint"))
+        violations = _check(_f("integer") + _f("text"), _f("bigint") + _f("text"), [mig])
+        assert [v.old_signature for v in violations] == ["public.f(integer)"]
