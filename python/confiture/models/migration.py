@@ -64,6 +64,11 @@ class Migration(ABC):
         - DROP INDEX CONCURRENTLY
         - VACUUM
         - REINDEX CONCURRENTLY
+        - ALTER TYPE ... ADD VALUE, when a later statement uses the label
+          (PostgreSQL refuses a new label before it commits)
+
+        ``migrate diff --generate`` writes the attribute for you, by the rule
+        ``migrate up`` applies to a ``.up.sql`` file.
 
         WARNING: Non-transactional migrations cannot be automatically
         rolled back if they fail. Manual cleanup may be required.

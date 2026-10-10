@@ -1192,9 +1192,10 @@ class PreflightAgainstResult:
 
         One ``PFLIGHT_REPLAY_FAILED`` issue per failed (non-skipped) migration,
         carrying the version as ``migration`` and the database error under
-        ``details["error"]``. Skipped and passing migrations produce nothing —
-        the static pass already surfaces non-transactional skips via
-        ``PFLIGHT_NON_TRANSACTIONAL``.
+        ``details["error"]``. Skipped and passing migrations produce nothing.
+        The static pass reports a non-transactional ``.up.sql`` as
+        ``PFLIGHT_NON_TRANSACTIONAL``; it never reads a Python migration's
+        class, so a skipped ``.py`` shows only in :attr:`skipped_migrations`.
         """
         return [
             PreflightIssue.of(

@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **⚠️ A generated Python migration runs in the mode its SQL needs** (#698). The positional
+  `migrate diff OLD NEW --generate` writes a Python class that never declared `transactional`,
+  so a diff adding or dropping an index ran `CREATE`/`DROP INDEX CONCURRENTLY` inside a
+  transaction and `migrate up` failed ("cannot run inside a transaction block"), and a diff
+  adding an enum label that a later statement uses (a default moved to it) failed with
+  `55P04`. The class now declares `transactional = False` when `runs_in_one_transaction`, the
+  rule `migrate up` applies to a `.up.sql`, says its up needs it, so the two forms of one diff
+  run in one mode. ⚠️ For newly generated files only:
+  - such a migration is no longer atomic: each statement commits as it runs, as its SQL pair
+    already did. A failure leaves the earlier statements committed and records no ledger row,
+    and the next `migrate up` runs the file from the top: drop any INVALID index and finish or
+    revert the applied statements before re-running;
+  - a migration that only adds an enum label (no index), which applied atomically and was
+    rehearsed by `--dry-run-execute` and `preflight --against` before, is now non-atomic and
+    skipped by both. `preflight --against` counts a skipped migration as passed, and static
+    `migrate preflight` never reads a Python migration's mode, so neither reports the skip as
+    an issue.
+
 ## [1.35.0] - 2026-10-10
 
 **Every index the desired state declares reaches the migration and the drift gate, or is

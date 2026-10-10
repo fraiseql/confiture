@@ -82,9 +82,9 @@ def _detect_transactional(up_file: Path) -> bool:
 
     A pure ``.up.sql`` migration has no Python class to carry
     ``transactional = False``, yet statements such as ``CREATE INDEX
-    CONCURRENTLY``, ``VACUUM``, ``REINDEX … CONCURRENTLY`` and ``ALTER TYPE …
-    ADD VALUE`` are rejected by PostgreSQL inside any transaction block.  This
-    mirrors the static ``preflight`` check (``MigrationAnalyzer`` on the up
+    CONCURRENTLY``, ``VACUUM`` and ``REINDEX … CONCURRENTLY`` are rejected by
+    PostgreSQL inside any transaction block, and a label ``ALTER TYPE … ADD
+    VALUE`` adds cannot be used before it commits (``55P04``).  This mirrors the static ``preflight`` check (``MigrationAnalyzer`` on the up
     file) so such a migration runs in autocommit under ``migrate up`` and is
     skipped under ``preflight --against`` — exactly like a Python migration
     that declares ``transactional = False`` (issue #169).
