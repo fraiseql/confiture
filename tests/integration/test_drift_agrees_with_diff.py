@@ -303,9 +303,9 @@ def _materialised(
             str(schema_file)
         )
     sql = schema_file.read_text(encoding="utf-8")
-    declared = read_text(sql).model
-    database = database_side(url, against=declared)
-    built = materialised_side(sql, scratch_url, declared=declared)
+    read = read_text(sql)
+    database = database_side(url, against=read.model)
+    built = materialised_side(sql, scratch_url, read=read)
     policy = replace(MATERIALISED, author="new")
     return report.drift_items, SchemaDiffer().compare_sides(database, built, policy).changes
 
