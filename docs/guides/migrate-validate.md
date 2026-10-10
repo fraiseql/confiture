@@ -776,7 +776,10 @@ A redefined **view** is not in that gap: `--require-migration` reports it, becau
 nothing else does.
 
 `--require-migration-bodies` closes the gap. It is **static and git-based (no
-DB)**: it diffs function bodies between `--base-ref` and HEAD and requires each
+DB)**: it compares the function bodies of the two builds `--require-migration`
+reads — the environment's selection at the fork point of `--base-ref` and at HEAD,
+each tree whole, so a function that moved between files is compared with itself
+and a file the build does not select is never read — and requires each
 changed body to be carried by a migration that re-defines the function (a
 `CREATE OR REPLACE`, in a `.sql` or `.py` migration). Comment/whitespace/case-only
 changes don't count; parameter-type changes are the existing signature check's

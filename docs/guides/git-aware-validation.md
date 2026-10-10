@@ -195,6 +195,17 @@ echo "✅ Schema validation passed"
   path through `..` or `.git` under an include directory is refused (`GIT_001`,
   exit 7). On Windows, copying a symlink needs Developer Mode or the symlink
   privilege.
+- **The fork point, not the base's tip.** `--require-migration` reads the base at
+  the merge base of `--base-ref` and HEAD (with `--staged`, of `--base-ref` and the
+  index), so a change made on `main` after the branch forked is not charged to the
+  branch. A branch that has fallen behind `main` reports only its own changes.
+  Without `--staged`, `--check-drift` still compares the two refs as given.
+- **The function checks read the same trees.** The `DROP FUNCTION` check for a
+  changed parameter type, and the body check of `--require-migration-bodies`,
+  compare the routines of these two builds, each tree whole. A routine that moved
+  between files is compared with itself; a file the build does not select (an
+  `exclude` pattern, a directory outside `include_dirs`, a test fixture) is never
+  read, so it can neither fail the gate nor, unparseable, turn the checks off.
 
 Two refs that name the same tree are one schema and are not read at all; each tree is
 read once however many checks ask. A git failure exits 7; a schema the differ refuses
