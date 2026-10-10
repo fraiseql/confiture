@@ -194,6 +194,21 @@ class TestMaterializedViewIndexes:
         assert _kinds(sql) == ["DropStmt", "CreateTableAsStmt", "IndexStmt"]
         assert [i.idxname for i in _indexes_of(sql)] == ["ix_mv_user_name"]
 
+    def test_carried_index_changes_do_not_reach_the_sql(self):
+        """The recreate writes the index sets whole; the changes it carries are a reader's.
+
+        ``ix_mv_user_name`` goes and ``ux_mv_user`` comes, so the change carries both
+        index changes, and its up and down are still the statements without them.
+        """
+        from dataclasses import replace
+
+        change = change_of(MV + MV_NAME, MV_OTHER + MV_UNIQUE, "REPLACE_MATVIEW")
+        assert len(change.index_changes) == 2
+        bare = replace(change, index_changes=())
+        generator = DifferSQLGenerator()
+        for render in (generator.generate_up, generator.generate_down):
+            assert _statements(render(change)) == _statements(render(bare))
+
     def test_drop_matview_down_recreates_its_indexes(self):
         change = change_of(MV + MV_UNIQUE, "", "DROP_MATVIEW")
         assert _kinds(DifferSQLGenerator().generate_up(change)) == ["DropStmt"]

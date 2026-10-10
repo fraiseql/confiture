@@ -774,7 +774,7 @@ class SchemaDiffer:
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
         # Objects compared by definition: views, routines and the rest (#288).
         objects, unwritable = self._compare_objects(old, new, policy)
-        changes.extend(_with_indexes(change, old.model, new.model) for change in objects)
+        changes.extend(self._carrying(change, old.model, new.model, policy) for change in objects)
         whole = {c.ref for c in objects if c.ref.kind == "matview"}
         changes.extend(self._compare_matview_indexes(old.model, new.model, policy, whole))
         return SchemaDiff(
@@ -1123,20 +1123,46 @@ class SchemaDiffer:
         indexes, which are created with it, so none of them is a change of its own.
         A side that did not read views says nothing about a matview's indexes.
         """
+        changes: list[SchemaChange] = []
+        for ref in sorted(old.views.keys() & new.views.keys() - whole, key=_object_sort_key):
+            changes.extend(self._matview_index_changes(old, new, ref, policy))
+        return changes
+
+    def _matview_index_changes(
+        self, old: SchemaModel, new: SchemaModel, ref: ObjectRef, policy: ComparisonPolicy
+    ) -> list[SchemaChange]:
+        """How the indexes of the materialized view *ref* differ: the one index comparison.
+
+        Only for a matview both sides hold, materialized on both, read by both: a
+        side that did not read views says nothing about a matview's indexes.
+        """
+        before, after = old.views.get(ref), new.views.get(ref)
+        if before is None or after is None or not (before.materialized and after.materialized):
+            return []
         if not old.coverage.shared(new.coverage, "views"):
             return []
-        changes: list[SchemaChange] = []
-        for ref in sorted(old.views.keys() & new.views.keys(), key=_object_sort_key):
-            before, after = old.views[ref], new.views[ref]
-            if ref in whole or not (before.materialized and after.materialized):
-                continue
-            relation = RelationName(before.schema, before.name)
-            changes.extend(
-                self._compare_indexes(
-                    before.indexes, after.indexes, relation, policy, relation_kind="matview"
-                )
-            )
-        return changes
+        relation = RelationName(before.schema, before.name)
+        return self._compare_indexes(
+            before.indexes, after.indexes, relation, policy, relation_kind="matview"
+        )
+
+    def _carrying(
+        self, change: SchemaChange, old: SchemaModel, new: SchemaModel, policy: ComparisonPolicy
+    ) -> SchemaChange:
+        """*change* with the indexes a matview it adds, drops or redefines carries.
+
+        A redefined matview also carries how its indexes differ, compared as a
+        paired matview's are: the recreate writes them whole, and a reader that
+        asks about the indexes (drift) reads the difference.
+        """
+        change = _with_indexes(change, old, new)
+        if not (isinstance(change, ObjectReplaced) and change.ref.kind == "matview"):
+            return change
+        found = self._matview_index_changes(old, new, change.ref, policy)
+        return replace(
+            change,
+            index_changes=tuple(c for c in found if isinstance(c, IndexAdded | IndexDropped)),
+        )
 
     @staticmethod
     def _constraints(table: Table, kind: str, policy: ComparisonPolicy) -> list[tuple[Any, Any]]:
