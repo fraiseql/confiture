@@ -580,6 +580,13 @@ class TView:
     ``uncascaded_tables`` is each table's own ``uncascaded_policy``, which overrides
     the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
     call's ``options`` alone, ``()`` pinning none, sorted by table.
+
+    ``indexes`` are the TVIEW's own, compared as a table's are: every index a tree
+    writes on it, or, read from a database, every index on its table but those
+    pg_tviews created (``tviews.registry.managed_indexes``) and those a constraint
+    uses, pg_tviews' rule; ``None`` where they were not read. ``managed_indexes``
+    are pg_tviews' own, read from the database alone and never compared: a tree
+    that writes one of them exactly writes what pg_tviews adopts as its own.
     """
 
     name: str
@@ -591,6 +598,8 @@ class TView:
     time_refresh: str | None = None
     function_reads: tuple[FunctionRead, ...] | None = None
     uncascaded_tables: tuple[UncascadedTable, ...] | None = None
+    indexes: tuple[Index, ...] | None = ()
+    managed_indexes: tuple[Index, ...] = field(default=(), compare=False)
 
     @property
     def entity(self) -> str:
@@ -984,9 +993,12 @@ def _keyed[T](
 def _tview_from(data: dict[str, Any]) -> TView:
     reads = data.get("function_reads")
     tables = data.get("uncascaded_tables")
+    indexes = data.get("indexes", ())
     return TView(
         **{
             **data,
+            "indexes": None if indexes is None else tuple(map(_index_from, indexes)),
+            "managed_indexes": tuple(map(_index_from, data.get("managed_indexes", ()))),
             "function_reads": None
             if reads is None
             else tuple(FunctionRead(r["function"], tuple(r["tables"])) for r in reads),
@@ -1275,8 +1287,19 @@ _TVIEW_DEFAULT_UNCASCADED_POLICY = "error"
 
 
 def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TView:
-    """*tview* as *rules* compare it: an option pg_tviews chose by default is no pin."""
-    tview = replace(tview, schema=_fold_schema(tview.schema, rules))
+    """*tview* as *rules* compare it: an option pg_tviews chose by default is no pin.
+
+    Its indexes are compared as a table's are; pg_tviews' own are not the TVIEW's.
+    """
+    indexes = tview.indexes
+    if indexes is not None:
+        indexes = _in_order([seen for _, seen in parity_indexes(indexes, rules)], rules)
+    tview = replace(
+        tview,
+        schema=_fold_schema(tview.schema, rules),
+        indexes=indexes,
+        managed_indexes=(),
+    )
     if "tview_defaults" not in rules:
         return tview
     return replace(

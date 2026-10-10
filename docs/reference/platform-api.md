@@ -671,6 +671,13 @@ tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
 the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
 call's `options` alone, `()` pinning none, sorted by table.
 
+`indexes` are the TVIEW's own, compared as a table's are: every index a tree
+writes on it, or, read from a database, every index on its table but those
+pg_tviews created (`tviews.registry.managed_indexes`) and those a constraint
+uses, pg_tviews' rule; `None` where they were not read. `managed_indexes`
+are pg_tviews' own, read from the database alone and never compared: a tree
+that writes one of them exactly writes what pg_tviews adopts as its own.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
@@ -682,6 +689,8 @@ call's `options` alone, `()` pinning none, sorted by table.
 | `time_refresh` | `str \| None` | `None` |
 | `function_reads` | `tuple[FunctionRead, ...] \| None` | `None` |
 | `uncascaded_tables` | `tuple[UncascadedTable, ...] \| None` | `None` |
+| `indexes` | `tuple[Index, ...] \| None` | `()` |
+| `managed_indexes` | `tuple[Index, ...]` | `()` |
 
 ### `FunctionRead`
 
