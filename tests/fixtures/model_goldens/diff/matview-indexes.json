@@ -1,0 +1,50 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_MATVIEW",
+        "details": "ADD MATERIALIZED VIEW mv_customer",
+        "irreversible_reason": null
+      },
+      {
+        "type": "REPLACE_MATVIEW",
+        "details": "REPLACE MATERIALIZED VIEW mv_order_total",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_INDEX",
+        "details": "DROP INDEX ix_order_big",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "details": "ADD INDEX ix_order_big ON mv_order_big",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "details": "ADD INDEX ux_order_count_customer ON mv_order_count",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 5,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": [],
+    "ok": true,
+    "command": "migrate diff",
+    "parser": {
+      "pglast": "8.5",
+      "pg_major": 18
+    }
+  }
+}

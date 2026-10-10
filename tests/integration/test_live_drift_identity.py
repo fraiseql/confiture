@@ -203,6 +203,14 @@ MUTATIONS = [
         "core.mv_widget",
         id="drop-matview",
     ),
+    # #690: a matview's unique index is its only uniqueness guarantee.
+    pytest.param(
+        "DROP INDEX core.ux_mv_widget_n",
+        "missing_index",
+        "critical",
+        "core.mv_widget.ux_mv_widget_n",
+        id="drop-matview-index",
+    ),
     pytest.param(
         "DROP TRIGGER trg_touch ON core.tb_widget",
         "missing_trigger",

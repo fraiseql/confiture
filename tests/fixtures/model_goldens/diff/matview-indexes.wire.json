@@ -1,0 +1,101 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 0,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 2,
+      "indexes_dropped": 1,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_MATVIEW",
+        "table": "mv_customer",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_customer AS SELECT DISTINCT customer FROM tb_order",
+        "details": {
+          "kind": "matview",
+          "name": "mv_customer",
+          "keyword": "MATERIALIZED VIEW"
+        }
+      },
+      {
+        "type": "REPLACE_MATVIEW",
+        "table": "mv_order_total",
+        "column": null,
+        "old_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_total AS SELECT customer, sum(total) AS total FROM tb_order GROUP BY customer",
+        "new_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_total AS SELECT customer, sum(total) AS total, max(total) AS largest FROM tb_order GROUP BY customer",
+        "details": {
+          "kind": "matview",
+          "name": "mv_order_total",
+          "keyword": "MATERIALIZED VIEW"
+        }
+      },
+      {
+        "type": "DROP_INDEX",
+        "table": "mv_order_big",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ix_order_big",
+          "columns": [
+            "customer"
+          ],
+          "unique": false,
+          "relation_kind": "matview"
+        }
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "mv_order_big",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ix_order_big",
+          "columns": [
+            "customer",
+            "total"
+          ],
+          "unique": false,
+          "relation_kind": "matview"
+        }
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "mv_order_count",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ux_order_count_customer",
+          "columns": [
+            "customer"
+          ],
+          "unique": true,
+          "relation_kind": "matview"
+        }
+      }
+    ],
+    "ok": true,
+    "command": "diff",
+    "parser": {
+      "pglast": "8.5",
+      "pg_major": 18
+    }
+  }
+}

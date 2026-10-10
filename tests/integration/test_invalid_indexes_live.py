@@ -9,6 +9,7 @@ is not what the tree says: drop it concurrently and create it again.
 
 from pathlib import Path
 
+import pglast
 import psycopg
 import pytest
 
@@ -200,18 +201,52 @@ def test_preflight_names_an_if_not_exists_the_invalid_index_would_skip(
         assert "INVALID" in found[0]["message"]
 
 
-def test_an_invalid_matview_index_is_read_but_not_compared_yet(
-    fresh_database: str, tmp_path: Path
-) -> None:
-    """Tracked in #690: a matview's indexes compare only through the view's equality."""
-    view = "CREATE MATERIALIZED VIEW mv_item AS SELECT id, qty FROM tb_item;\n"
+MATVIEW = "CREATE MATERIALIZED VIEW mv_item AS SELECT id, name, qty FROM tb_item;\n"
+
+
+def test_an_invalid_matview_index_is_rebuilt_live(fresh_database: str, tmp_path: Path) -> None:
+    """A matview's INVALID index is the rebuild pair a table's is (#690)."""
     index = "CREATE INDEX ix_mv_ratio ON mv_item ((100 / qty));\n"
-    _run(fresh_database, TABLE, "INSERT INTO tb_item VALUES (1, 'a', 0)", view)
+    _run(fresh_database, TABLE, "INSERT INTO tb_item VALUES (1, 'a', 0)", MATVIEW)
     _left_invalid(fresh_database, index.replace("INDEX", "INDEX CONCURRENTLY"))
 
     with psycopg.connect(fresh_database) as conn:
         assert live_catalog.invalid_indexes(conn, ["public"]) == {("public", "ix_mv_ratio")}
-    assert _drift(fresh_database, _tree(tmp_path, TABLE + view + index)) == []
+    tree = _tree(tmp_path, TABLE + MATVIEW + index)
+    extra, missing = _drift(fresh_database, tree)
+    assert (extra.drift_type, extra.severity) == (DriftType.EXTRA_INDEX, DriftSeverity.INFO)
+    assert (missing.drift_type, missing.severity) == (
+        DriftType.MISSING_INDEX,
+        DriftSeverity.WARNING,
+    )
+    assert missing.object_name == extra.object_name == "public.mv_item.ix_mv_ratio"
+    assert "INVALID" in missing.message
+    assert (missing.subject.relation, missing.subject.name) == ("mv_item", "ix_mv_ratio")
+
+    changes = platform.diff(fresh_database, tree).changes
+    up = "".join(DifferSQLGenerator().generate_up(c) or "" for c in changes)
+    drop, create = [raw.stmt for raw in pglast.parse_sql(up)]
+    assert type(drop).__name__ == "DropStmt"
+    assert drop.concurrent
+    assert type(create).__name__ == "IndexStmt"
+    assert create.concurrent
+    assert (create.idxname, create.relation.relname) == ("ix_mv_ratio", "mv_item")
+
+
+def test_an_invalid_unique_matview_index_is_critical_live(
+    fresh_database: str, tmp_path: Path
+) -> None:
+    """A matview holds no constraints: its unique index is its only uniqueness guarantee."""
+    unique = "CREATE UNIQUE INDEX ux_mv_name ON mv_item (name);\n"
+    _run(fresh_database, TABLE, "INSERT INTO tb_item VALUES (1, 'a', 1), (2, 'a', 2)", MATVIEW)
+    _left_invalid(fresh_database, unique.replace("INDEX", "INDEX CONCURRENTLY"))
+
+    _, missing = _drift(fresh_database, _tree(tmp_path, TABLE + MATVIEW + unique))
+    assert (missing.drift_type, missing.severity) == (
+        DriftType.MISSING_INDEX,
+        DriftSeverity.CRITICAL,
+    )
+    assert "INVALID" in missing.message
 
 
 def test_refresh_concurrently_refuses_an_invalid_unique_index(fresh_database: str) -> None:

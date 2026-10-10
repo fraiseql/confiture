@@ -227,6 +227,17 @@ MORE = [
         "extra_trigger",
         id="extra-trigger",
     ),
+    pytest.param(
+        "CREATE INDEX ix_mv_widget_extra ON core.mv_widget (n)",
+        "extra_index",
+        id="add-matview-index",
+    ),
+    pytest.param(
+        "DROP INDEX core.ux_mv_widget_n; CREATE UNIQUE INDEX ux_mv_widget_n "
+        "ON core.mv_widget (n) WHERE n > 0",
+        "missing_index",
+        id="matview-unique-index-gains-a-predicate",
+    ),
 ]
 
 

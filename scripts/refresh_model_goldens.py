@@ -120,6 +120,10 @@ TREES: tuple[Tree, ...] = (
     # other trees, almost all additions, cannot show of the wire.
     Tree("every-change.old", files=("tests/fixtures/every_change/old.sql",), drift=False),
     Tree("every-change.new", files=("tests/fixtures/every_change/new.sql",), drift=False),
+    # A materialized view's indexes: created with it, carried through a recreate,
+    # added and rebuilt on one both trees hold (#690).
+    Tree("matview-indexes.old", files=("tests/fixtures/matview_indexes/old.sql",), drift=False),
+    Tree("matview-indexes.new", files=("tests/fixtures/matview_indexes/new.sql",), drift=False),
 )
 
 PAIRS: tuple[tuple[str, str, str], ...] = (
@@ -129,6 +133,7 @@ PAIRS: tuple[tuple[str, str, str], ...] = (
         "03-zero-downtime-migration.new",
     ),
     ("every-change", "every-change.old", "every-change.new"),
+    ("matview-indexes", "matview-indexes.old", "matview-indexes.new"),
 )
 
 _VERSION = re.compile(r"\b\d{14}(?=_golden\b)|(?<=-- Version: )\d{14}\b")

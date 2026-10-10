@@ -1,0 +1,117 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 1,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "tb_order",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "customer",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "total",
+              "type": "NUMERIC",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_MATVIEW",
+        "table": "mv_customer",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_customer AS SELECT DISTINCT customer FROM tb_order",
+        "details": {
+          "kind": "matview",
+          "name": "mv_customer",
+          "keyword": "MATERIALIZED VIEW"
+        }
+      },
+      {
+        "type": "ADD_MATVIEW",
+        "table": "mv_order_big",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_big AS SELECT id, customer, total FROM tb_order WHERE total > 100",
+        "details": {
+          "kind": "matview",
+          "name": "mv_order_big",
+          "keyword": "MATERIALIZED VIEW"
+        }
+      },
+      {
+        "type": "ADD_MATVIEW",
+        "table": "mv_order_count",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_count AS SELECT customer, count(*) AS n FROM tb_order GROUP BY customer",
+        "details": {
+          "kind": "matview",
+          "name": "mv_order_count",
+          "keyword": "MATERIALIZED VIEW"
+        }
+      },
+      {
+        "type": "ADD_MATVIEW",
+        "table": "mv_order_total",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_total AS SELECT customer, sum(total) AS total, max(total) AS largest FROM tb_order GROUP BY customer",
+        "details": {
+          "kind": "matview",
+          "name": "mv_order_total",
+          "keyword": "MATERIALIZED VIEW"
+        }
+      }
+    ],
+    "ok": true,
+    "command": "diff",
+    "parser": {
+      "pglast": "8.5",
+      "pg_major": 18
+    }
+  }
+}

@@ -43,3 +43,26 @@ def test_drift_compares_nothing_itself() -> None:
         if isinstance(node, ast.FunctionDef)
     }
     assert sorted(n for n in defined if n.startswith(("_compare_", "_same_"))) == []
+
+
+def test_matview_index_changes_are_rendered() -> None:
+    """An index change on a matview both models hold is a finding on that matview."""
+    from dataclasses import replace
+
+    from confiture.core.drift import DriftReport, DriftSeverity, _Findings
+    from confiture.core.schema_change import IndexAdded
+    from confiture.core.schema_model import ref_for
+    from confiture.core.schema_read import read_text
+
+    view = "CREATE TABLE t (id int);\nCREATE MATERIALIZED VIEW mv AS SELECT id FROM t;\n"
+    expected = read_text(view + "CREATE UNIQUE INDEX ux_mv ON mv (id);\n").catalogued
+    actual = replace(read_text(view).catalogued, source="catalog")
+    (index,) = expected.views[ref_for("matview", None, "mv")].indexes
+    report = DriftReport(database_name="db", expected_schema_source="tree")
+    _Findings(expected, actual, DriftSeverity.WARNING).render(
+        [IndexAdded(index.table, index, relation_kind="matview")], report, column_order=False
+    )
+    (item,) = report.drift_items
+    assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
+    assert item.object_name == "public.mv.ux_mv"
+    assert report.indexes_checked == 1
