@@ -35,7 +35,7 @@ reference from the CLI with `confiture --exit-codes`.
 ### Symbolic codes per exit code
 
 - **0** — Success (including success-with-signal: already applied, nothing pending, advisories)
-  - DIFFER_402, DIFFER_404, DIFFER_405, MIGR_101, SCHEMA_206, SEED_002, SEED_003
+  - DIFFER_402, DIFFER_404, DIFFER_405, DIFFER_407, MIGR_101, SCHEMA_206, SEED_002, SEED_003
 - **1** — Generic failure (SQL/hook execution, status: pending)
   - SQL_001
 - **2** — Tracking table absent — confiture not initialized on this database yet
@@ -45,7 +45,7 @@ reference from the CLI with `confiture --exit-codes`.
 - **4** — Schema / DDL / build error
   - DDL_001, REBUILD_001, SCHEMA_001, SCHEMA_201, SCHEMA_202, SCHEMA_205
 - **5** — Configuration invalid, or validation / sync / lint / precondition failure
-  - ANON_1400, CONFIG_001, CONFIG_002, CONFIG_003, CONFIG_004, CONFIG_007, CONFIG_008, CONFIG_009, CONFIG_010, CONFIG_011, CONFIG_012, CONFIG_013, CONFIG_014, DIFFER_400, DIFFER_401, DIFFER_403, DIFF_001, PRECON_1000, RESTORE_001, SEED_001, SYNC_001, VALID_001, VALID_002, VALID_003, VALID_004, VALID_005, VALID_006, VALID_007, VALID_008, VALID_009, VERIFY_001
+  - ANON_1400, CONFIG_001, CONFIG_002, CONFIG_003, CONFIG_004, CONFIG_007, CONFIG_008, CONFIG_009, CONFIG_010, CONFIG_011, CONFIG_012, CONFIG_013, CONFIG_014, DIFFER_400, DIFFER_401, DIFFER_403, DIFFER_406, DIFF_001, PRECON_1000, RESTORE_001, SEED_001, SYNC_001, VALID_001, VALID_002, VALID_003, VALID_004, VALID_005, VALID_006, VALID_007, VALID_008, VALID_009, VERIFY_001
 - **6** — Lock contention — another writer holds the lock
   - LOCK_1300
 - **7** — Git / pgGit / grant-accompaniment error

@@ -7,12 +7,38 @@ loop spec → schema → migration closes without a hand-authored target.
 
 ## The pipeline
 
+An artifact is a **fragment** of the desired state, not the whole of it: FraiseQL contributes the
+part only it knows — the indexes its queries need, on `tv_<type>` relations the project authors
+itself. A desired state is whole, so the artifact is composed into the project's tree rather than
+diffed alone. Emit it into a committed directory and list that directory in the environment's
+`include_dirs`, after the files that declare its tables:
+
+```yaml
+# db/environments/local.yaml
+include_dirs:
+  - db/schema
+  - path: db/fraiseql/indexes   # what fraiseql's --emit-ddl writes
+    order: 900                  # after every table it indexes
+    auto_discover: false        # a missing directory fails the build, never skips it
+```
+
 ```bash
-fraiseql compile schema.json -o schema.compiled.json --emit-ddl build/ddl
-confiture migrate diff --from db --to build/ddl --generate --name sync_from_spec
+fraiseql compile schema.json -o schema.compiled.json --emit-ddl db/fraiseql/indexes
+confiture migrate diff --from db --to-env local --generate --name sync_from_spec
 confiture migrate preflight
 confiture migrate up
 ```
+
+`order` is required: every entry defaults to `0`, and inside one order block files sort by path,
+so `db/fraiseql/…` would build before `db/schema/…` and its indexes before their tables.
+`--to-env local` reads exactly what `confiture build --env local` selects — `order`, `include` and
+`exclude` honoured — which is also the tree a deploy builds and checks for drift. A hand-written
+copy of a generated index is a second definition (`confiture lint` reports it as `build_005`).
+
+Diffed alone against a database, a fragment is refused: an index on a relation the fragment does
+not declare is `DIFFER_406` (exit 5). The database holds the relation and the fragment does not, so
+the migration would drop it; or the database does not hold it, so the index could not be created.
+`--from db --to <dir>` is for a directory that is a whole schema.
 
 - `--from` is the current state: a schema file, a directory of `.sql` files, `-` for stdin, or
   `db` — the database of `--config` (default `db/environments/local.yaml`), read from its
@@ -28,8 +54,7 @@ confiture migrate up
   change rather than an expression that exists on both sides; the payload says
   `"fidelity": "materialised"` ([Comparison fidelity](../reference/comparison-fidelity.md)).
 - `--to` is the desired state: a schema file, a directory of `.sql` files (read in name order), or
-  `-` for stdin, so `fraiseql compile … --emit-ddl - | confiture migrate diff --from db --to -` is
-  one pipeline when the emitter writes to stdout.
+  `-` for stdin — each a whole schema. `--to-env <env>` is the environment's build instead.
 - The positional form `migrate diff OLD.sql NEW.sql` still works; the two forms do not mix.
 
 ## What the migration contains
@@ -53,24 +78,30 @@ the risk tier the change-set classifier behind `migrate preflight` assigns it (`
 change the generator cannot express is written as a `-- WARNING:` comment rather than silently dropped. The positional form `migrate diff OLD NEW
 --generate` keeps writing a Python migration.
 
-An artifact may declare an index on a table it does not declare — a `tv_<type>` relation the
-project authors, which a localized field needs an expression index on. Between two trees (an empty
-or earlier artifact on `--from`), the migration carries that index as written, `CREATE INDEX
-CONCURRENTLY IF NOT EXISTS` since the table exists and is in use, under a comment naming the
-undeclared table, and the diff reports a `DIFFER_405` warning (also in `--format json`) naming the
-index and the table. The down drops it the same way. A table either side declares is that side's
-whole, so its indexes come and go with it.
+Between two trees — an empty or earlier artifact on `--from` — an index on a table neither tree
+declares is carried as written, `CREATE INDEX CONCURRENTLY IF NOT EXISTS` since the table exists
+and is in use, under a comment naming the undeclared table, and the diff reports a `DIFFER_405`
+warning (also in `--format json`) naming the index and the table. The down drops it the same way.
+A table either side declares is that side's whole, so its indexes come and go with it; an index on
+a relation only the current side declares is the contradiction `DIFFER_406` refuses.
 
-The round trip closes with `drift`: `confiture drift --schema <dir>` accepts the same directory of
-`.sql` files and reports nothing once the migration is applied.
+An index on a TVIEW is built by `confiture build` and kept by pg_tviews across a rebuild, but
+`migrate diff` does not carry it and drift does not check it yet: each one is a `DIFFER_407`
+warning naming the index and the TVIEW. Write a change to one in a migration by hand.
+
+The round trip closes with `drift`: `confiture drift --schema <dir>` accepts a directory of `.sql`
+files that is a whole schema — the composed tree — and reports nothing once the migration is
+applied. Given a fragment, it refuses with `DIFFER_406` as `migrate diff` does.
 
 ## Output
 
 `--format json` reports the changes and, under `source`, where the desired state came from:
 
 ```json
-{"kind": "sql", "path": "build/ddl"}
+{"kind": "env", "path": "local"}
 ```
+
+`kind` is `env` for `--to-env`, `sql` for a file, a directory or stdin.
 
 The payload's schema is `migrate-diff.schema.json` (see [JSON schemas](../reference/json-schemas.md)).
 
@@ -111,7 +142,7 @@ Nothing is commented out silently.
 
 A structured export (a JSON or SpecQL schema) is not a source at 1.1.0. FraiseQL's compiled JSON
 describes GraphQL types, not tables; the mapping to DDL is fraiseql's own `--emit-ddl`, and that DDL
-is what confiture reads. `source.kind` in the JSON output is `sql` today and stays open for a
+is what confiture reads. `source.kind` in the JSON output is `sql` or `env` and stays open for a
 structured source when one exists.
 
 ## The external generator
