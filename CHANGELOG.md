@@ -122,6 +122,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constraint, and `missing_constraint` already is. Every unique index drift rebuilds — for
   validity, `NULLS NOT DISTINCT`, its method — reports `missing_index` as `critical`; any other
   stays `warning`. `DRIFT_OF` carries a per-change severity, which drift's index findings read.
+- **A git ref is read as `confiture build` reads the working tree** (#686). `migrate validate
+  --check-drift`, `--require-migration` and `--list-unmigrated-bodies` read each ref by copying its
+  include directories into a temporary directory (`GitRepository.materialise`: raw bytes, one
+  `ls-tree` and one `cat-file --batch` per ref) and running the build's own selection over the
+  copy, with the working tree's environment. A ref used to be listed by hand, and differed from
+  the build in `sort_mode: hex` order, entries sharing an `order` value, `recursive: false` (read
+  nothing), `include`/`exclude` patterns, `exclude_dirs`, overlapping entries, a project in a
+  repository subdirectory (a `GitError`), and a non-ASCII file name (dropped). The ref is now
+  compared file by file, so its `DIFFER_400` names the file and line, by its working-tree path,
+  and an index file the build reads after its table is no longer a false `DIFFER_406` — nor a
+  dropped index a silent `DIFFER_408` that let `--require-migration` pass without a migration.
+  `--staged` reads the index the same way. `build --list-files --compare-to` reads its ref through
+  the same copy in place of `git archive`, so a file marked `export-ignore` is selected there. Two
+  refs naming one tree are not read; drift and accompaniment share one read per tree.
+- **⚠️ A git check that cannot run keeps its own code and exit status.** `--check-drift` exits with
+  a confiture error's own code (a `DIFFER_406` exits 5; it exited 7 as "Drift check failed").
+  `--require-migration` raises a git failure (exit 7) instead of reporting it as "the schema does
+  not parse" (exit 1), and its `migration_error` carries the error's code and message
+  (`DIFFER_400 Cannot parse the schema (…)`), shown as "could not run: <code> <message>".
+- **⚠️ A submodule, a symlink leaving the repository, or a path through `..` or `.git` under an
+  include directory is refused** (`GIT_001`, exit 7, naming the path) by the git checks and by
+  `build --list-files --compare-to`, which skipped them.
+- **⚠️ Untracked include directories are refused** by the git checks (`GIT_001`): when neither ref
+  holds a file the working tree's build selects, the check said nothing changed.
 
 ## [1.34.0] - 2026-10-09
 
