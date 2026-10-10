@@ -19,6 +19,31 @@ class TestCreateTableFix:
         assert "CREATE TABLE IF NOT EXISTS users" in result
         assert result.endswith(";")
 
+    def test_fix_leaves_a_declared_plain_create_table_alone(self):
+        sql = "-- confiture:creates app.users\nCREATE TABLE app.users (id INT);\n"
+        assert IdempotencyFixer().fix(sql) == sql
+
+    def test_fix_rewrites_an_undeclared_create_table_beside_a_declared_one(self):
+        sql = (
+            "-- confiture:creates users\n"
+            "CREATE TABLE users (id INT);\n"
+            "CREATE TABLE orders (id INT);\n"
+        )
+        assert IdempotencyFixer().fix(sql) == (
+            "-- confiture:creates users\n"
+            "CREATE TABLE users (id INT);\n"
+            "CREATE TABLE IF NOT EXISTS orders (id INT);\n"
+        )
+
+    def test_dry_run_proposes_nothing_for_a_declared_create(self):
+        sql = "-- confiture:creates users\nCREATE TABLE users (id INT);\n"
+        assert IdempotencyFixer().dry_run(sql) == []
+
+    def test_fix_never_rewrites_a_quoted_create_table_name(self):
+        """The rewrite matches an unquoted name only; a quoted one is left as written."""
+        sql = 'CREATE TABLE "Users" (id INT);'
+        assert IdempotencyFixer().fix(sql) == sql
+
     def test_preserves_schema_qualified_name(self):
         """Preserves schema prefix when fixing CREATE TABLE."""
         sql = "CREATE TABLE app.users (id INT PRIMARY KEY);"

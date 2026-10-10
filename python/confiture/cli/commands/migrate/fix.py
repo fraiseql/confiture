@@ -60,7 +60,8 @@ def migrate_fix(
     PROCESS:
       Transforms non-idempotent statements to safe-to-rerun equivalents:
       CREATE TABLE → CREATE TABLE IF NOT EXISTS, CREATE INDEX → CREATE INDEX
-      IF NOT EXISTS, DROP TABLE → DROP TABLE IF EXISTS, and more.
+      IF NOT EXISTS, DROP TABLE → DROP TABLE IF EXISTS, and more. A CREATE
+      TABLE the file declares with -- confiture:creates is left as written.
 
     EXAMPLES:
       confiture migrate fix --idempotent --dry-run

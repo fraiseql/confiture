@@ -34,8 +34,9 @@ def creates_line(spelling: str) -> str:
     return f"-- {DIRECTIVE_PREFIX}{CREATES_DIRECTIVE} {comment_text(spelling)}"
 
 
-def _relation(argument: str | None) -> Declared | None:
-    match name_parts(argument) if argument else None:
+def relation_named(written: str | None) -> Declared | None:
+    """The relation *written* names, folded, or ``None`` unless it is a name of one or two parts."""
+    match name_parts(written) if written else None:
         case [name]:
             return None, identifier_identity(name)
         case [schema, name]:
@@ -46,5 +47,5 @@ def _relation(argument: str | None) -> Declared | None:
 
 def declared(sql: str) -> frozenset[Declared]:
     """Every relation *sql*'s ``creates`` directives name, as written and folded."""
-    found = (_relation(d.argument) for d in directives(sql) if d.name == CREATES_DIRECTIVE)
+    found = (relation_named(d.argument) for d in directives(sql) if d.name == CREATES_DIRECTIVE)
     return frozenset(relation for relation in found if relation is not None)

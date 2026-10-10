@@ -291,6 +291,33 @@ class TestIdempotencyFixCLI:
         # Content should remain unchanged
         assert migration_file.read_text() == idempotent_content
 
+    def test_migrate_fix_idempotent_leaves_a_declared_create_alone(self, tmp_path: Path):
+        """A plain CREATE TABLE the file declares is meant, and is not rewritten."""
+        import json
+
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        migration_file = migrations_dir / "001_create_users.up.sql"
+        content = "-- confiture:creates users\nCREATE TABLE users (id INT PRIMARY KEY);\n"
+        migration_file.write_text(content)
+
+        result = runner.invoke(
+            app,
+            [
+                "migrate",
+                "fix",
+                "--idempotent",
+                "--format",
+                "json",
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert migration_file.read_text() == content
+        assert json.loads(result.stdout)["files"] == []
+
     def test_fix_idempotent_json_output(self, tmp_path: Path):
         """JSON output format works for fix command."""
         migrations_dir = tmp_path / "db" / "migrations"
