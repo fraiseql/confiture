@@ -60,6 +60,7 @@ from confiture.core.ddl_walk import (
     read_index,
     render_default,
     rendered_query,
+    uncascaded_tables,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -873,9 +874,17 @@ MINIMUM_PG_TVIEWS = "0.1.0-beta.26"
 #: The registry columns pg_tviews appended under contract 1 that confiture reads:
 #: ``view``, the backing view in pg_tviews' own schema, and ``uncascaded_policy``,
 #: stored beside ``options`` (0.1.0-beta.25, fraiseql/pg_tviews#181);
-#: ``function_reads`` and ``time_refresh`` (0.1.0-beta.26, fraiseql/pg_tviews#193).
-#: A build without one is refused, not read as a TVIEW that declares nothing.
-REGISTRY_COLUMNS = ("view", "uncascaded_policy", "function_reads", "time_refresh")
+#: ``function_reads`` and ``time_refresh`` (0.1.0-beta.26, fraiseql/pg_tviews#193), and
+#: ``uncascaded_table_policies``, the ``uncascaded_tables`` option (0.1.0-beta.26,
+#: fraiseql/pg_tviews#195). A build without one is refused, not read as a TVIEW that
+#: declares nothing.
+REGISTRY_COLUMNS = (
+    "view",
+    "uncascaded_policy",
+    "function_reads",
+    "time_refresh",
+    "uncascaded_table_policies",
+)
 
 _REGISTRY_COLUMNS_HELD = """
 SELECT attname::text FROM pg_attribute
@@ -1119,7 +1128,8 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
     # beside the table is the tree's — ``NULL`` once that view is gone.
     query = t"""
         SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
-               r.uncascaded_policy, r.time_refresh, r.function_reads, r.view::oid::bigint
+               r.uncascaded_policy, r.time_refresh, r.function_reads,
+               r.uncascaded_table_policies, r.view::oid::bigint
         FROM {TVIEWS_SCHEMA:i}.registry r
         WHERE r.schema = ANY({list(schemas)})
         ORDER BY r.schema, r.name
@@ -1135,6 +1145,7 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
                 uncascaded_policy=policy,
                 time_refresh=time_refresh,
                 function_reads=function_reads(reads),
+                uncascaded_tables=uncascaded_tables(table_policies or {}),
             ),
             view_oid,
         )
@@ -1147,6 +1158,7 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
             policy,
             time_refresh,
             reads,
+            table_policies,
             view_oid,
         ) in conn.execute(query).fetchall()
     ]

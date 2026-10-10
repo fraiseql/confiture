@@ -93,6 +93,7 @@ from confiture.core.schema_model import (
     Table,
     Trigger,
     TView,
+    UncascadedTable,
     ValueSource,
     View,
 )
@@ -186,6 +187,7 @@ __all__ = [
     "TableHints",
     "TableRenamed",
     "Trigger",
+    "UncascadedTable",
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
     "ValueSource",

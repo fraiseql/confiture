@@ -717,7 +717,7 @@
     },
     "TView": {
       "type": "object",
-      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `time_refresh` (`external`) and `function_reads` are what the TVIEW declares of the reads no write to a tracked table changes: the time, and the tables a non-immutable function reads (pg_tviews 0.1.0-beta.26). A tree pins them in a `pg_tviews_create_or_replace()` call's `options` alone; `function_reads` `[]` pins none. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before an option was modelled lacks its key and pins nothing.",
+      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `time_refresh` (`external`) and `function_reads` are what the TVIEW declares of the reads no write to a tracked table changes: the time, and the tables a non-immutable function reads (pg_tviews 0.1.0-beta.26). A tree pins them in a `pg_tviews_create_or_replace()` call's `options` alone; `function_reads` `[]` pins none. `uncascaded_tables` is each table's own `uncascaded_policy`, overriding the TVIEW's for a write to that table (pg_tviews 0.1.0-beta.26, the `uncascaded_tables` option, `tviews.registry.uncascaded_table_policies`): pinned the same way, `[]` pinning none. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before an option was modelled lacks its key and pins nothing.",
       "additionalProperties": false,
       "required": [
         "name",
@@ -727,7 +727,8 @@
         "fillfactor",
         "uncascaded_policy",
         "time_refresh",
-        "function_reads"
+        "function_reads",
+        "uncascaded_tables"
       ],
       "properties": {
         "name": {
@@ -777,6 +778,32 @@
           "items": {
             "$ref": "#/$defs/FunctionRead"
           }
+        },
+        "uncascaded_tables": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/UncascadedTable"
+          }
+        }
+      }
+    },
+    "UncascadedTable": {
+      "type": "object",
+      "description": "What a write to one table no cascade reaches does to a TVIEW: one entry of pg_tviews' `uncascaded_tables` option. `table` is a spelling, the author's or the registry's (`regclass` text, bare on the read path); `policy` (`warn`, `error` or `full_refresh`) overrides the TVIEW's `uncascaded_policy` for it. Entries are sorted by `table`.",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "policy"
+      ],
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "policy": {
+          "type": "string"
         }
       }
     },

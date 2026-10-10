@@ -22,6 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its path apart with `unnest`/`string_to_array` (`treekey_002`), is a warning: pg_tviews rebuilds
   the whole TVIEW on every write, or refuses the view as unlinked. Read from the parse tree, with
   the fixtures of pg_treekey's `treekey.lint_views()`; on by default, family `treekey`.
+- **A TVIEW's per-table `uncascaded_tables` is in the model** (pg_tviews#195). pg_tviews
+  0.1.0-beta.26 lets one table carry its own `uncascaded_policy`, overriding the TVIEW's for a
+  write to it. `TView` gains `uncascaded_tables` (a tuple of the new `UncascadedTable(table,
+  policy)`, re-exported by `confiture.platform`), read from a `pg_tviews_create_or_replace()`
+  call's `options`, passed in the call `migrate diff --generate` writes, read live from
+  `tviews.registry.uncascaded_table_policies`, and compared by drift as the existing
+  `tview_option_mismatch` (subject `uncascaded_tables`), each table by identity. The model's
+  wire and `schema-model.schema.json` gain the key; an older wire reads as pinning none. No
+  drift kind or severity changes, and `MINIMUM_PG_TVIEWS` stays 0.1.0-beta.26, the first
+  registry with the column.
 
 ### Fixed
 

@@ -528,6 +528,20 @@ class FunctionRead:
 
 
 @dataclass(frozen=True)
+class UncascadedTable:
+    """What a write to one table no cascade reaches does to a TVIEW.
+
+    One entry of pg_tviews' ``uncascaded_tables`` option (fraiseql/pg_tviews#195):
+    ``table`` as written — the author's spelling, or the registry's ``regclass``
+    text, bare on the read path — and ``policy`` (``warn``, ``error`` or
+    ``full_refresh``), which overrides the TVIEW's ``uncascaded_policy`` for it.
+    """
+
+    table: str
+    policy: str
+
+
+@dataclass(frozen=True)
 class TView:
     """A pg_tviews TVIEW: ``CREATE TABLE tv_<entity> AS SELECT …``.
 
@@ -551,6 +565,10 @@ class TView:
     tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
     ``pg_tviews_create_or_replace()`` call's ``options`` alone; ``function_reads``
     ``()`` pins none, functions and tables sorted.
+
+    ``uncascaded_tables`` is each table's own ``uncascaded_policy``, which overrides
+    the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
+    call's ``options`` alone, ``()`` pinning none, sorted by table.
     """
 
     name: str
@@ -561,6 +579,7 @@ class TView:
     uncascaded_policy: str | None = None
     time_refresh: str | None = None
     function_reads: tuple[FunctionRead, ...] | None = None
+    uncascaded_tables: tuple[UncascadedTable, ...] | None = None
 
     @property
     def entity(self) -> str:
@@ -572,17 +591,27 @@ class TView:
 
 
 #: The pg_tviews ``options`` keys a tree can pin, as :class:`TView` holds them.
-TVIEW_OPTIONS = ("logged", "fillfactor", "uncascaded_policy", "time_refresh", "function_reads")
+TVIEW_OPTIONS = (
+    "logged",
+    "fillfactor",
+    "uncascaded_policy",
+    "time_refresh",
+    "function_reads",
+    "uncascaded_tables",
+)
 
 
 def tview_option(tview: TView, key: str) -> Any:
     """The value of *key* as pg_tviews' ``options`` object writes it; ``None`` for no pin.
 
-    ``function_reads`` is an object mapping each function to its tables.
+    ``function_reads`` is an object mapping each function to its tables,
+    ``uncascaded_tables`` one mapping each table to its policy.
     """
     value = getattr(tview, key)
     if key == "function_reads" and value is not None:
         return {read.function: list(read.tables) for read in value}
+    if key == "uncascaded_tables" and value is not None:
+        return {entry.table: entry.policy for entry in value}
     return value
 
 
@@ -936,12 +965,16 @@ def _keyed[T](
 
 def _tview_from(data: dict[str, Any]) -> TView:
     reads = data.get("function_reads")
+    tables = data.get("uncascaded_tables")
     return TView(
         **{
             **data,
             "function_reads": None
             if reads is None
             else tuple(FunctionRead(r["function"], tuple(r["tables"])) for r in reads),
+            "uncascaded_tables": None
+            if tables is None
+            else tuple(UncascadedTable(t["table"], t["policy"]) for t in tables),
         }
     )
 
@@ -1064,8 +1097,8 @@ PARITY_NORMALISATIONS: dict[str, str] = {
     "tview_defaults": (
         "a TVIEW option the tree does not pin is pg_tviews' to choose, and the registry "
         "holds every key: a stock pg_tviews creates a TVIEW unlogged with fillfactor 85, "
-        "uncascaded_policy error and no function_reads, so those values are no pin, on "
-        "either side"
+        "uncascaded_policy error, no function_reads and no uncascaded_tables, so those "
+        "values are no pin, on either side"
     ),
     "view_definitions": (
         "a view's query is stored as a parse tree and read back through "
@@ -1236,6 +1269,7 @@ def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TVie
         if tview.uncascaded_policy == _TVIEW_DEFAULT_UNCASCADED_POLICY
         else tview.uncascaded_policy,
         function_reads=tview.function_reads or None,
+        uncascaded_tables=tview.uncascaded_tables or None,
     )
 
 
