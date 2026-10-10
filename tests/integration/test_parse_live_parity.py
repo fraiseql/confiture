@@ -104,6 +104,20 @@ def test_every_routine_and_view_shape_reads_back_as_itself(
     assert live == parsed, _explain(parsed, live)
 
 
+def test_a_range_type_reads_back_without_its_constructors(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """A range type's constructors are PostgreSQL's, created with the type: the
+    tree declares one routine and the database holds one."""
+    sql = (
+        "CREATE TYPE span AS RANGE (subtype = int4);\n"
+        "CREATE FUNCTION fn() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n"
+    )
+    parsed, live = _parity_of(sql, fresh_database_factory)
+    assert len(parsed["routines"]) == 1, parsed
+    assert live == parsed, _explain(parsed, live)
+
+
 EXCLUSIONS = """
 CREATE TABLE booking (
     room_id INT,

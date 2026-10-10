@@ -54,6 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     changed after the fork.
   - `FunctionSignatureChecker` and `FunctionBodyChecker` (not part of `confiture.platform`)
     take each tree's routines instead of a repository and a file list.
+- **A range type's constructors are not read as routines.** `CREATE TYPE … AS RANGE` makes
+  PostgreSQL create the type's constructor functions and its multirange's, recorded as the
+  type's implicit dependents; the live reader listed them as routines. A database holding a
+  range type the tree declares was then no longer "no change" from it: `migrate diff --from
+  db` proposed `DROP FUNCTION` for each of them (five per range type), `--scratch-url`
+  proposed creating them (`LANGUAGE internal`), and drift reported them as `extra_routine`
+  (info) when the tree declares a routine in that schema. All three now see nothing. A live
+  model (`schema dump-model` from a database, a baseline snapshot built on a scratch server)
+  holds five fewer routines per range type.
 
 ## [1.35.0] - 2026-10-10
 

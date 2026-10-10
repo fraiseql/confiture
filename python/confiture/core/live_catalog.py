@@ -110,6 +110,16 @@ _EXTENSION_OWNED = """
 #: Not an object an extension created.
 _NOT_EXTENSION_OWNED = "NOT " + _EXTENSION_OWNED
 
+#: Not a routine PostgreSQL created with another object: a range type's
+#: constructors and its multirange's are recorded as the type's implicit
+#: dependents, made and dropped with it, and no tree declares them.
+_NOT_IMPLICIT_ROUTINE = """
+    NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'i'
+    )
+"""
+
 #: The first object id ``initdb`` does not hand out (PostgreSQL's
 #: ``FirstNormalObjectId``): an object below it — ``plpgsql``, ``pg_catalog``'s
 #: own — came with the cluster, and no tree declares it.
@@ -958,6 +968,7 @@ JOIN pg_language l ON l.oid = p.prolang
 LEFT JOIN pg_description d ON d.objoid = p.oid AND d.classoid = 'pg_proc'::regclass
 WHERE n.nspname = ANY(%s)
   AND p.prokind = ANY(%s)
+  AND {_NOT_IMPLICIT_ROUTINE}
   {{filters}}
 ORDER BY n.nspname, p.proname, p.oid
 """
@@ -1334,6 +1345,7 @@ JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = ANY(%s)
   AND p.prokind IN ('f', 'p', 'w')
   AND {_NOT_EXTENSION_OWNED.format(catalog="pg_proc", oid="p.oid")}
+  AND {_NOT_IMPLICIT_ROUTINE}
 ORDER BY n.nspname, p.proname, p.oid
 """
 
