@@ -144,9 +144,10 @@ def _table_object_tier(change: TableObjectChange) -> RiskTier | None:
         case IndexAdded():
             # The renderer builds it CONCURRENTLY.
             return tier_for_create_index(concurrently=True)
-        case ForeignKeyAdded(_, constraint):
-            # Added NOT VALID and validated separately — when it has a name to validate by.
-            return tier_for_add_constraint(not_valid=bool(constraint.name))
+        case ForeignKeyAdded():
+            # Added NOT VALID and validated in the same transaction, the scan under the
+            # ADD's lock — or, unnamed, added and validated in one statement (Q4).
+            return tier_for_add_constraint(not_valid=False)
         case (
             CheckConstraintAdded()
             | UniqueConstraintAdded()

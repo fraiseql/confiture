@@ -1,5 +1,6 @@
 """The pglast walk: one handler per statement kind, producing change entries."""
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Final
 
 from confiture.core._pglast_enums import member as _pg_member
@@ -32,10 +33,10 @@ from confiture.core.change_set.models import (
     ChangeEntry,
     _detail_for,
     tier_for_add_column,
-    tier_for_add_constraint,
     tier_for_create_index,
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
+from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.sql_lexer import parse_file
 
 # Resolved BY NAME, never by literal ordinal (#192).
@@ -48,6 +49,7 @@ _AT_CHANGE_OWNER = _pg_member("AlterTableType", "AT_ChangeOwner")
 _AT_COLUMN_DEFAULT = _pg_member("AlterTableType", "AT_ColumnDefault")
 _AT_SET_NOT_NULL = _pg_member("AlterTableType", "AT_SetNotNull")
 _AT_DROP_NOT_NULL = _pg_member("AlterTableType", "AT_DropNotNull")
+_AT_VALIDATE_CONSTRAINT = _pg_member("AlterTableType", "AT_ValidateConstraint")
 _OBJECT_COLUMN = _pg_member("ObjectType", "OBJECT_COLUMN")
 _OBJECT_MATVIEW = _pg_member("ObjectType", "OBJECT_MATVIEW")
 # DropStmt.removeType → kind. Names resolved by member, never by ordinal.
@@ -88,7 +90,8 @@ _AST_SKIP: Final = frozenset(
 
 
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
-
+    """Each statement's entries, in order, read in the transaction the file runs as."""
+    ctx = replace(ctx, transactional=runs_in_one_transaction(sql), added={})
     entries: list[ChangeEntry] = []
     for raw in parse_file(sql).statements:
         entries.extend(_ast_statement(raw, sql, ctx))
@@ -164,18 +167,7 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
                 )
             )
         elif subtype == _AT_ADD_CONSTRAINT:
-            constraint = cmd.def_
-            not_valid = bool(getattr(constraint, "skip_validation", False))
-            conname = getattr(constraint, "conname", None)
-            entries.append(
-                ctx.entry(
-                    "add_constraint",
-                    ctx.qualified(schema, table, conname),
-                    tier=tier_for_add_constraint(not_valid=not_valid),
-                    detail="ADD CONSTRAINT" + (" NOT VALID" if not_valid else ""),
-                    not_valid=not_valid,
-                )
-            )
+            entries.append(ctx.add_constraint(schema, table, cmd.def_))
         elif subtype == _AT_DROP_CONSTRAINT:
             entries.append(
                 ctx.entry(
@@ -210,6 +202,8 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
                     detail=f"ALTER COLUMN {_ident(name)} DROP NOT NULL",
                 )
             )
+        elif subtype == _AT_VALIDATE_CONSTRAINT:
+            entries.append(ctx.validate_constraint(schema, table, name))
         elif subtype == _AT_CHANGE_OWNER:
             entries.append(ctx.entry("change_owner", target, detail="OWNER TO"))
         else:
