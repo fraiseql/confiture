@@ -340,6 +340,20 @@ def _content_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
     )
 
 
+def _named_as(after: Any, before: Any) -> Any:
+    """*after*, rebuilt in *before*'s place: an unnamed index takes the name it replaces.
+
+    An index the tree leaves unnamed is paired by what it says with the one the
+    database named; rebuilt, it must be created again, and an unnamed index
+    cannot be written (``differ_sql._unnamed``) — dropped and never re-created
+    would be worse than left as it was. A constraint keeps no name it was not
+    given: PostgreSQL names it as it would the author's own.
+    """
+    if isinstance(after, Index) and after.name is None and before.name:
+        return replace(after, name=before.name)
+    return after
+
+
 def _pair_by_content(
     unnamed: dict[tuple[Any, ...], list[tuple[Any, Any]]],
     named: dict[tuple[Any, ...], list[tuple[Any, Any]]],
@@ -389,10 +403,13 @@ def _rebuilt(old: Index, new: Index) -> bool:
 
     Its keys, uniqueness, ``NULLS NOT DISTINCT`` and predicate, each as the policy's
     rules leave it: under the structural tier an expression key or a predicate is
-    only *one exists*. No statement changes ``NULLS NOT DISTINCT`` in place.
+    only *one exists*. No statement changes ``NULLS NOT DISTINCT`` in place. An index
+    a failed concurrent build left INVALID on one side only is rebuilt too.
     """
     rebuilt = _fields_differ(("columns", "unique", "nulls_not_distinct", "where"))
-    return _built_otherwise(old, new) or rebuilt(old, new)
+    # An INVALID index enforces and serves nothing, and `CREATE … IF NOT EXISTS`
+    # skips it: the one remedy is to drop it and build it again (#689).
+    return old.valid != new.valid or _built_otherwise(old, new) or rebuilt(old, new)
 
 
 def _names(indexes: Iterable[Index]) -> frozenset[str]:
@@ -1119,7 +1136,7 @@ class SchemaDiffer:
             ):
                 if differs is not None and differs(before_seen, after_seen):
                     changes.append(dropped(table, before))
-                    changes.append(added(table, after))
+                    changes.append(added(table, _named_as(after, before)))
 
         return changes
 

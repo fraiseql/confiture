@@ -537,12 +537,22 @@ _POLICY = replace(CATALOGUED, author="new")
 #: tree's side whose unnamed objects PostgreSQL named.
 _MATERIALISED = replace(MATERIALISED, author="new")
 
+
 #: Every change the comparison makes, as the finding drift reports for it — or,
 #: for a change drift has no finding for, why. A constraint dropped and added under
 #: one name is one ``constraint_mismatch``; an object's kind picks its pair of
 #: ``_OBJECT_DRIFT_TYPES``; a TVIEW redefined is one ``tview_option_mismatch`` per
 #: option the tree pins; the column order's severity is ``column_order_severity``.
-DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, DriftSeverity] | str] = {
+def _missing_index_severity(change: SchemaChange) -> DriftSeverity:
+    """A missing unique index is a missing constraint, valid or not; any other a warning (#689)."""
+    assert isinstance(change, IndexAdded)
+    return DriftSeverity.CRITICAL if change.index.unique else DriftSeverity.WARNING
+
+
+#: A finding's severity: fixed for its kind, or read from the change itself.
+Severity = DriftSeverity | Callable[[SchemaChange], DriftSeverity]
+
+DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
     TableAdded: (DriftType.MISSING_TABLE, DriftSeverity.CRITICAL),
     TableDropped: (DriftType.EXTRA_TABLE, DriftSeverity.WARNING),
     TableRenamed: "a database renames nothing by similarity: drift's policy pairs no rename",
@@ -555,7 +565,7 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, DriftSeverity] | str]
     ColumnNotNullValidityChanged: (DriftType.NULLABLE_MISMATCH, DriftSeverity.WARNING),
     ColumnDefaultChanged: (DriftType.DEFAULT_MISMATCH, DriftSeverity.WARNING),
     ColumnOrderChanged: (DriftType.COLUMN_ORDER_MISMATCH, DriftSeverity.WARNING),
-    IndexAdded: (DriftType.MISSING_INDEX, DriftSeverity.WARNING),
+    IndexAdded: (DriftType.MISSING_INDEX, _missing_index_severity),
     IndexDropped: (DriftType.EXTRA_INDEX, DriftSeverity.INFO),
     **dict.fromkeys(
         (
@@ -616,6 +626,14 @@ _ON_TABLE = (
     *_CONSTRAINT_ADDED,
     *_CONSTRAINT_DROPPED,
 )
+
+
+def severity_of(change: SchemaChange) -> DriftSeverity:
+    """The severity drift reports *change* with, as :data:`DRIFT_OF` says."""
+    found = DRIFT_OF[type(change)]
+    assert not isinstance(found, str), f"drift reports no {type(change).__name__}"
+    severity = found[1]
+    return severity if isinstance(severity, DriftSeverity) else severity(change)
 
 
 def _index_label(index: Index) -> str:
@@ -773,39 +791,56 @@ class _Findings:
         extra; one the DDL left unnamed is the live one that says the same thing.
         """
         table = _named(expected)
-        added = [c.index for c in changes if isinstance(c, IndexAdded)]
-        extra = sorted(c.index.name or "" for c in changes if isinstance(c, IndexDropped))
+        added = [c for c in changes if isinstance(c, IndexAdded)]
+        dropped = [c for c in changes if isinstance(c, IndexDropped)]
+        invalid = {c.index.name for c in dropped if not c.index.valid}
+        extra = sorted(dropped, key=lambda c: c.index.name or "")
         report.indexes_checked += len(expected.indexes) + len(extra)
-        missing: list[tuple[str, str | None]] = [
-            (name, name) for name in sorted(ix.name for ix in added if ix.name)
+        missing: list[tuple[str, str | None, IndexAdded]] = [
+            (c.index.name, c.index.name, c)
+            for c in sorted(added, key=lambda c: c.index.name or "")
+            if c.index.name
         ]
-        unnamed = [ix for ix in added if not ix.name]
+        unnamed = [c for c in added if not c.index.name]
         missing += [
-            (_index_label(expected.indexes[at]), None)
-            for at in sorted(_nth(expected.indexes, unnamed))
+            (_index_label(expected.indexes[at]), None, change)
+            for at, change in sorted(
+                zip(_nth(expected.indexes, [c.index for c in unnamed]), unnamed, strict=True),
+                key=lambda pair: pair[0],
+            )
         ]
-        for label, name in missing:
+        for label, name, change in missing:
+            state = (
+                " is INVALID (a failed concurrent build): it enforces and serves nothing"
+                if name in invalid
+                else " is missing"
+            )
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.MISSING_INDEX,
-                    severity=DriftSeverity.WARNING,
+                    severity=severity_of(change),
                     object_name=f"{table}.{label}",
                     subject=_subject(expected, name),
                     expected=label,
                     actual=None,
-                    message=f"Index '{label}' on '{table}' is missing",
+                    message=f"Index '{label}' on '{table}'{state}",
                 )
             )
-        for name in extra:
+        for change in extra:
+            name = change.index.name or ""
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.EXTRA_INDEX,
-                    severity=DriftSeverity.INFO,
+                    severity=severity_of(change),
                     object_name=f"{table}.{name}",
                     subject=_subject(actual, name),
                     expected=None,
                     actual=name,
-                    message=f"Index '{name}' on '{table}' exists but is not expected",
+                    message=(
+                        f"Index '{name}' on '{table}' exists INVALID: drop it and build it again"
+                        if name in invalid
+                        else f"Index '{name}' on '{table}' exists but is not expected"
+                    ),
                 )
             )
 

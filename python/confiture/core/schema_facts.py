@@ -1,7 +1,7 @@
 """What a live database can tell preflight that migration files cannot (issue #199).
 
 Preflight is a filesystem-only check by design, and that stays the primary path:
-everything here is **strictly additive**. Three facts are worth a connection when
+everything here is **strictly additive**. These facts are worth a connection when
 one is already open, because none is recoverable from the migration SQL:
 
 * **The current column type.** ``ALTER TABLE … ALTER COLUMN … TYPE bigint`` names
@@ -11,6 +11,8 @@ one is already open, because none is recoverable from the migration SQL:
   release. Knowing the version turns the conservative reading into the true one.
 * **How many rows each table holds**, as the planner estimates it — which of the
   tables a migration touches are large enough for ``migrate up --batched``.
+* **Which indexes are INVALID** — what a ``CREATE INDEX … IF NOT EXISTS`` would
+  silently skip.
 
 Collection never raises: a database that refuses the introspection query yields
 empty facts, and every consumer degrades to the static answer. Losing the
@@ -21,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
 __all__ = ["SchemaFacts", "collect_schema_facts"]
 
@@ -49,6 +51,10 @@ class SchemaFacts:
     """``schema.tv_name`` (case-folded) → the query pg_tviews recorded for each registered
     TVIEW; empty when the extension is absent or the read failed."""
 
+    invalid_indexes: frozenset[tuple[str, str]] = frozenset()
+    """``(schema, name)``, case kept, of each index a failed concurrent build left
+    INVALID (#689), which a ``CREATE INDEX … IF NOT EXISTS`` of that name skips."""
+
     def column_type(self, qualified: str | None) -> str | None:
         """The current type of ``schema.table.column``, or ``None`` if unknown."""
         if not qualified:
@@ -61,6 +67,7 @@ class SchemaFacts:
             self.server_version is not None
             or bool(self.column_types)
             or bool(self.tviews)
+            or bool(self.invalid_indexes)
             or self.row_estimates is not None
         )
 
@@ -79,6 +86,7 @@ def collect_schema_facts(conn: Any) -> SchemaFacts:
         column_types=_column_types(conn),
         row_estimates=_row_estimates(conn),
         tviews=_tviews(conn),
+        invalid_indexes=_invalid_indexes(conn),
     )
 
 
@@ -110,10 +118,18 @@ def _column_types(conn: Any) -> dict[str, str]:
     # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
     from confiture.core import live_catalog
 
-    try:
-        return live_catalog.column_types(conn)
-    except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
-        return {}
+    return _advisory(lambda: live_catalog.column_types(conn), {})
+
+
+def _invalid_indexes(conn: Any) -> frozenset[tuple[str, str]]:
+    """Every INVALID index in the user schemas, as ``live_catalog`` reads it."""
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    from confiture.core import live_catalog
+
+    return _advisory(
+        lambda: frozenset(live_catalog.invalid_indexes(conn, live_catalog.user_schemas(conn))),
+        frozenset(),
+    )
 
 
 def _row_estimates(conn: Any) -> dict[str, int | None] | None:
@@ -121,10 +137,15 @@ def _row_estimates(conn: Any) -> dict[str, int | None] | None:
     # Reason: start-up — the no-database path never reads the catalog, and large_tables imports psycopg
     from confiture.core.large_tables import row_estimates
 
+    return _advisory(lambda: row_estimates(conn), None)
+
+
+def _advisory[T](read: Callable[[], T], unknown: T) -> T:
+    """*read*'s answer, or *unknown* when the database will not give it."""
     try:
-        return row_estimates(conn)
+        return read()
     except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
-        return None
+        return unknown
 
 
 def _scalar(conn: Any, sql: str) -> object | None:

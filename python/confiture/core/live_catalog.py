@@ -299,9 +299,15 @@ WHERE k.conrelid = ANY(%s) AND k.contype IN ('p', 'u', 'c', 'f', 'x')
 ORDER BY k.conrelid, k.conname
 """
 
+#: Whether an index is usable (#689). A failed ``CREATE INDEX CONCURRENTLY`` leaves
+#: it neither valid nor ready; a partitioned table's own index (``relkind 'I'``)
+#: built ``ON ONLY`` is invalid by design until every partition's is attached, and
+#: is read as valid.
+_VALID = "(i.indisvalid AND i.indisready) OR ic.relkind = 'I'"
+
 #: An index attached to a partitioned table's index (``pg_inherits``) is that
 #: index's, as a cloned constraint is: the tree declares it once, on the parent.
-_INDEXES = """
+_INDEXES = f"""
 SELECT
     i.indrelid,
     pg_get_indexdef(i.indexrelid),
@@ -309,7 +315,8 @@ SELECT
         SELECT 1 FROM pg_constraint k
         WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid
           AND k.contype IN ('p', 'u', 'x')
-    )
+    ),
+    {_VALID}
 FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 WHERE i.indrelid = ANY(%s)
@@ -422,9 +429,9 @@ def _tables(
         read = _constraint(name, definition, ref_schema, ref_name)
         if read is not None:
             constraints[relid].append(read)
-    indexes: dict[int, list[tuple[Any, bool]]] = defaultdict(list)
-    for relid, definition, backs in conn.execute(_INDEXES, (oids,)).fetchall():
-        indexes[relid].append((pglast.parse_sql(definition)[0].stmt, bool(backs)))
+    indexes: dict[int, list[tuple[Any, bool, bool]]] = defaultdict(list)
+    for relid, definition, backs, valid in conn.execute(_INDEXES, (oids,)).fetchall():
+        indexes[relid].append((pglast.parse_sql(definition)[0].stmt, bool(backs), bool(valid)))
 
     tables: dict[ObjectRef, Table] = {}
     for oid, schema, name in relations:
@@ -433,8 +440,12 @@ def _tables(
             for row, node in zip(rows[oid], _type_nodes([r[2] for r in rows[oid]]), strict=True)
         ]
         index_models: list[Index] = [
-            replace(read_index(stmt, table=RelationName(schema, name)), backs_constraint=backs)
-            for stmt, backs in indexes[oid]
+            replace(
+                read_index(stmt, table=RelationName(schema, name)),
+                backs_constraint=backs,
+                valid=valid,
+            )
+            for stmt, backs, valid in indexes[oid]
         ]
         tables[ref_for("table", schema, name)] = Table(
             name=name,
@@ -739,8 +750,8 @@ def user_schemas(conn: psycopg.Connection) -> list[str]:
 #: Every index on a table, a partitioned table or a materialized view — the ones
 #: backing a constraint included, which :func:`read` flags. This is the set
 #: ``pg_indexes`` lists.
-_ALL_INDEXES = """
-SELECT n.nspname, t.relname, pg_get_indexdef(i.indexrelid)
+_ALL_INDEXES = f"""
+SELECT n.nspname, t.relname, pg_get_indexdef(i.indexrelid), {_VALID}
 FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 JOIN pg_class t ON t.oid = i.indrelid
@@ -760,12 +771,27 @@ def indexes(conn: psycopg.Connection, schemas: Sequence[str]) -> dict[ObjectRef,
     relation's schema and name.
     """
     found: dict[ObjectRef, list[Index]] = defaultdict(list)
-    for schema, table, definition in conn.execute(_ALL_INDEXES, (list(schemas),)).fetchall():
+    rows = conn.execute(_ALL_INDEXES, (list(schemas),)).fetchall()
+    for schema, table, definition, valid in rows:
         stmt = pglast.parse_sql(definition)[0].stmt
         found[ref_for("table", schema, table)].append(
-            read_index(stmt, table=RelationName(schema, table))
+            replace(read_index(stmt, table=RelationName(schema, table)), valid=bool(valid))
         )
     return {ref: tuple(found_on) for ref, found_on in found.items()}
+
+
+@reads_under_one_path
+def invalid_indexes(conn: psycopg.Connection, schemas: Sequence[str]) -> set[tuple[str, str]]:
+    """``(schema, name)`` of every index in *schemas* a failed concurrent build left INVALID (#689).
+
+    Names as the catalog holds them, case kept: what a statement naming one resolves to.
+    """
+    return {
+        (index.table.schema or "", index.name)
+        for found in indexes(conn, schemas).values()
+        for index in found
+        if not index.valid and index.name
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1008,9 +1034,11 @@ def _views(
     on: dict[int, list[Index]] = defaultdict(list)
     matviews = {oid: RelationName(schema, name) for oid, schema, name, mat, *_ in rows if mat}
     if indexes and matviews:
-        for relid, definition, _backs in conn.execute(_INDEXES, (list(matviews),)).fetchall():
+        for relid, definition, _backs, valid in conn.execute(
+            _INDEXES, (list(matviews),)
+        ).fetchall():
             stmt = pglast.parse_sql(definition)[0].stmt
-            on[relid].append(read_index(stmt, table=matviews[relid]))
+            on[relid].append(replace(read_index(stmt, table=matviews[relid]), valid=bool(valid)))
     return [
         View(
             name=name,

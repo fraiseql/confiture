@@ -194,6 +194,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -213,6 +214,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -232,6 +234,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],

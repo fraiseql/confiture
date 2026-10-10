@@ -173,6 +173,7 @@
             "schema": "catalog"
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -192,6 +193,7 @@
             "schema": "catalog"
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],
@@ -292,6 +294,7 @@
             "schema": "prep_seed"
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],

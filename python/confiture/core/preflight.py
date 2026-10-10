@@ -8,7 +8,7 @@ Filesystem-only checks that require no database connection:
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pglast.parser
 
@@ -21,10 +21,47 @@ from confiture.core.destructive import irreversible_reasons, is_gated
 from confiture.core.expand_contract import StagedPlan, plannable
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
-from confiture.models.results import MigrationPreflightInfo, PreflightResult
+from confiture.core.sql_lexer import parse_file
+from confiture.models.results import MigrationPreflightInfo, PreflightIssue, PreflightResult
 
-if TYPE_CHECKING:
-    from confiture.models.results import PreflightIssue
+
+def invalid_index_issues(
+    files: Iterable[Path], invalid: frozenset[tuple[str, str]]
+) -> list[PreflightIssue]:
+    """``PFLIGHT_INVALID_INDEX`` for each ``CREATE INDEX … IF NOT EXISTS`` an INVALID index would skip.
+
+    A failed concurrent build leaves its index behind INVALID (#689); a later
+    ``IF NOT EXISTS`` of that name sees it and creates nothing, so the index stays
+    unusable — a unique one enforcing nothing. *invalid* is ``(schema, name)`` as
+    the catalog holds them; an index named without a schema matches its name in
+    any of them. A file the parser rejects is ``PFLIGHT_UNPARSEABLE``'s.
+    """
+    issues: list[PreflightIssue] = []
+    for path in files:
+        if not path.name.endswith(".up.sql"):
+            continue
+        try:
+            statements = parse_file(path.read_text(encoding="utf-8")).statements
+        except pglast.parser.ParseError, OSError:
+            continue
+        for raw in statements:
+            stmt = raw.stmt
+            if type(stmt).__name__ != "IndexStmt" or not stmt.if_not_exists or not stmt.idxname:
+                continue
+            schema = stmt.relation.schemaname
+            if not any(name == stmt.idxname and schema in (None, held) for held, name in invalid):
+                continue
+            issues.append(
+                PreflightIssue.of(
+                    "PFLIGHT_INVALID_INDEX",
+                    f"{path.name}: index {stmt.idxname} exists INVALID (a failed concurrent "
+                    "build), and CREATE INDEX … IF NOT EXISTS skips it, leaving it unusable",
+                    migration=_version_from_migration_filename(path.name),
+                    file=path.name,
+                    details={"index": stmt.idxname},
+                )
+            )
+    return issues
 
 
 def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:

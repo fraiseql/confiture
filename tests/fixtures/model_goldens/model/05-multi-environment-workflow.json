@@ -324,6 +324,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -343,6 +344,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": "status <> 'deleted'"
         },
         {
@@ -364,6 +366,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -385,6 +388,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],
@@ -743,6 +747,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -762,6 +767,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": "assigned_to IS NOT NULL"
         },
         {
@@ -781,6 +787,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -800,6 +807,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -819,6 +827,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": "due_date IS NOT NULL"
         },
         {
@@ -840,6 +849,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -861,6 +871,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": "assigned_to IS NOT NULL"
         }
       ],
@@ -1103,6 +1114,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -1124,6 +1136,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         },
         {
@@ -1145,6 +1158,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],

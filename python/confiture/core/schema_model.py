@@ -302,7 +302,11 @@ class Index:
     operator class and ordering (``gin_trgm_ops``, ``DESC NULLS LAST``), ``""``
     for a key that writes none, and ``()`` when no key writes any.
     ``nulls_not_distinct`` is its ``NULLS NOT DISTINCT``, which PostgreSQL records on
-    any index and which constrains only a unique one.
+    any index and which constrains only a unique one. ``valid`` is false for an
+    index a failed ``CREATE INDEX CONCURRENTLY`` left behind (#689): it enforces
+    and serves nothing, and ``CREATE … IF NOT EXISTS`` skips it. Only the catalog
+    knows it; it is not what the index *is* (a matview compared by equality is
+    not redefined by it), so the comparison reads it where it rebuilds one.
     """
 
     name: str | None
@@ -318,6 +322,7 @@ class Index:
     #: before it did), and a key shaped like an identifier is then a column.
     expressions: tuple[bool, ...] | None = None
     nulls_not_distinct: bool = False
+    valid: bool = field(default=True, compare=False)
 
 
 @dataclass(frozen=True)
