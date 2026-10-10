@@ -11,11 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pglast
+
 from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_order import apply_order
 from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
+from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_change import SchemaChange, SchemaDiff
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
@@ -102,6 +105,12 @@ class MigrationGenerator:
     ) -> Path:
         """Generate migration file from schema diff.
 
+        The class runs in the mode ``migrate up`` gives the same diff's SQL pair:
+        when the up holds a statement no transaction may hold (``CREATE``/``DROP
+        INDEX CONCURRENTLY``) or one whose effect a later statement may not use
+        before commit (``ALTER TYPE … ADD VALUE``), it declares ``transactional =
+        False``, and each ``execute`` then commits as it runs.
+
         Args:
             diff: Schema diff containing changes
             name: Name for the migration (snake_case)
@@ -178,6 +187,24 @@ class MigrationGenerator:
         down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
         down_path.write_text(header + self._down_statements(changes[::-1], downs))
         return up_path
+
+    def _one_transaction(self, changes: list[SchemaChange]) -> bool | None:
+        """Whether the up runs in one transaction, by the rule ``migrate up`` applies to it.
+
+        Asked of the up as the migration executes it, each change's statement
+        terminated and joined; ``runs_in_one_transaction`` is the predicate the
+        runner reads from a ``.up.sql`` (``sql_file_migration._detect_transactional``
+        is this question's twin there). ``None`` when PostgreSQL's parser rejects
+        the text: the caller keeps its own default, and ``migrate up`` reports the
+        statement when it runs.
+        """
+        up = "\n".join(
+            _terminated(sql) for change in changes if (sql := self._change_to_up_sql(change))
+        )
+        try:
+            return runs_in_one_transaction(up)
+        except pglast.parser.ParseError:
+            return None
 
     def _gate(self, diff: SchemaDiff, policy: str) -> bool:
         """Whether the up side falls under the gate, and refuse it when the policy forbids."""
@@ -378,7 +405,7 @@ class {class_name}(Migration):
 
     version = "{version}"
     name = "{name}"
-{destructive}
+{destructive}{transactional}
     def up(self) -> None:
         """Apply migration."""
 {up_statements}
@@ -395,6 +422,12 @@ class {class_name}(Migration):
             destructive=(
                 "    destructive = True  # data is lost: migrate up needs --allow-destructive\n"
                 if gated
+                else ""
+            ),
+            transactional=(
+                "    transactional = False  # a statement here cannot run in a transaction:"
+                " migrate up runs it in autocommit\n"
+                if self._one_transaction(changes) is False
                 else ""
             ),
             up_statements=up_statements,
