@@ -297,7 +297,6 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("triggers", "Mapping[ObjectRef, Trigger]"),
         ("tviews", "Mapping[ObjectRef, TView]"),
         ("other_objects", "Mapping[ObjectRef, OtherObject]"),
-        ("unattached_indexes", "Mapping[ObjectRef, tuple[Index, ...]]"),
         ("coverage", "Coverage"),
         ("source", "Provenance"),
     ),

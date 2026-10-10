@@ -1164,7 +1164,6 @@
   ],
   "triggers": [],
   "tviews": [],
-  "unattached_indexes": [],
   "views": [
     {
       "definition": "SELECT o.tenant_id, o.id, o.reference, o.created_at, p.id AS provider_id, c.legal_name AS provider_name FROM app.tb_order AS o INNER JOIN app.tb_provider AS p ON p.tenant_id = o.tenant_id AND p.id = o.fk_provider INNER JOIN catalog.tb_company AS c ON c.id = p.fk_company",

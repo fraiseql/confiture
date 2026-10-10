@@ -790,11 +790,6 @@ class SchemaModel:
     triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
     tviews: Mapping[ObjectRef, TView] = field(default_factory=dict)
     other_objects: Mapping[ObjectRef, OtherObject] = field(default_factory=dict)
-    #: Indexes the schema writes on a relation it does not declare, keyed by that
-    #: relation's table reference: a table someone else authors, which the index
-    #: assumes exists (#679). A database holds every index on a table it has, so
-    #: only a tree has any.
-    unattached_indexes: Mapping[ObjectRef, tuple[Index, ...]] = field(default_factory=dict)
     #: What the reader read (:class:`Coverage`). Not what the schema is, so not
     #: part of equality: a tree and the database built from it are one schema.
     coverage: Coverage = field(default_factory=Coverage, compare=False)
@@ -802,7 +797,7 @@ class SchemaModel:
     source: Provenance = field(default="author", compare=False)
 
     def __post_init__(self) -> None:
-        for name in (*SECTIONS, "unattached_indexes"):
+        for name in SECTIONS:
             value = getattr(self, name)
             if not isinstance(value, _ReadOnly):
                 object.__setattr__(self, name, _ReadOnly(value))
@@ -826,9 +821,6 @@ class SchemaModel:
             "triggers": section(self.triggers),
             "tviews": section(self.tviews),
             "other_objects": section(self.other_objects),
-            "unattached_indexes": [
-                asdict(index) for _, found in _ordered(self.unattached_indexes) for index in found
-            ],
             "coverage": dict(self.coverage.sections),
             "source": self.source,
         }
@@ -954,13 +946,6 @@ def _tview_from(data: dict[str, Any]) -> TView:
     )
 
 
-def _unattached(items: list[dict[str, Any]]) -> dict[ObjectRef, tuple[Index, ...]]:
-    grouped: dict[ObjectRef, list[Index]] = {}
-    for index in map(_index_from, items):
-        grouped.setdefault(index.table.ref(), []).append(index)
-    return {ref: tuple(found) for ref, found in grouped.items()}
-
-
 def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
     routines: dict[ObjectRef, list[Routine]] = {}
     for routine in map(_routine_from, data["routines"]):
@@ -983,8 +968,6 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
         # A wire written before TVIEWs were modelled has none (#504).
         tviews=_keyed(data.get("tviews", []), _tview_from, tview_ref),
         other_objects=_keyed(data.get("other_objects", []), lambda d: OtherObject(**d), other_ref),
-        # A wire written before #679 carries none.
-        unattached_indexes=_unattached(data.get("unattached_indexes", [])),
         # A wire written before coverage was recorded claims only the structural
         # sections, which every reader has always read.
         coverage=Coverage.of(data["coverage"]) if "coverage" in data else Coverage(),
@@ -1296,5 +1279,4 @@ def normalise_for_parity(
         },
         tviews={ref: parity_tview(t, rules) for ref, t in model.tviews.items()},
         other_objects=model.other_objects,
-        unattached_indexes=model.unattached_indexes,
     )

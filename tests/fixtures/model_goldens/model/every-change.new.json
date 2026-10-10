@@ -666,7 +666,6 @@
   ],
   "triggers": [],
   "tviews": [],
-  "unattached_indexes": [],
   "views": [
     {
       "definition": "SELECT 2 AS two",

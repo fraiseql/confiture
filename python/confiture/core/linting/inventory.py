@@ -287,8 +287,9 @@ class Inventory:
     #: Each ``CREATE`` whose name its schema already held as another kind when it ran.
     name_collisions: list[NameCollision] = field(default_factory=list)
     #: Each ``CREATE INDEX`` on a relation the tree had not declared when it ran,
-    #: in order: the model attaches one to a relation the tree declares later and
-    #: holds the rest as unattached (#679).
+    #: in order (#679). The model holds none of them: a relation the tree declares
+    #: later is one the build fails at the index for, and one it never declares is
+    #: someone else's — ``SchemaRead.dangling_indexes`` carries both to the diff.
     unattached_indexes: list[Index] = field(default_factory=list)
 
     @property
@@ -1191,12 +1192,20 @@ def _takes_name(obj: SchemaObject, inventory: Inventory) -> bool:
 def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
     """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared.
 
-    One on a relation the tree has not declared is kept aside, unattached (#679).
-    An index takes its name in its table's schema, among every relation there;
-    a statement naming one already taken creates nothing (#638).
+    One on a relation the tree has not declared *by then* is kept aside,
+    unattached (#679): the inventory lists every ``CREATE`` before it folds, so
+    a relation declared later is found, and an index the build fails at must
+    not be placed on it. An index takes its name in its table's schema, among
+    every relation there; a statement naming one already taken creates nothing
+    (#638).
     """
     relation = raw.stmt.relation
-    found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
+    offset = parsed.base + statement_offset(parsed.text, raw)
+    found = [
+        obj
+        for obj in inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
+        if obj.offset < offset
+    ]
     if not found:
         table = relation_name(relation)
         if table is not None:
@@ -1204,7 +1213,6 @@ def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
         return
     target = found[0]
     index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
-    offset = parsed.base + statement_offset(parsed.text, raw)
     line = _line_of(parsed.text, offset - parsed.base)
     if_not_exists = bool(raw.stmt.if_not_exists)
     for holder in (
@@ -1479,12 +1487,12 @@ def inherit_columns(inventory: Inventory) -> Inventory:
             resolved[id(table)] = _merged(table, inherited)
         return resolved[id(table)]
 
-    return replace(
-        inventory,
+    return Inventory(
         objects=[
             replace(obj, columns=columns_of(obj, frozenset())) if obj.kind == "table" else obj
             for obj in inventory.objects
         ],
+        schemas=inventory.schemas,
     )
 
 
@@ -1618,7 +1626,6 @@ def schema_model(inventory: Inventory) -> SchemaModel:
         elif obj.tview is not None:
             tview = replace(obj.tview, name=obj.folded_name, schema=obj.folded_schema)
             tviews[tview_ref(tview)] = tview
-    unattached = _attach(inventory.unattached_indexes, tables, views, tviews)
     return SchemaModel(
         tables=tables,
         enum_types=enum_types,
@@ -1626,37 +1633,7 @@ def schema_model(inventory: Inventory) -> SchemaModel:
         routines={ref: tuple(found) for ref, found in routines.items()},
         views=views,
         tviews=tviews,
-        unattached_indexes=unattached,
     )
-
-
-def _attach(
-    indexes: list[Index],
-    tables: dict[Any, Table],
-    views: dict[ObjectRef, View],
-    tviews: dict[ObjectRef, TView],
-) -> dict[ObjectRef, tuple[Index, ...]]:
-    """Put each index on the table or materialized view the tree declares later, and keep the rest.
-
-    An index written before its table fails the build at that statement, which
-    lint reports; the model holds it where the table that is declared would. A
-    TVIEW's indexes are pg_tviews' to make, and the model holds none.
-    """
-    unattached: dict[ObjectRef, list[Index]] = {}
-    for index in indexes:
-        ref = index.table.ref()
-        if ref in tables:
-            table = tables[ref]
-            tables[ref] = replace(
-                table, indexes=(*table.indexes, replace(index, table=table.relation))
-            )
-        elif (view_key := index.table.ref("matview")) in views:
-            view = views[view_key]
-            relation = RelationName(view.schema, view.name)
-            views[view_key] = replace(view, indexes=(*view.indexes, replace(index, table=relation)))
-        elif index.table.ref("tview") not in tviews:
-            unattached.setdefault(ref, []).append(index)
-    return {ref: tuple(found) for ref, found in unattached.items()}
 
 
 def label_for(path: Path, root: Path | None) -> str:

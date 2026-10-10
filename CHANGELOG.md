@@ -22,11 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CONCURRENTLY IF NOT EXISTS`, under a comment naming the undeclared table, with a `DIFFER_405`
   warning (exit 0) naming the index and the table. This changes the desired-state contract: the
   FraiseQL fixture gains `90_indexes.sql` and its expected migration the index. The model's wire
-  gains `unattached_indexes`, empty for a database; an index written before its own table is now
-  that table's rather than lost. `IndexAdded` and `IndexDropped` gain `table_declared`.
+  is unchanged: such an index rides the read (`SchemaRead.dangling_indexes`, `Side.dangling`), as
+  the names that need quotes do. `IndexAdded` and `IndexDropped` gain `table_declared`.
+- **⚠️ An index written before the relation it is on is no longer placed on that relation.** The
+  build fails at such an index, yet the model put it on the table declared later, so the diff
+  hid the failure. A desired schema written that way is refused (`DIFFER_406`); in the current
+  schema it is a `DIFFER_408` warning (exit 0) and is not compared, because a committed ref
+  cannot be reordered. `confiture lint` reports it as `build_004`.
 - **⚠️ A desired state that indexes a relation it does not declare is refused against a database
   or a tree that declares it** (#679): `DIFFER_406` (error, exit 5) from `migrate diff` and
-  `confiture drift`, naming the index and the relation. A desired state is whole, so a relation it
+  `confiture drift`, naming the index, the relation and why. A desired state is whole, so a relation it
   does not declare is one the migration drops — or, against a database that does not hold it, one
   the index could not be created on. `--from db` used to skip such an index in silence (the model a
   database is compared with lost it), and with a scratch server the fragment failed its build

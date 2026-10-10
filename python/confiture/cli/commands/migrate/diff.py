@@ -322,7 +322,7 @@ def _compared(
     if scratch is None:
         return database, Side.of(desired_read, held=True), None, None
     # Before the scratch build, which would fail on the index rather than name it.
-    refuse_undeclared_relations(database.model, desired_read.catalogued)
+    refuse_undeclared_relations(database, Side.of(desired_read, held=True))
     built = materialised_side(desired.read(), scratch, declared=desired_read.model)
     return database, built, replace(MATERIALISED, author="new"), "materialised"
 

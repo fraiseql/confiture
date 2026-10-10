@@ -11,7 +11,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from confiture.core.ddl_objects import DDLObject, pair_definitions
 from confiture.core.ddl_walk import (
@@ -182,7 +182,9 @@ class Side:
     the ``CREATE`` a migration writes. ``warnings`` is what the read has to say
     that is not a change: two definitions of one object, resolved the way
     ``confiture build`` resolves them (#313). ``quoted`` lists every name that
-    needs quotes, which :meth:`SchemaDiffer.compare_sides` refuses.
+    needs quotes, which :meth:`SchemaDiffer.compare_sides` refuses. ``dangling``
+    holds each index written on a relation the tree had not declared when it ran
+    (``SchemaRead.dangling_indexes``, #679); a database holds none.
     """
 
     model: SchemaModel = field(default_factory=SchemaModel)
@@ -190,6 +192,7 @@ class Side:
     warnings: list[BuildWarning] = field(default_factory=list)
     quoted: list[QuotedName] = field(default_factory=list)
     constants: ConstantSpellings = AS_WRITTEN
+    dangling: Mapping[ObjectRef, tuple[Index, ...]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, read: SchemaRead, *, held: bool = False) -> Side:
@@ -200,7 +203,9 @@ class Side:
         side a database is compared with.
         """
         model = read.catalogued if held else read.model
-        return cls(model, read.declared.objects, read.warnings, read.quoted)
+        return cls(
+            model, read.declared.objects, read.warnings, read.quoted, dangling=read.dangling_indexes
+        )
 
     @property
     def tables(self) -> list[Table]:
@@ -301,7 +306,17 @@ def _declares(model: SchemaModel, ref: ObjectRef) -> bool:
     )
 
 
-def refuse_undeclared_relations(old: SchemaModel, new: SchemaModel) -> None:
+def undeclared(side: Side) -> dict[ObjectRef, tuple[Index, ...]]:
+    """The indexes *side* writes on a relation it never declares: someone else's table (#679)."""
+    return {ref: found for ref, found in side.dangling.items() if not _declares(side.model, ref)}
+
+
+def misordered(side: Side) -> dict[ObjectRef, tuple[Index, ...]]:
+    """The indexes *side* writes before the relation it declares them on: the build fails at each."""
+    return {ref: found for ref, found in side.dangling.items() if _declares(side.model, ref)}
+
+
+def refuse_undeclared_relations(old: Side, new: Side) -> None:
     """Refuse a desired state that indexes a relation it cannot have (``DIFFER_406``, #679).
 
     A desired state is whole: a relation it does not declare is one the
@@ -309,29 +324,55 @@ def refuse_undeclared_relations(old: SchemaModel, new: SchemaModel) -> None:
     declares therefore contradicts it — the migration would drop the table and
     index it. Against a database, an index on a relation the database does
     not hold could not be created either. Only between two trees, neither of
-    which declares the relation, is the index carried (``DIFFER_405``).
+    which declares the relation, is the index carried (``DIFFER_405``). An
+    index written before the relation the desired state declares is one its
+    build fails at.
 
     Raises:
         DifferError: ``DIFFER_406``, naming the first such index and its relation.
     """
-    for ref in sorted(new.unattached_indexes, key=_object_sort_key):
-        if _declares(old, ref):
+    for ref in sorted(misordered(new), key=_object_sort_key):
+        _refuse(
+            new.dangling[ref][0],
+            "the desired schema declares it only after the index, so its build fails there",
+        )
+    for ref, found in sorted(undeclared(new).items(), key=lambda item: _object_sort_key(item[0])):
+        if _declares(old.model, ref):
             reason = "the current schema declares it, so the migration would drop it"
-        elif old.source != "author":
+        elif old.model.source != "author":
             reason = "the database does not hold it, so the migration could not create the index"
         else:
             continue
-        index = new.unattached_indexes[ref][0]
-        raise DifferError(
-            f"Index {comment_text(index.name or ', '.join(index.columns))} is on "
-            f"{comment_text(index.table.qualified)}, which the desired schema does not "
-            f"declare: {reason}",
-            error_code="DIFFER_406",
-            resolution_hint=(
-                "Declare the relation in the desired schema — compose the fragment into the "
-                "environment's include_dirs, after the file that creates it — or remove the index"
-            ),
+        _refuse(found[0], f"the desired schema does not declare it, and {reason}")
+
+
+def _refuse(index: Index, reason: str) -> NoReturn:
+    raise DifferError(
+        f"Index {comment_text(index.name or ', '.join(index.columns))} is on "
+        f"{comment_text(index.table.qualified)}: {reason}",
+        error_code="DIFFER_406",
+        resolution_hint=(
+            "Declare the relation in the desired schema, before the index — compose the "
+            "fragment into the environment's include_dirs, after the file that creates it — "
+            "or remove the index"
+        ),
+    )
+
+
+def _misordered_warnings(side: Side) -> list[BuildWarning]:
+    """``DIFFER_408``: an index the current tree writes before its relation, not compared.
+
+    A committed ref cannot be reordered, so it is said rather than refused.
+    """
+    return [
+        BuildWarning.of(
+            "DIFFER_408",
+            index=index.name or ", ".join(index.columns),
+            table=index.table.qualified,
         )
+        for ref in sorted(misordered(side), key=_object_sort_key)
+        for index in side.dangling[ref]
+    ]
 
 
 def _assumed(change: SchemaChange) -> BuildWarning:
@@ -669,7 +710,7 @@ class SchemaDiffer:
         """
         refuse_quoted_names("old", old.quoted)
         refuse_quoted_names("new", new.quoted)
-        refuse_undeclared_relations(old.model, new.model)
+        refuse_undeclared_relations(old, new)
         if policy is None:
             policy = policy_between(old.model.source, new.model.source)
         if policy.rules and old.model.source != new.model.source:
@@ -678,7 +719,7 @@ class SchemaDiffer:
             policy = replace(policy, constants=policy.constants | old.constants | new.constants)
 
         changes = self._compare_tables(old.tables, new.tables, policy)
-        unattached = self._compare_unattached_indexes(old.model, new.model)
+        unattached = self._compare_unattached_indexes(old, new)
         changes.extend(unattached)
         changes.extend(self._compare_enum_types(old.enum_types, new.enum_types))
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
@@ -687,7 +728,12 @@ class SchemaDiffer:
         changes.extend(objects)
         return SchemaDiff(
             changes=changes,
-            warnings=[*_merged_warnings(old, new), *unwritable, *map(_assumed, unattached)],
+            warnings=[
+                *_merged_warnings(old, new),
+                *_misordered_warnings(old),
+                *unwritable,
+                *map(_assumed, unattached),
+            ],
         )
 
     # ------------------------------------------------------------------
@@ -981,23 +1027,22 @@ class SchemaDiffer:
             differs=_rebuilt,
         )
 
-    def _compare_unattached_indexes(self, old: SchemaModel, new: SchemaModel) -> list[SchemaChange]:
+    def _compare_unattached_indexes(self, old: Side, new: Side) -> list[SchemaChange]:
         """Indexes on a table neither tree declares (#679), compared as a table's are.
 
         Only between two trees: a database holds every index on a table it has.
         A table one side declares is that side's whole — added or dropped with
-        the indexes it holds — so the other side's unattached indexes on it add
-        nothing.
+        the indexes it holds — so the other side's indexes on it add nothing.
         """
-        if not old.source == new.source == "author":
+        if not old.model.source == new.model.source == "author":
             return []
+        before_all, after_all = undeclared(old), undeclared(new)
         changes: list[SchemaChange] = []
-        refs = old.unattached_indexes.keys() | new.unattached_indexes.keys()
-        for ref in sorted(refs, key=_object_sort_key):
-            if any(_declares(model, ref) for model in (old, new)):
+        for ref in sorted(before_all.keys() | after_all.keys(), key=_object_sort_key):
+            if any(_declares(side.model, ref) for side in (old, new)):
                 continue
-            before = old.unattached_indexes.get(ref, ())
-            after = new.unattached_indexes.get(ref, ())
+            before = before_all.get(ref, ())
+            after = after_all.get(ref, ())
             changes.extend(
                 self._compare_named_objects(
                     old=[(index, index) for index in before],

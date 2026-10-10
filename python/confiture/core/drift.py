@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -401,6 +401,9 @@ class ExpectedSchema:
 
     model: SchemaModel
     schemas: frozenset[str]
+    #: Each index the tree writes on a relation it had not declared when it ran,
+    #: keyed in ``default_schema`` as the model is (``SchemaRead.dangling_indexes``).
+    dangling: Mapping[ObjectRef, tuple[Index, ...]] = field(default_factory=dict)
 
 
 def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
@@ -439,10 +442,6 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
             ref_for("tview", t.schema or default_schema, t.name): t for t in model.tviews.values()
         },
         other_objects=model.other_objects,
-        unattached_indexes={
-            ref_for("table", found[0].table.schema or default_schema, found[0].table.name): found
-            for found in model.unattached_indexes.values()
-        },
     )
 
 
@@ -472,7 +471,11 @@ def expected_schema(read: SchemaRead, default_schema: str = DEFAULT_SCHEMA) -> E
     model = _in_schema(read.catalogued, default_schema)
     schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}
     schemas |= {declared.name for declared in read.inventory.schemas}
-    return ExpectedSchema(model=model, schemas=frozenset(schemas))
+    dangling = {
+        ref_for("table", found[0].table.schema or default_schema, found[0].table.name): found
+        for found in read.dangling_indexes.values()
+    }
+    return ExpectedSchema(model=model, schemas=frozenset(schemas), dangling=dangling)
 
 
 def _read_expected(read: Callable[[], SchemaRead]) -> SchemaRead:
@@ -1279,7 +1282,9 @@ class SchemaDriftDetector:
         )
         actual = self.get_live_schema(expected.schemas, objects=True)
         # Before a scratch build, which would fail on the index rather than name it.
-        refuse_undeclared_relations(actual, expected.model)
+        refuse_undeclared_relations(
+            stated_side(actual), replace(stated_side(expected.model), dangling=expected.dangling)
+        )
         if self.scratch_url is None:
             report = self.compare_schemas(expected.model, actual)
         else:
