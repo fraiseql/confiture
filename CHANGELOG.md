@@ -75,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`DIFFER_403`, exit 5) where `--scratch-url` used to generate it. `warnings[]` loses the
   `DIFFER_404` entries for objects the tree declares. A domain, type or policy redefined between
   the database and the tree is still not seen, at either fidelity.
+- **Text `migrate diff` prints its warnings.** `warnings[]` (`DIFFER_402`, `DIFFER_404`, …) was
+  in the JSON payload only; text output now lists each with its code, and no longer says
+  "Schemas are identical" while one stands. `build`, `migrate diff` and the git accompaniment
+  check render a warning through one printer, so the accompaniment check's duplicate-definition
+  line now carries its code (`DIFFER_402 …`).
 
 ## [1.35.0] - 2026-10-10
 
