@@ -87,3 +87,21 @@ def test_a_matview_index_counts_as_one_fact(monkeypatch, tmp_path: Path) -> None
     facts = 6
     found = BaselineDetector(tmp_path).similarity(None, Snapshot("1", "x", snapshot))  # ty: ignore[invalid-argument-type]
     assert found == 1 - 1 / facts
+
+
+def test_a_tview_index_counts_as_one_fact(monkeypatch, tmp_path: Path) -> None:
+    """One TVIEW index apart is one change among facts that count TVIEW indexes."""
+    from dataclasses import replace
+
+    from confiture.core import baseline_detector
+    from confiture.core.baseline_detector import Snapshot
+    from confiture.core.differ import stated_side
+
+    tree = TREE + "CREATE TABLE tv_x AS SELECT id FROM tb_x;"
+    live = replace(read_text(tree).catalogued, source="catalog")
+    snapshot = read_text(tree + "CREATE INDEX ix_tv_x ON tv_x (id);").catalogued
+    monkeypatch.setattr(baseline_detector, "database_side", lambda *_, **__: stated_side(live))
+    # tb_x, id, name and its primary key; tv_x and ix_tv_x
+    facts = 6
+    found = BaselineDetector(tmp_path).similarity(None, Snapshot("1", "x", snapshot))  # ty: ignore[invalid-argument-type]
+    assert found == 1 - 1 / facts

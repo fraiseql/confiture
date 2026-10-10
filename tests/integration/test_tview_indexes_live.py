@@ -203,3 +203,46 @@ def test_tviews_reads_no_index(tview_database: str) -> None:
     with psycopg.connect(tview_database) as conn:
         (tview,) = live_catalog.tviews(conn, ["public"])
     assert tview.indexes is None
+
+
+def _drift(url: str, tree: str, tmp_path: Any) -> Any:
+    from confiture.core.drift import SchemaDriftDetector
+
+    schema_file = tmp_path / "schema.sql"
+    schema_file.write_text("CREATE EXTENSION pg_tviews;\n" + tree, encoding="utf-8")
+    with psycopg.connect(url) as conn:
+        return SchemaDriftDetector(conn).compare_with_schema_file(str(schema_file))
+
+
+def test_drift_reports_an_invalid_unique_user_index(tview_database: str, tmp_path: Any) -> None:
+    unique = "CREATE UNIQUE INDEX ux_tv_post_title ON tv_post (title);\n"
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        _invalid_unique_index(conn)
+    report = _drift(tview_database, TREE + unique, tmp_path)
+
+    found = {(i.drift_type.value, i.severity.value) for i in report.drift_items}
+    assert found == {("missing_index", "critical"), ("extra_index", "info")}
+    (missing,) = [i for i in report.drift_items if i.drift_type.value == "missing_index"]
+    assert "INVALID" in missing.message
+    assert missing.object_name == "public.tv_post.ux_tv_post_title"
+
+
+def test_drift_takes_an_adopted_copy_as_pg_tviews_own(tview_database: str, tmp_path: Any) -> None:
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute(USER_INDEX + ADOPTED_COPY)
+    report = _drift(tview_database, TREE + USER_INDEX + ADOPTED_COPY, tmp_path)
+
+    assert report.drift_items == []
+    assert report.indexes_checked >= 1
+
+
+def test_drift_refuses_an_index_pg_tviews_skipped(tview_database: str, tmp_path: Any) -> None:
+    """pg_tviews skipped it: its name was taken by pg_tviews' own index (DIFFER_409)."""
+    from confiture.exceptions import DifferError
+
+    skipped = "CREATE INDEX IF NOT EXISTS idx_tv_post_id ON tv_post (lower(id::text));\n"
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute(skipped)
+    with pytest.raises(DifferError) as refused:
+        _drift(tview_database, TREE + skipped, tmp_path)
+    assert refused.value.error_code == "DIFFER_409"
