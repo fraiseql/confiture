@@ -110,6 +110,14 @@ class ReadGraph:
             return []
         return self.inventory.find_all(ROUTINE_KINDS, schema, identifier_identity(name))
 
+    def views_named(self, schema: str | None, name: str) -> list[Holder]:
+        """The plain views of the tree a relation name may read, as a ``RangeVar`` holds it."""
+        return [
+            holder
+            for view in self.inventory.find_all(("view",), schema, identifier_identity(name))
+            if (holder := self.holders.get(key(view))) is not None
+        ]
+
     def waivers(self, directive: str) -> dict[tuple[str | None, int], list[str] | None]:
         """``-- confiture:<directive> <name>[, <name>]: <why>``, by the statement it sits above.
 

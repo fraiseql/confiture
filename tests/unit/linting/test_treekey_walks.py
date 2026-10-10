@@ -7,6 +7,8 @@ from ``src/lint.rs`` and ``tests/pg_regress/sql/60_lint_views.sql``, so the rule
 and ``treekey.lint_views()`` agree.
 """
 
+import pytest
+
 from confiture.core.linting.inventory import build_inventory
 from confiture.core.linting.tree_walks import TreeWalkFinding, tree_walk_findings
 from confiture.core.sql_lexer import parse_file
@@ -44,19 +46,23 @@ def _found(view: str) -> list[str]:
 # -- src/lint.rs ---------------------------------------------------------------
 
 
-def test_a_recursive_cte_over_the_parent_fk_is_treekey_001() -> None:
-    assert _found(
-        "CREATE VIEW v_category_names AS WITH RECURSIVE names(pk_item_category, name) AS (\n"
-        "  SELECT c.pk_item_category, c.name::text AS name\n"
-        "    FROM catalog.tb_item_category c\n"
-        "   WHERE c.fk_parent_item_category IS NULL\n"
-        "  UNION ALL\n"
-        "  SELECT c.pk_item_category, (n.name || ' > '::text) || c.name::text\n"
-        "    FROM catalog.tb_item_category c\n"
-        "      JOIN names n ON c.fk_parent_item_category = n.pk_item_category\n"
-        ")\n"
-        "SELECT pk_item_category, name FROM names;\n"
-    ) == ["treekey_001"]
+def test_a_recursive_cte_over_the_parent_fk_on_a_plain_view_is_not_treekey_001() -> None:
+    """No TVIEW reads it, so pg_tviews never sees it."""
+    assert (
+        _found(
+            "CREATE VIEW v_category_names AS WITH RECURSIVE names(pk_item_category, name) AS (\n"
+            "  SELECT c.pk_item_category, c.name::text AS name\n"
+            "    FROM catalog.tb_item_category c\n"
+            "   WHERE c.fk_parent_item_category IS NULL\n"
+            "  UNION ALL\n"
+            "  SELECT c.pk_item_category, (n.name || ' > '::text) || c.name::text\n"
+            "    FROM catalog.tb_item_category c\n"
+            "      JOIN names n ON c.fk_parent_item_category = n.pk_item_category\n"
+            ")\n"
+            "SELECT pk_item_category, name FROM names;\n"
+        )
+        == []
+    )
 
 
 def test_a_recursive_cte_over_something_else_is_fine() -> None:
@@ -157,7 +163,7 @@ def test_quoted_names_are_matched_quoted_and_both_findings_reported() -> None:
         'CREATE VIEW s.v AS WITH RECURSIVE w AS (SELECT t."Fk_Up" FROM s.t t)\n'
         "SELECT unnest(string_to_array(t.\"Tree Path\"::text, '.'::text)) FROM s.t t;\n",
     )
-    assert [f.code for f in found] == ["treekey_001", "treekey_002"]
+    assert [f.code for f in found] == ["treekey_002"]
 
 
 def test_a_bare_name_does_not_match_a_quoted_column() -> None:
@@ -225,7 +231,6 @@ def test_the_regression_suite_reports_what_lint_views_reports() -> None:
     found = _findings(_REGRESS_TREES, _REGRESS_VIEWS)
     assert sorted((f.object_name, f.code) for f in found) == [
         ("lv.mv_industry:lv.tb_industry", "treekey_002"),
-        ("lv.v_category_names:lv.tb_item_category", "treekey_001"),
         ("lv.v_location:lv.tb_location", "treekey_002"),
         ("lv_other.v_location_names:lv.tb_location", "treekey_002"),
     ]
@@ -278,3 +283,161 @@ def test_a_tview_reading_the_tree_is_judged_too() -> None:
         "$$);\n",
     )
     assert [(f.code, f.object_type, f.line) for f in found] == [("treekey_002", "tview", 3)]
+
+
+# -- treekey_001: a recursive walk on a TVIEW's chain (pg_tviews 0.1.0-beta.26) ------
+
+_CATEGORY = """CREATE TABLE tb_category (pk_category bigint PRIMARY KEY, id uuid,
+    fk_parent bigint, name text, path ltree);
+CREATE TABLE tb_item (pk_item bigint PRIMARY KEY, id uuid, fk_category bigint);
+SELECT treekey.manage_path('tb_category', 'pk_category', 'fk_parent');
+"""
+
+#: pg_tviews#183's shape: the TVIEW reads a view that reads a view that walks the tree.
+_PATH_VIEWS = """CREATE VIEW v_category_path AS
+WITH RECURSIVE up AS (
+  SELECT c.pk_category AS node, c.pk_category AS anc, c.fk_parent, 0 AS depth
+    FROM tb_category c
+  UNION ALL
+  SELECT up.node, p.pk_category, p.fk_parent, up.depth + 1
+    FROM up JOIN tb_category p ON p.pk_category = up.fk_parent)
+SELECT n.pk_category, (SELECT array_agg(a.name ORDER BY up.depth DESC) FROM up
+    JOIN tb_category a ON a.pk_category = up.anc WHERE up.node = n.pk_category) AS names
+FROM tb_category n;
+CREATE VIEW v_item_def AS
+SELECT i.pk_item, i.id, c.names FROM tb_item i JOIN v_category_path c
+  ON c.pk_category = i.fk_category;
+"""
+
+
+def _tview(name: str = "tv_item", options: str | None = None) -> str:
+    passed = f", options => '{options}'" if options else ""
+    return (
+        f"SELECT tviews.pg_tviews_create_or_replace('{name}', $$\n"
+        f"  SELECT pk_item, id, jsonb_build_object('names', names) AS data FROM v_item_def\n"
+        f"$${passed});\n"
+    )
+
+
+def _walks(*texts: str) -> list[TreeWalkFinding]:
+    return [f for f in _findings(*texts) if f.code == "treekey_001"]
+
+
+def test_a_recursive_walk_a_tview_reaches_through_views_is_one_finding_at_the_cte() -> None:
+    (found,) = _walks(_CATEGORY, _PATH_VIEWS, _tview())
+    assert (found.file, found.line, found.object_type, found.object_name) == (
+        "001.sql",
+        2,
+        "view",
+        "v_category_path:tb_category",
+    )
+    assert found.message.startswith(
+        "tv_item reads tb_category in a WITH RECURSIVE through v_item_def → v_category_path: "
+    )
+    assert "pg_tviews refuses" in found.message
+    assert "@>" in found.fix
+    assert '"uncascaded_tables": {"tb_category": "full_refresh"}' in found.fix
+    assert '"uncascaded_policy": "full_refresh"' in found.fix
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        '{"uncascaded_policy": "full_refresh"}',
+        '{"uncascaded_tables": {"public.tb_category": "full_refresh"}}',
+        '{"uncascaded_policy": "warn", "uncascaded_tables": {"tb_category": "full_refresh"}}',
+    ],
+)
+def test_a_full_refresh_policy_for_the_tree_is_quiet(options: str) -> None:
+    assert _walks(_CATEGORY, _PATH_VIEWS, _tview(options=options)) == []
+
+
+def test_a_warn_policy_says_the_rows_go_stale() -> None:
+    (found,) = _walks(_CATEGORY, _PATH_VIEWS, _tview(options='{"uncascaded_policy": "warn"}'))
+    assert "stale" in found.message
+    assert "refuses" not in found.message
+
+
+def test_a_per_table_policy_for_another_table_leaves_the_tree_s() -> None:
+    options = '{"uncascaded_tables": {"tb_item": "full_refresh"}}'
+    assert len(_walks(_CATEGORY, _PATH_VIEWS, _tview(options=options))) == 1
+
+
+def test_a_recursive_view_no_tview_reads_is_not_treekey_001() -> None:
+    assert _walks(_CATEGORY, _PATH_VIEWS) == []
+
+
+def test_two_tviews_reaching_one_walk_are_one_finding_naming_both() -> None:
+    (found,) = _walks(_CATEGORY, _PATH_VIEWS, _tview("tv_item"), _tview("tv_item_copy"))
+    assert found.message.startswith("tv_item and tv_item_copy read tb_category")
+
+
+def test_a_recursive_cte_naming_the_parent_column_without_reading_the_tree_is_fine() -> None:
+    view = (
+        "CREATE VIEW v_item_def AS\n"
+        "WITH RECURSIVE s(i, fk_parent) AS (SELECT 1, 0::bigint UNION ALL\n"
+        "  SELECT i + 1, fk_parent FROM s WHERE i < 3)\n"
+        "SELECT i.pk_item, i.id, (SELECT max(s.i) FROM s) AS names FROM tb_item i;\n"
+    )
+    assert _walks(_CATEGORY, view, _tview()) == []
+
+
+def test_the_tree_read_in_a_cte_the_recursive_one_reads_counts() -> None:
+    """Measured: pg_tviews reads the tree as walked when the recursive CTE reads a sibling."""
+    view = (
+        "CREATE VIEW v_item_def AS\n"
+        "WITH RECURSIVE base AS (SELECT c.pk_category, c.fk_parent FROM tb_category c),\n"
+        "up AS (SELECT b.pk_category AS node, b.fk_parent FROM base b UNION ALL\n"
+        "  SELECT up.node, p.fk_parent FROM up JOIN base p ON p.pk_category = up.fk_parent)\n"
+        "SELECT i.pk_item, i.id, (SELECT count(*) FROM up) AS names FROM tb_item i;\n"
+    )
+    (found,) = _walks(_CATEGORY, view, _tview())
+    assert found.line == 3
+
+
+def test_a_sibling_cte_the_recursive_one_does_not_read_is_fine() -> None:
+    """Measured: a WITH RECURSIVE clause's other CTEs are read as any CTE is."""
+    view = (
+        "CREATE VIEW v_item_def AS\n"
+        "WITH RECURSIVE base AS (SELECT c.pk_category, c.name FROM tb_category c),\n"
+        "s(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM s WHERE i < 3)\n"
+        "SELECT i.pk_item, i.id, (SELECT max(s.i) FROM s) AS names FROM tb_item i\n"
+        "  JOIN base b ON b.pk_category = i.fk_category;\n"
+    )
+    assert _walks(_CATEGORY, view, _tview()) == []
+
+
+def test_a_walk_inside_a_called_function_is_not_treekey_001() -> None:
+    """Measured: pg_tviews sees a function's tables through function_reads (tview_004)."""
+    function = (
+        "CREATE FUNCTION f_names(p bigint) RETURNS text[] LANGUAGE sql STABLE AS $f$\n"
+        "WITH RECURSIVE up AS (SELECT c.pk_category, c.fk_parent FROM tb_category c\n"
+        "  WHERE c.pk_category = p UNION ALL SELECT x.pk_category, x.fk_parent FROM up\n"
+        "  JOIN tb_category x ON x.pk_category = up.fk_parent)\n"
+        "SELECT array_agg(pk_category::text) FROM up $f$;\n"
+        "CREATE VIEW v_item_def AS SELECT i.pk_item, i.id, f_names(i.fk_category) AS names\n"
+        "  FROM tb_item i;\n"
+    )
+    assert _walks(_CATEGORY, function, _tview()) == []
+
+
+def test_a_tview_written_as_a_table_meets_the_default_policy() -> None:
+    (found,) = _walks(
+        _CATEGORY,
+        _PATH_VIEWS,
+        "CREATE TABLE tv_item AS SELECT pk_item, id, names FROM v_item_def;\n",
+    )
+    assert "pg_tviews refuses" in found.message
+
+
+def test_the_walk_in_the_tview_s_own_query_is_placed_in_it() -> None:
+    (found,) = _walks(
+        _CATEGORY,
+        "SELECT tviews.pg_tviews_create_or_replace('tv_category', $$\n"
+        "WITH RECURSIVE up AS (SELECT c.pk_category, c.fk_parent FROM tb_category c\n"
+        "  UNION ALL SELECT p.pk_category, p.fk_parent FROM up\n"
+        "  JOIN tb_category p ON p.pk_category = up.fk_parent)\n"
+        "SELECT n.pk_category, n.id FROM tb_category n $$);\n",
+    )
+    assert (found.object_type, found.line) == ("tview", 2)
+    assert found.message.startswith("tv_category reads tb_category in a WITH RECURSIVE: ")

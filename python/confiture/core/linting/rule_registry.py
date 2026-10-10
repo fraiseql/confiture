@@ -435,7 +435,7 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="treekey_001",
         family="treekey",
-        title="A view walks a pg_treekey tree with WITH RECURSIVE over its parent key",
+        title="A TVIEW reads a pg_treekey tree in a WITH RECURSIVE pg_tviews cannot trace",
         severity="warning",
         default_on=True,
     ),

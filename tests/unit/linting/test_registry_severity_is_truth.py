@@ -257,8 +257,10 @@ FIXTURES: dict[str, Fixture] = {
         {
             "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
             "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
-            "CREATE VIEW v_n AS WITH RECURSIVE w AS (SELECT n.pk_n FROM tb_n n "
-            "WHERE n.fk_up IS NULL) SELECT pk_n FROM w;\n"
+            "CREATE VIEW v_n AS WITH RECURSIVE w AS (SELECT n.pk_n, n.fk_up FROM tb_n n "
+            "UNION ALL SELECT p.pk_n, p.fk_up FROM w JOIN tb_n p ON p.pk_n = w.fk_up) "
+            "SELECT pk_n FROM w;\n"
+            "CREATE TABLE tv_n AS SELECT pk_n FROM v_n;\n"
         }
     ),
     "treekey_002": Fixture(
