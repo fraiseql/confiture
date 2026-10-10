@@ -417,7 +417,9 @@ and a view's query compare as stored. A payload carries `"fidelity"` only when i
 `materialised`; `docs/reference/comparison-fidelity.md` says what each tier compares.
 Every other comparator is a rendering of the engine too: the body checks hand it sides
 whose statements carry one slot (`differ.slot_side`; `function_body_drift.changed_bodies`),
-the signature checks ask `function_signature_drift.unpaired_routines`, and the baseline
+the signature checks ask `function_signature_drift.unpaired_routines` (`--require-migration`'s
+over the routines of the two trees its DDL half compared, `GitSchemaBuilder.read_at_ref`,
+never a changed file on its own), and the baseline
 detector compares a database with each schema-history snapshot (model wire,
 `<version>_<name>.json`) through `database_side`. `tests/unit/test_bodies_render_the_engine.py`
 and `tests/unit/test_routines_are_paired_once.py` fail on a comparator of its own.

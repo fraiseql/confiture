@@ -33,6 +33,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     skipped by both. `preflight --against` counts a skipped migration as passed, and static
     `migrate preflight` never reads a Python migration's mode, so neither reports the skip as
     an issue.
+- **`--require-migration`'s function checks read the trees the build reads, from the fork
+  point** (#700). The `DROP FUNCTION` check for a changed parameter type and
+  `--require-migration-bodies`' body check compared every changed `.sql` file in the
+  repository with itself at the two refs. They now compare the routines of the two trees
+  the gate's DDL half reads (the environment's selection at each ref, whole), already
+  parsed, so nothing is read twice.
+  - ⚠️ A routine in a file the build does not select (an `exclude` pattern, a directory
+    outside `include_dirs`, a test fixture or a seed directory) no longer fails the gate.
+  - ⚠️ A routine retyped or re-bodied while it moves between files is now reported, as the
+    same edit in place always was; so is one a later file drops and recreates.
+  - An overload added beside a kept one is no longer reported as a retype of it, and a
+    bare `DROP FUNCTION f;` excuses a retype only when `f` had one overload (PostgreSQL
+    refuses it otherwise).
+  - An unparseable `.sql` anywhere in the changeset no longer turns both checks off, and a
+    migration is read from the repository, not the current directory.
+  - ⚠️ `--require-migration` (and `--list-unmigrated-bodies`) compare from the merge base
+    of `--base-ref` and HEAD, as `--staged` and the migration list already did: on a branch
+    behind `main`, `has_ddl_changes` and `ddl_changes` no longer include what `main`
+    changed after the fork.
+  - `FunctionSignatureChecker` and `FunctionBodyChecker` (not part of `confiture.platform`)
+    take each tree's routines instead of a repository and a file list.
 
 ## [1.35.0] - 2026-10-10
 
