@@ -6,9 +6,9 @@ changes: a function whose body was edited in the schema DDL (same signature)
 without a migration that re-applies it will run the old body in migrate-only
 environments (staging/production) — silent prod↔source drift.
 
-Like the signature checker, this is **git-based and static (no database)**: it
-compares the routines a file declares at ``base_ref`` and at ``target_ref`` —
-the schema model's, read by the lint inventory — and requires a body change to
+Like the signature checker, this is **static (no database)**: it compares the
+routines two trees declare — the schema model's, each ref's build read whole, so
+a routine that moved between files is compared with itself — and requires a body change to
 be carried by a migration that re-defines the function. The complementary
 *runtime* guarantee — that the migration actually produces the intended body — is
 provided by ``migrate validate --check-body-replay`` (#179).
@@ -25,12 +25,12 @@ from confiture.core.function_signature_drift import (
     function_key,
     printed_signature,
 )
-from confiture.exceptions import GitError, SchemaError
+from confiture.exceptions import SchemaError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
-    from confiture.core.git import GitRepository
     from confiture.core.schema_model import Routine
 
 
@@ -67,70 +67,37 @@ class FunctionBodyChecker:
     """Check that function body changes are carried by a migration.
 
     Args:
-        git_repo: GitRepository for reading file content at refs.
         normalizer: FunctionBodyNormalizer (created if not provided).
     """
 
-    def __init__(
-        self,
-        git_repo: GitRepository,
-        normalizer: FunctionBodyNormalizer | None = None,
-    ) -> None:
-        self._git = git_repo
+    def __init__(self, normalizer: FunctionBodyNormalizer | None = None) -> None:
         self._normalizer = normalizer or FunctionBodyNormalizer()
 
     def check(
         self,
-        changed_sql_files: list[Path],
+        old: Sequence[Routine],
+        new: Sequence[Routine],
         migration_file_paths: list[Path],
-        base_ref: str,
-        target_ref: str,
     ) -> list[FunctionBodyViolation]:
-        """Return body-change violations for the changed SQL files.
+        """A routine both trees declare whose body changed and no migration carries.
+
+        A routine only one tree declares — added, dropped, or given new argument
+        types — is not a body change.
 
         Args:
-            changed_sql_files: SQL files that changed between refs.
+            old: The routines the base tree declares.
+            new: The routines the target tree declares.
             migration_file_paths: New migration files in the changeset.
-            base_ref: Old git reference.
-            target_ref: New git reference.
 
         Returns:
             One violation per function whose body changed (same signature) with no
-            migration re-defining it. Empty if all body changes are carried.
+            migration re-defining it, in the order the target tree declares them.
         """
         carried = self._functions_redefined_by_migrations(migration_file_paths)
         violations: list[FunctionBodyViolation] = []
-        for sql_file in changed_sql_files:
-            old = self._routines_at_ref(sql_file, base_ref)
-            new = self._routines_at_ref(sql_file, target_ref)
-            violations.extend(self._check_file(old, new, carried))
-        return violations
-
-    def _routines_at_ref(self, path: Path, ref: str) -> list[Routine]:
-        """The routines *path* declares at *ref*; none when it did not exist there."""
-        try:
-            content = self._git.show_file_at_ref(path, ref)
-        except GitError:
-            return []
-        if content is None:
-            return []
-        return declared_routines(content)
-
-    def _check_file(
-        self,
-        old: list[Routine],
-        new: list[Routine],
-        carried: set[str],
-    ) -> list[FunctionBodyViolation]:
-        """A routine both refs declare whose body changed and no migration carries.
-
-        A routine only one ref declares — added, dropped, or given new argument
-        types — is not a body change.
-        """
-        violations: list[FunctionBodyViolation] = []
         changed, _checked = changed_bodies(old, new)
-        # In the order the new ref declares them, as a reader of the file meets them.
-        for before, after in sorted(changed, key=lambda pair: new.index(pair[1])):
+        order = {id(routine): position for position, routine in enumerate(new)}
+        for before, after in sorted(changed, key=lambda pair: order[id(pair[1])]):
             old_body, new_body = before.body, after.body
             if old_body is None or new_body is None:
                 continue  # C/internal — no extractable body to compare
@@ -181,7 +148,7 @@ class FunctionBodyChecker:
         for mig_path in migration_files:
             try:
                 content = mig_path.read_text()
-            except OSError:
+            except OSError, UnicodeDecodeError:
                 continue
             for sql in migration_sql(mig_path, content):
                 try:

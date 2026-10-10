@@ -37,7 +37,7 @@ from confiture.core.differ import EXACT, SchemaDiffer, slot_side
 from confiture.core.schema_change import ObjectAdded, ObjectDropped
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import routine_ref
-from confiture.core.schema_read import read_text
+from confiture.core.schema_read import SchemaRead, read_text
 from confiture.core.type_lattice import catalog_spelling, signatures_match
 
 if TYPE_CHECKING:
@@ -63,9 +63,18 @@ def declared_routines(sql: str) -> list[Routine]:
     Raises:
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects *sql*.
     """
+    return routines_of(read_text(sql))
+
+
+def routines_of(read: SchemaRead) -> list[Routine]:
+    """Every function and procedure *read*'s model holds, in declaration order.
+
+    A tree read once (a build's selection, a git ref) is asked here rather than
+    parsed again: the model already folds what each file does to the others.
+    """
     return [
         routine
-        for found in read_text(sql).model.routines.values()
+        for found in read.model.routines.values()
         for routine in found
         if routine.kind in _SIGNATURE_KINDS
     ]
