@@ -431,8 +431,8 @@ def _table_indexes(table: Table) -> str:
 def _relation_indexes(relation_name: RelationName, indexes: tuple[Index, ...]) -> str:
     """A relation's own indexes, created with it: not ``CONCURRENTLY``, since nobody reads it yet.
 
-    A table or a materialized view this migration creates — or drops and creates
-    again, under the ``DROP``'s lock. One PostgreSQL creates to back a constraint is
+    A table, a materialized view or a TVIEW this migration creates — or drops and
+    creates again, under the ``DROP``'s lock. One PostgreSQL creates to back a constraint is
     not written: the constraint creates it. One the schema left unnamed cannot be
     created ``IF NOT EXISTS``, and a migration that re-applies would add it again,
     so it is named as missing.
@@ -454,7 +454,7 @@ def _relation_indexes(relation_name: RelationName, indexes: tuple[Index, ...]) -
 
 
 def _carried_indexes(indexes: tuple[Index, ...]) -> str:
-    """The indexes a materialized view's change carries, created right after it."""
+    """The indexes a materialized view's or a TVIEW's change carries, created right after it."""
     return _relation_indexes(indexes[0].table, indexes) if indexes else ""
 
 

@@ -22,8 +22,8 @@ any other view. A TVIEW whose definition embeds another TVIEW reads that TVIEW's
 | Where | What |
 |---|---|
 | `confiture build` | builds `CREATE TABLE tv_x AS …` as written |
-| `confiture drift`, `migrate validate --check-live-drift` | `missing_tview` / `extra_tview` against a live database with `pg_tviews` installed, and `tview_option_mismatch` when an option the tree pins is not what `tviews.registry` holds |
-| `migrate diff --generate` | writes `SELECT tviews.pg_tviews_create_or_replace('tv_x', $tview$…$tview$);` for an added or changed TVIEW and `SELECT tviews.pg_tviews_drop('tv_x', if_exists => true);` for a dropped one, with the matching down |
+| `confiture drift`, `migrate validate --check-live-drift` | `missing_tview` / `extra_tview` against a live database with `pg_tviews` installed, `tview_option_mismatch` when an option the tree pins is not what `tviews.registry` holds, and `missing_index` / `extra_index` for a TVIEW's own indexes ([Indexes](#indexes)) |
+| `migrate diff --generate` | writes `SELECT tviews.pg_tviews_create_or_replace('tv_x', $tview$…$tview$);` for an added or changed TVIEW and `SELECT tviews.pg_tviews_drop('tv_x', if_exists => true);` for a dropped one, with the matching down, and each index change on a TVIEW ([Indexes](#indexes)) |
 | `migrate fix --idempotent` | adds `IF NOT EXISTS` to a `tv_*` CTAS as to any table |
 | `migrate preflight --against` | the finding below |
 | `confiture lint --select tview` | the two storage rules below |
@@ -164,6 +164,67 @@ The call is read when its name and query are string constants (`tv_post`, `post`
 passes. `SELECT tviews.pg_tviews_drop('tv_post')` drops a TVIEW the tree declared
 before it, as `DROP TABLE tv_post` does. Moving a TVIEW from one spelling to the other
 is no change: `migrate diff` generates nothing for it.
+
+### Indexes
+
+An index the tree writes on a TVIEW is the TVIEW's, as a matview's is its own:
+`migrate diff` carries it and drift checks it. pg_tviews keeps such an index across a
+refresh, a cascade and a replace, and drops it with the TVIEW, so:
+
+- A TVIEW added is created with its indexes, plain and `IF NOT EXISTS`, right after
+  `pg_tviews_create_or_replace()`; a TVIEW dropped gets them back in the down.
+- An index added, dropped or changed on a TVIEW both sides hold is
+  `CREATE INDEX CONCURRENTLY` / `DROP INDEX CONCURRENTLY`, and the file runs outside a
+  transaction. Around a redefinition, every drop runs before
+  `pg_tviews_create_or_replace()` and every add after it: the replace may add the
+  column the index names, and pg_tviews refuses to rebuild a TVIEW while one of its
+  user indexes is INVALID (`55000`).
+- Drift reports a missing index as `missing_index` (critical when it is unique, valid or
+  not; an INVALID one is reported with the pair that rebuilds it) and one the tree does
+  not write as `extra_index`, as on a table.
+
+**pg_tviews' own indexes.** pg_tviews creates indexes of its own on a TVIEW — on `id`
+and each UUID `fk_*` column, the propagation indexes, and the GIN on `data` of the
+`data_gin_index` option — and publishes their names in
+`tviews.registry.managed_indexes`. confiture reads that column and never reproduces
+pg_tviews' naming: a TVIEW's indexes, read from a database, are every index on its
+table but those, and those a constraint uses (its primary key's, or one a foreign key
+elsewhere references). pg_tviews' own are never `extra_index`.
+
+**Reserved names.** pg_tviews reserves the names of its own indexes on a TVIEW, and
+those it would create for the definition (`idx_<tv>_data_gin` among them):
+
+- A `CREATE INDEX` under one that is exactly pg_tviews' index (same method and columns,
+  nothing else) is adopted as pg_tviews' own. Against a database, confiture takes the
+  tree's statement as that index: no change, no drift.
+- A `CREATE INDEX` under one that is another index is refused with `42939` while the
+  name is free. Once pg_tviews has created its index under that name, a plain
+  `CREATE INDEX` fails with `42P07`, and `CREATE INDEX IF NOT EXISTS` **skips silently**:
+  the database never holds the tree's index. Against a database, confiture refuses
+  such a tree with `DIFFER_409` (exit 5, from `migrate diff --from db` and drift alike).
+  Rename the index.
+
+**What confiture cannot see between two trees.** `migrate diff` between two trees
+compares what each writes, with no registry to ask, so:
+
+- Never copy pg_tviews' own index into a tree. Adopted, it is pg_tviews'; a later tree
+  that removes it generates `DROP INDEX CONCURRENTLY IF EXISTS`, which drops
+  **pg_tviews'** index, and pg_tviews forgets it. `pg_tviews_ensure_propagation_indexes()`
+  creates it again (from 0.1.0-beta.27 a role needs `GRANT EXECUTE` on it).
+- A new index under a reserved name that pg_tviews has not created yet is generated as
+  `CREATE INDEX CONCURRENTLY`, which pg_tviews refuses (`42939`) partway through a file
+  that runs outside a transaction: the statements before it have committed. Rename it.
+- A tree carries no index validity. A redefinition generated between two trees, applied
+  to a database holding an INVALID user index on the TVIEW, is refused by pg_tviews
+  (`55000`). Generate against the database (`migrate diff --from db`, which drops and
+  rebuilds the INVALID index around the replace), or `REINDEX` the index first.
+
+**pg_tviews 0.1.0-beta.27.** Beside `managed_indexes`, beta.27 revokes `EXECUTE` from
+`PUBLIC` on `pg_tviews_refresh_all()`, `pg_tviews_refresh_all_entities()`,
+`pg_tviews_rebuild_all()`, `pg_tviews_reregister_all()`, `pg_tviews_set_logged()`,
+`pg_tviews_ensure_propagation_indexes()` and `pg_tviews_invalidate_caches()`, and the
+per-TVIEW functions require ownership: grant them to the roles that call them.
+confiture calls none of them.
 
 ## Preflight finding
 

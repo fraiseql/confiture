@@ -295,7 +295,7 @@ class Constraint:
 
 @dataclass(frozen=True)
 class Index:
-    """An index on one table or materialized view.
+    """An index on one table, materialized view or TVIEW.
 
     ``columns`` holds each key as written — a column name or a rendered
     expression. ``method`` is the access method; PostgreSQL's grammar fills in

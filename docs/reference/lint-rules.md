@@ -1277,7 +1277,7 @@ db/schema/20_views/v_product.sql:4  tview_003  tv_product reads current_setting(
   `"time_refresh": "external"` and a non-immutable function not declared in
   `"function_reads"` — under its `error` and `full_refresh` policies, so neither rule
   reports a TVIEW declaring `uncascaded_policy: warn`; pg_tviews 0.1.0-beta.26 is the
-  first release that refuses them, and confiture's minimum. A `CREATE TABLE … AS`
+  first release that refuses them (confiture's minimum is 0.1.0-beta.27). A `CREATE TABLE … AS`
   cannot pass options: write the TVIEW as a `pg_tviews_create_or_replace()` call, or
   waive the read. `tview_003` is on because pg_tviews does not refuse `current_setting`
   (a `pg_catalog` function), yet the stored row is wrong for every other reader.
@@ -1300,7 +1300,7 @@ A tree is a table whose ltree path pg_treekey maintains: the tree declares it wi
 (the path column is the fourth argument, `path` by default; named arguments are read
 too). pg_tviews follows a TVIEW's query through the plain views it reads to decide which
 rows a write refreshes, and how that chain walks the tree decides what it can follow.
-Measured on pg_tviews 0.1.0-beta.26 (PostgreSQL 18.6):
+Measured on pg_tviews 0.1.0-beta.26 and 0.1.0-beta.27 (PostgreSQL 18.6):
 
 | Spelling of "the ancestors of n" | What pg_tviews does | Rule |
 |---|---|---|

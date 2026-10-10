@@ -7,7 +7,8 @@ pg_tviews follows a TVIEW's query through the plain views it reads
 (:mod:`~confiture.core.linting.tview_reads`, routines not followed: a function's
 tables reach pg_tviews through ``function_reads``) to decide which rows a write
 refreshes. What it does with each spelling of a walk over a managed tree, measured
-on pg_tviews 0.1.0-beta.26 (PostgreSQL 18.6, 2026-10-10):
+on pg_tviews 0.1.0-beta.26 (PostgreSQL 18.6, 2026-10-10), and unchanged on 0.1.0-beta.27
+(2026-10-11):
 
 ======================================================  ==================================  =============
 Spelling                                                pg_tviews                           Rule
@@ -323,7 +324,7 @@ class _Walks:
     def _ordinal_reads(self, query: Query) -> Iterator[tuple[int, Tree]]:
         """``(where, tree)`` for each ``… WITH ORDINALITY`` over a tree's path column.
 
-        Measured on pg_tviews 0.1.0-beta.26: an ordinality has no condition linking
+        Measured on pg_tviews 0.1.0-beta.26 and beta.27: an ordinality has no condition linking
         it to the TVIEW key, so the tree is uncascaded, wherever the function sits
         (a scalar subquery's ``FROM``, ``LATERAL``, a ``LATERAL`` subquery).
         """
@@ -343,7 +344,7 @@ class _Walks:
     def _recursive_reads(self, query: Query) -> Iterator[tuple[int, Tree]]:
         """``(where, tree)`` for each recursive CTE that reads a tree, itself or by a sibling.
 
-        Measured on pg_tviews 0.1.0-beta.26: a tree read in the recursive CTE, or in
+        Measured on pg_tviews 0.1.0-beta.26 and beta.27: a tree read in the recursive CTE, or in
         a CTE of the same ``WITH RECURSIVE`` it reads, is ``all_keys``; one read by a
         sibling the recursive CTE never reads is read as any CTE is.
         """

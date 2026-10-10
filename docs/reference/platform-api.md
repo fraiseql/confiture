@@ -503,7 +503,7 @@ constraint, and every one a server before 18 holds, is enforced.
 class Index
 ```
 
-An index on one table or materialized view.
+An index on one table, materialized view or TVIEW.
 
 `columns` holds each key as written — a column name or a rendered
 expression. `method` is the access method; PostgreSQL's grammar fills in
@@ -1562,7 +1562,7 @@ class IndexAdded(_OnIndexed)
 An index only the new side holds on a relation both hold, or on one neither declares.
 
 `relation_kind` is `"matview"` for an index on a materialized view both
-sides hold. `table_declared` is false for an index on a table neither tree
+sides hold, `"tview"` for one on a TVIEW both hold. `table_declared` is false for an index on a table neither tree
 declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
@@ -1581,7 +1581,7 @@ class IndexDropped(_OnIndexed)
 An index only the old side holds on a relation both hold, or on one neither declares.
 
 `relation_kind` is `"matview"` for an index on a materialized view both
-sides hold. `table_declared` is false for an index on a table neither tree
+sides hold, `"tview"` for one on a TVIEW both hold. `table_declared` is false for an index on a table neither tree
 declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
@@ -1791,8 +1791,8 @@ class ObjectAdded(_ObjectChange)
 
 An object only the new tree defines.
 
-`indexes` are the ones a materialized view is created with, as a table's
-travel on `TableAdded`; `()` for every other kind.
+`indexes` are the ones a materialized view or a TVIEW is created with, as a
+table's travel on `TableAdded`; `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
@@ -1808,8 +1808,8 @@ class ObjectDropped(_ObjectChange)
 
 An object only the old tree defines.
 
-`indexes` are the ones a materialized view held, which its down creates
-again with it; `()` for every other kind.
+`indexes` are the ones a materialized view or a TVIEW held, which its down
+creates again with it; `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
