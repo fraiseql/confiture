@@ -18,3 +18,7 @@ CREATE TABLE IF NOT EXISTS tb_user (
     is_active BOOLEAN NOT NULL,
     created_at TIMESTAMPTZ NOT NULL
 );
+
+-- confiture:tier additive
+-- tv_product is not declared in this schema: the index assumes it exists
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_tv_product_name_fr ON tv_product ((((data -> 'name') ->> 'fr') COLLATE "fr-x-icu"));

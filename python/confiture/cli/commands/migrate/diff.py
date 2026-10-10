@@ -23,15 +23,26 @@ from confiture.cli.options import (
 )
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
-from confiture.core.desired_state import DesiredStateSource, load_desired_state
+from confiture.core.desired_state import DesiredStateSource, EnvSource, load_desired_state
 from confiture.core.destructive import data_loss_reason, resolve_policy
-from confiture.core.differ import MATERIALISED, ComparisonPolicy, SchemaDiffer, Side
+from confiture.core.differ import (
+    MATERIALISED,
+    ComparisonPolicy,
+    SchemaDiffer,
+    Side,
+    refuse_undeclared_relations,
+)
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.schema_read import SchemaRead, read_segments
 from confiture.core.schema_sources import database_side, materialised_side
 from confiture.error_codes import FAILURE
 from confiture.exceptions import DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
+
+_TO_ENV_HELP = (
+    "Desired state: the environment's build — the files `confiture build --env` selects, "
+    "in build order (a fragment composed through include_dirs). Instead of --to"
+)
 
 
 @cli_boundary
@@ -56,6 +67,7 @@ def migrate_diff(
             "(default: the second positional)"
         ),
     ),
+    to_env: str | None = typer.Option(None, "--to-env", help=_TO_ENV_HELP),
     config: Path = config_option(
         help="Environment config, read for `--from db` (default: db/environments/local.yaml)"
     ),
@@ -116,6 +128,7 @@ def migrate_diff(
             new_schema,
             from_=from_,
             to=to,
+            to_env=to_env,
             json_mode=is_json(format_type),
             report=report_file,
         )
@@ -204,12 +217,28 @@ def migrate_diff(
         raise typer.Exit(FAILURE) from e
 
 
+def _one_desired_side(
+    to: str | None, to_env: str | None, *, json_mode: bool, report: Path | None
+) -> None:
+    """Refuse ``--to`` and ``--to-env`` together: both name the desired side (exit 5)."""
+    if to is not None and to_env is not None:
+        fail(
+            ValidationError(
+                "--to and --to-env name the same side; give one.",
+                resolution_hint="Use --to for a file or directory, --to-env for an environment's build.",
+            ),
+            json_mode=json_mode,
+            output_file=report,
+        )
+
+
 def _resolve_sides(
     old_schema: Path | None,
     new_schema: Path | None,
     *,
     from_: str | None,
     to: str | None,
+    to_env: str | None,
     json_mode: bool,
     report: Path | None,
 ) -> tuple[str, DesiredStateSource]:
@@ -219,8 +248,9 @@ def _resolve_sides(
     is refused (exit 5). The current side is a spec string (``db`` is special),
     the desired side a :class:`DesiredStateSource`.
     """
+    _one_desired_side(to, to_env, json_mode=json_mode, report=report)
     positional = old_schema is not None or new_schema is not None
-    named = from_ is not None or to is not None
+    named = from_ is not None or to is not None or to_env is not None
     if positional and named:
         fail(
             ValidationError(
@@ -231,16 +261,16 @@ def _resolve_sides(
             output_file=report,
         )
     if named:
-        if from_ is None or to is None:
+        if from_ is None or (to is None and to_env is None):
             fail(
                 ValidationError(
-                    "--from and --to go together.",
+                    "--from and --to (or --to-env) go together.",
                     resolution_hint="Usage: confiture migrate diff --from current.sql --to desired/",
                 ),
                 json_mode=json_mode,
                 output_file=report,
             )
-        return from_, load_desired_state(to)
+        return from_, EnvSource(to_env) if to_env is not None else load_desired_state(str(to))
     if old_schema is None or new_schema is None:
         # A missing positional is a usage error (exit 2), as it was when the
         # arguments were required; the sides only became optional for --from/--to.
@@ -291,6 +321,8 @@ def _compared(
     scratch = _core_connection.scratch_url_from_config(config_data, scratch_url)
     if scratch is None:
         return database, Side.of(desired_read, held=True), None, None
+    # Before the scratch build, which would fail on the index rather than name it.
+    refuse_undeclared_relations(database, Side.of(desired_read, held=True))
     built = materialised_side(desired.read(), scratch, declared=desired_read.model)
     return database, built, replace(MATERIALISED, author="new"), "materialised"
 
