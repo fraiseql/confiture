@@ -70,6 +70,12 @@ confiture migrate generate add_user_bio
 confiture migrate up
 ```
 
+A database built from DDL already holds what the existing migrations create: mark them
+applied with `confiture migrate baseline --through <version>` before `migrate up`, or use
+`confiture migrate rebuild`. A generated migration that runs in one transaction creates its
+new tables plainly, so applied over them it fails with `42P07`
+([Legacy bootstrap](guides/legacy-bootstrap.md)).
+
 ---
 
 ## Documentation

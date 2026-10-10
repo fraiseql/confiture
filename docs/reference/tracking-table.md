@@ -100,6 +100,14 @@ ledger you meant — set `migration.tracking_table` to the qualified name, or pu
 its schema on the connection's `search_path` — and re-run. If the other relation
 is unrelated, drop or rename it first.
 
+A ledger that says less than the database holds is not harmless either. A
+migration `migrate diff --generate` wrote creates each new table and
+materialized view plainly when it runs in one transaction, so if
+`--auto-detect-baseline` (or a `migrate baseline` set too low, or a database
+built from DDL with no baseline at all) leaves such a migration pending over
+relations that already exist, `migrate up` fails it with `42P07` and rolls it
+back. Check `migrate status`, then `migrate baseline --through <version>`.
+
 ### If you renamed the table before 0.39.0
 
 A set of messages and one query hardcoded the `tb_confiture` default rather than resolving the configured name (#190). If you configured `tracking_table` and are upgrading from an earlier release, note what changed:

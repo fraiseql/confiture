@@ -323,7 +323,11 @@ class SchemaAnalyzer:
                         message=f"Table '{table_name}' already exists",
                         sql_fragment=sql[:100],
                         line_number=line_num,
-                        suggestion="Add 'IF NOT EXISTS' or use ALTER TABLE",
+                        suggestion=(
+                            "Check confiture migrate status: the migration may already be "
+                            "applied, or the database needs migrate baseline; otherwise use "
+                            "ALTER TABLE, or IF NOT EXISTS in a hand-written migration"
+                        ),
                     )
                 )
 

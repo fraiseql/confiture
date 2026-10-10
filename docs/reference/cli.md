@@ -1208,6 +1208,14 @@ The `--force` flag **skips migration state checks** and applies all migrations r
 
 **Use force mode only when you understand the risks and have verified the migrations are safe to reapply.**
 
+A migration `migrate diff --generate` wrote is not safe to reapply when it runs in one
+transaction: it creates each new table and materialized view plainly (declared by
+`-- confiture:creates`), so applied over a database that already holds one it fails with
+`42P07` (duplicate table) and rolls back. A file with a concurrent index or an enum label keeps
+`IF NOT EXISTS`. To bring a database whose schema is already there under migration control, use
+`migrate baseline` or `--auto-detect-baseline` ([Legacy bootstrap](../guides/legacy-bootstrap.md)),
+or `migrate rebuild`.
+
 #### Output (Success)
 
 ```
@@ -1346,6 +1354,12 @@ confiture migrate up [OPTIONS]
 | `--yes` | `-y` | Flag | off | Skip the --dry-run-execute confirmation prompt (default: off) |
 
 <!-- END GENERATED: cli confiture migrate up -->
+
+`--auto-detect-baseline` marks as applied every migration up to the level it detects. When it
+detects a level below what the database holds, `migrate up` then applies a generated migration
+over relations that already exist, and one that runs in one transaction fails with `42P07` on its
+first plain `CREATE TABLE` / `CREATE MATERIALIZED VIEW`, then rolls back; `migrate status` shows
+where the ledger stands, and `migrate baseline --through <version>` sets it.
 
 ### `confiture migrate down`
 

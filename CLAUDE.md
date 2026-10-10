@@ -209,6 +209,18 @@ the lexer itself. A fact that **tightens** a verdict (a constraint added → its
 validation is `lock_risky`) matches by identity; one that **loosens** a verdict
 matches only as written, and a statement the fold cannot read is never assumed.
 
+**One creates directive** — `core/created_relations.py` writes and reads
+`-- confiture:creates <relation>`. The generator writes one line per relation
+`DifferSQLGenerator.creates()` names — a table or materialized view created with no
+`IF NOT EXISTS` — only in a file that runs in one transaction (`runs_in_one_transaction`,
+the predicate `migrate up` reads; the down follows the up); an autocommit file keeps
+`IF NOT EXISTS` and declares nothing, because a failed one is run again from the top.
+`declared()` is what `migrate validate`/`fix --idempotent` read: matched as written (the
+loosening direction), each part folded as PostgreSQL folds it, and a line that names no
+relation of one or two parts declares nothing. Preflight never reads it: its proof that a
+relation is new is the plain `CREATE`. `tests/unit/test_one_creates_directive.py` fails on
+the directive spelled or matched anywhere else; its allow-list is empty.
+
 **One type canonicaliser** — `core/type_lattice.py`: `canonical_type` decides that
 `int8` and `bigint` are one type, `same_type` whether two declarations are, and
 `core/ddl_walk.type_name` reads a pglast `TypeName` for it (drops the `pg_catalog`

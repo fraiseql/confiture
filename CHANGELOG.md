@@ -60,6 +60,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   … IF NOT EXISTS` names an index the database holds INVALID, which the statement would skip.
   `live_catalog.invalid_indexes()` lists them.
 
+### Changed
+
+- **⚠️ A generated migration that runs in one transaction creates its new tables and
+  materialized views plainly, and says so.** `migrate diff --generate` (the `.up.sql`/`.down.sql`
+  pair and the `.py` form) writes `CREATE TABLE` / `CREATE MATERIALIZED VIEW` without `IF NOT
+  EXISTS` for a relation the change creates — `ADD_TABLE`, `ADD_MATVIEW`, `REPLACE_MATVIEW` both
+  ways, and the down of `DROP_TABLE` and `DROP_MATVIEW` — under one `-- confiture:creates
+  <relation>` line, so PostgreSQL proves the relation new. "Runs in one transaction" is the
+  test `migrate up` uses; a file with a concurrent index or an enum label runs in autocommit,
+  where a failure records no ledger row and the retry runs the file from the top, so it is
+  unchanged: `IF NOT EXISTS`, no directive. The down follows the up's mode. Applying such a
+  migration over a database that already holds the relation — `migrate up --force`, `psql -f`,
+  `build` then `migrate up` without a baseline, `--auto-detect-baseline` detecting a level too
+  low — now fails with `42P07` and rolls back. The regression is narrow: those paths already
+  failed on a generated `ADD COLUMN`, `DROP TABLE` or `CREATE TYPE`. Two migrations creating the
+  same relation now fail on the second. The safe paths are `migrate rebuild`, `migrate baseline`
+  and `--auto-detect-baseline` ([Legacy bootstrap](docs/guides/legacy-bootstrap.md)). Tiers,
+  the replica verdict and `window_safe` are unchanged, as are the diff wire and the model wire.
+  The FraiseQL desired-state contract (`tests/contract/test_desired_state_fixture.py`) is
+  unchanged: its fixture carries a concurrent index, so its expected migration keeps `IF NOT
+  EXISTS`.
+- **`migrate validate --idempotent` accepts a plain create the file declares, and `migrate fix
+  --idempotent` leaves it.** A `CREATE TABLE` under `-- confiture:creates <relation>` is not a
+  `CREATE_TABLE` finding; the relation is matched as written (`app.t` declares `app.t`, not
+  `t`), and a line naming no relation of one or two parts declares nothing. The payloads and
+  `--list-patterns` are unchanged. `migrate preflight` never reads the directive.
+- **The `42P07` advice starts from the database's state** (`TABLE_ALREADY_EXISTS`,
+  `docs/error-reference.md`): `migrate status`, then `migrate baseline` for a database built
+  from DDL; `IF NOT EXISTS` only for a hand-written migration that must re-run.
+
 ### Fixed
 
 - **A TVIEW query or routine body the session-read rules could not read is reported degraded**
