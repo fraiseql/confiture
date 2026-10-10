@@ -146,6 +146,8 @@ class SessionReads:
 
     findings: list[SessionFinding]
     unread: list[str]
+    #: Each selected code whose family's chains reached :attr:`unread` entries, with them.
+    degraded: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -202,14 +204,19 @@ def session_reads(
     graph = _Graph.read(files, inventory)
     findings: list[SessionFinding] = []
     unread: set[str] = set()
+    degraded: dict[str, list[str]] = {}
     for family, family_codes in (("tview", TVIEW_CODES), ("view", VIEW_CODES)):
         if codes & family_codes:
             targets = [t for t in graph.targets if t.family == family]
             findings.extend(f for f in graph.findings(targets) if f.code in codes)
-            unread |= graph.unread(targets)
+            reached = graph.unread(targets)
+            unread |= reached
+            if reached:
+                degraded.update(dict.fromkeys(sorted(codes & family_codes), sorted(reached)))
     return SessionReads(
         sorted(findings, key=lambda f: (f.file or "", f.line, f.code, f.object_name)),
         sorted(unread),
+        degraded,
     )
 
 

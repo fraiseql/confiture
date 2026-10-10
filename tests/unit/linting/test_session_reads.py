@@ -5,6 +5,8 @@ its definition reads of the session — a setting, the role, the time — is the
 writer's, stored for every reader.
 """
 
+from pathlib import Path
+
 import pytest
 
 from confiture.core.linting.inventory import build_inventory
@@ -284,3 +286,44 @@ def test_select_session_reads_selects_the_view_family() -> None:
         {"session_001", "session_002", "session_003"}
     )
     assert {"tview_003", "tview_004", "tview_005"} <= resolve_selection(None, ())
+
+
+def test_a_query_the_linter_could_not_read_is_reported_degraded(tmp_path: Path) -> None:
+    """What a chain reached and could not read reaches the report, not just the reader."""
+    from tests.unit.linting.test_softdel_keys import _project
+
+    from confiture.core.linting.schema_linter import LintConfig, SchemaLinter
+
+    sql = _BASE + "SELECT tviews.pg_tviews_create_or_replace('tv_product', $$ SELEKT now() $$);\n"
+    linter = SchemaLinter(
+        env="local",
+        project_dir=_project(tmp_path, None),
+        config=LintConfig(check_session_reads=frozenset({"tview_005"})),
+    )
+    report = linter.lint(sql)
+
+    assert [(s.code, s.state) for s in report.degraded] == [("tview_005", "degraded")]
+    assert "tv_product (its query does not parse)" in report.degraded[0].reason
+
+
+def test_an_unread_view_is_degraded_for_the_view_family_only(tmp_path: Path) -> None:
+    """A routine only the view family's chain reaches does not degrade the TVIEW rules."""
+    from tests.unit.linting.test_softdel_keys import _project
+
+    from confiture.core.linting.schema_linter import LintConfig, SchemaLinter
+
+    sql = (
+        _BASE
+        + "CREATE FUNCTION f_broken() RETURNS int LANGUAGE plpgsql AS $$ BEGIN SELEKT; END $$;\n"
+        + "CREATE VIEW v_product AS SELECT pk_product, f_broken() AS n FROM tb_product;\n"
+    )
+    linter = SchemaLinter(
+        env="local",
+        project_dir=_project(tmp_path, None),
+        config=LintConfig(check_session_reads=frozenset({"tview_005", "session_003"})),
+    )
+    report = linter.lint(sql)
+
+    (status,) = [s for s in report.degraded if s.code in SESSION_CODES]
+    assert status.code == "session_003"
+    assert "f_broken" in status.reason
