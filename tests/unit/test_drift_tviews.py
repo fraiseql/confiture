@@ -15,6 +15,7 @@ from confiture.core.schema_model import (
     SchemaModel,
     Table,
     TView,
+    UncascadedTable,
     ref_for,
     tview_ref,
 )
@@ -252,3 +253,31 @@ def test_reads_the_tree_does_not_declare_are_never_drift() -> None:
     )
 
     assert found == []
+
+
+TABLES = """
+CREATE TABLE tb_post (pk_post bigint PRIMARY KEY);
+SELECT tviews.pg_tviews_create_or_replace('tv_post', 'SELECT pk_post FROM tb_post',
+    options => '{"uncascaded_tables": {"public.tb_post": "full_refresh"}}');
+"""
+
+
+def test_a_table_policy_the_registry_spells_bare_is_no_drift() -> None:
+    """The registry writes a table on the read path as ``regclass`` text: bare."""
+    found = compare_pinned(
+        TABLES, _registry(uncascaded_tables=(UncascadedTable("tb_post", "full_refresh"),))
+    )
+
+    assert found == []
+
+
+def test_a_table_policy_the_registry_does_not_hold_is_a_warning() -> None:
+    (item,) = compare_pinned(TABLES, _registry(uncascaded_tables=()))
+
+    assert (item.drift_type.value, item.severity.value, item.subject.name) == (
+        "tview_option_mismatch",
+        "warning",
+        "uncascaded_tables",
+    )
+    assert item.expected == 'uncascaded_tables = {"public.tb_post": "full_refresh"}'
+    assert item.actual == "uncascaded_tables = {}"
