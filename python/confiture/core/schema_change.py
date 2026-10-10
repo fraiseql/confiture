@@ -253,9 +253,10 @@ class _OfTable(_Change):
 class _OnTable(_Change):
     """A change to what a table holds: a column, an index or a constraint.
 
-    ``table`` is the table, schema and name apart; :attr:`ref` is the key the model holds the
-    table under, since a column, an index and a constraint are keyed by nothing
-    of their own.
+    ``table`` is the relation, schema and name apart; :attr:`ref` is the key the
+    model holds it under, since a column, an index and a constraint are keyed by
+    nothing of their own. An index may be on a materialized view instead, which
+    its change says (``relation_kind``).
     """
 
     __slots__ = ()
@@ -264,7 +265,7 @@ class _OnTable(_Change):
 
     @property
     def ref(self) -> ObjectRef:
-        """The key of the table the change is on."""
+        """The key of the table the change is on: a column and a constraint are a table's."""
         return self.table.ref()
 
 

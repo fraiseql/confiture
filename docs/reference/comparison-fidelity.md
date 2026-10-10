@@ -58,6 +58,11 @@ A named index whose keys, uniqueness or predicate change is dropped and created 
 every tier: `migrate diff` writes `DROP INDEX` then `CREATE INDEX`, and drift reports
 `missing_index` plus `extra_index`, as for a named index rebuilt with another access method.
 
+A materialized view's indexes are compared as a table's are, at every tier: an index
+missing, extra, changed or INVALID is an index change on the matview, never a redefinition
+of it. A matview that is created, dropped or redefined carries its indexes: `migrate diff`
+writes them right after the `CREATE MATERIALIZED VIEW`, plain and `IF NOT EXISTS`.
+
 No tier compares a generated column's expression: no change says how one changed.
 
 ## What drift reports at each tier
@@ -71,6 +76,12 @@ more of them.
   CHECK's text is not compared.
 - A changed partial index predicate or expression key is `missing_index` plus
   `extra_index`.
+- An index on a materialized view is reported as an index on a table is: `missing_index`
+  (critical when it is unique: a matview holds no constraints, so that index is its only
+  uniqueness guarantee) or `extra_index`. One limit: at the materialised tier, a matview
+  whose query also changed is one redefinition, which drift does not report, so its index
+  differences go unreported with it. `migrate diff` still writes the recreate with every
+  index.
 - A view whose query changed is not a drift item at any tier: drift reports that a view
   exists (`missing_view`, `extra_view`). Compare view bodies with `migrate validate
   --check-body-views`, or ask `migrate diff --from db` with a scratch server, which writes

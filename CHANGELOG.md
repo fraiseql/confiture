@@ -117,7 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`missing_index` + `extra_index`, the messages say INVALID). An unnamed tree index rebuilt in a
   named live one's place takes its name, so it is created again rather than only dropped. A
   partitioned table's own `ON ONLY` index reads as valid. An INVALID index on a materialized
-  view is read but not compared yet (tracked in #690).
+  view is rebuilt the same way (#690, below).
 - **⚠️ A missing unique index is critical drift**, valid or not (#689): it is a missing
   constraint, and `missing_constraint` already is. Every unique index drift rebuilds — for
   validity, `NULLS NOT DISTINCT`, its method — reports `missing_index` as `critical`; any other
@@ -146,6 +146,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `build --list-files --compare-to`, which skipped them.
 - **⚠️ Untracked include directories are refused** by the git checks (`GIT_001`): when neither ref
   holds a file the working tree's build selects, the check said nothing changed.
+- **⚠️ A materialized view's indexes are compared like a table's** (#690). They were folded into
+  the matview's equality: between two trees and between two databases they were not compared at
+  all, and against a database an index difference became a drop and recreate of the matview
+  that drift never reported.
+  - **`confiture drift` / `--check-live-drift` / `--check-drift`** report `missing_index` /
+    `extra_index` on a matview, where every matview index difference was silent. A missing
+    unique one, valid or not, is critical: a matview holds no constraints, so that index is its
+    only uniqueness guarantee, and `REFRESH MATERIALIZED VIEW CONCURRENTLY` needs a valid one —
+    PostgreSQL refuses it over an INVALID unique index. An INVALID index is the rebuild pair,
+    and the message says INVALID. `indexes_checked` counts matview indexes. Exit codes change
+    accordingly.
+  - **`migrate diff --from db`** rebuilds the index (`DROP INDEX CONCURRENTLY` + `CREATE …
+    CONCURRENTLY`) instead of dropping and recreating the matview. A created or recreated
+    matview is followed by its indexes, plain and `IF NOT EXISTS`, and a dropped one's down
+    creates them again. Before, a redefinition silently lost them.
+  - **Between two trees and between two databases**, a matview index change is now a change, so
+    **`--require-migration`** notices it.
+  - **Baseline detection** counts matview indexes, so a database's similarity to a snapshot can
+    move.
+  - A generated migration that adds a matview with an index reads `lock_risky` /
+    `window_safe: false` in preflight, as one adding a table with an index already does; the
+    change's declared tier is unchanged.
+  - Index changes on a matview carry `details.relation_kind: "matview"` (`confiture diff` and
+    git-validation JSON; `migrate diff`'s one-line `details` is unchanged). On the seam,
+    `IndexAdded`/`IndexDropped` gain `relation_kind` (`RelationKind`), so `ref` names the matview,
+    and `ObjectAdded`/`ObjectDropped.indexes` and `ObjectReplaced.old_indexes`/`new_indexes`
+    carry the indexes of a matview created, dropped or recreated.
+  - Known limit: under `--scratch-url`, a matview whose query also drifted is reported as
+    neither redefined nor missing an index; the generated migration still recreates it with
+    every index.
 
 ## [1.34.0] - 2026-10-09
 

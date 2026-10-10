@@ -501,7 +501,7 @@ constraint, and every one a server before 18 holds, is enforced.
 class Index
 ```
 
-An index on one table.
+An index on one table or materialized view.
 
 `columns` holds each key as written — a column name or a rendered
 expression. `method` is the access method; PostgreSQL's grammar fills in
@@ -516,8 +516,8 @@ for a key that writes none, and `()` when no key writes any.
 any index and which constrains only a unique one. `valid` is false for an
 index a failed `CREATE INDEX CONCURRENTLY` left behind (#689): it enforces
 and serves nothing, and `CREATE … IF NOT EXISTS` skips it. Only the catalog
-knows it; it is not what the index *is* (a matview compared by equality is
-not redefined by it), so the comparison reads it where it rebuilds one.
+knows it; it is not what the index *is*, so two indexes are paired without
+it, and the comparison reads it where it rebuilds one.
 
 | Field | Type | Default |
 |---|---|---|
@@ -608,7 +608,8 @@ A view or a materialized view.
 `definition` is the query as the reader holds it: the DDL's `SELECT`
 rendered, or `pg_get_viewdef`'s deparse — two spellings of one query, which
 is why a definition is compared through one deparser or not at all.
-`indexes` are a materialized view's; a view has none.
+`indexes` are a materialized view's; a view has none. They are compared as
+a table's are, never as part of the view's definition.
 
 | Field | Type | Default |
 |---|---|---|
