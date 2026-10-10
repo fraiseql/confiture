@@ -21,7 +21,7 @@ from typer.testing import CliRunner
 from confiture.cli.main import app
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import unified_linter
-from confiture.core.git_schema import GitSchemaBuilder
+from confiture.core.git import GitRepository
 from confiture.core.ssh_tunnel import _build_ssh_cmd
 from confiture.core.unified_linter import SquawkRunner, UnifiedLinter
 from confiture.exceptions import GitError
@@ -162,17 +162,35 @@ class TestSubprocessSeparators:
         assert captured["argv"] == ["git", "diff", "--name-only", "--diff-filter=AM", "--"]
 
     @pytest.mark.parametrize("ref", ["--output=x", "-x", "--format=%(objectname)"])
-    def test_git_ls_tree_never_receives_an_option_shaped_ref(
+    def test_git_materialise_never_receives_an_option_shaped_ref(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
     ) -> None:
         calls: list[list[str]] = []
         monkeypatch.setattr(
+            subprocess, "Popen", lambda argv, **kw: calls.append(list(argv)) or MagicMock()
+        )
+        monkeypatch.setattr(
             subprocess, "run", lambda argv, **kw: calls.append(list(argv)) or MagicMock()
         )
-        builder = GitSchemaBuilder.__new__(GitSchemaBuilder)
-        builder.repo_path = tmp_path
 
         with pytest.raises(GitError):
-            builder._get_files_at_ref(ref, Path("db/schema"), recursive=True)
+            GitRepository(tmp_path).materialise(ref, [tmp_path / "db"], tmp_path / "out")
 
         assert calls == []
+
+    def test_git_materialise_ends_its_options_before_the_paths(self, tmp_path: Path) -> None:
+        root = tmp_path / "repo"
+        (root / "-x").mkdir(parents=True)
+        (root / "-x" / "a.sql").write_text("-- a\n")
+        for argv in (["init", "-q"], ["add", "-A"]):
+            subprocess.run(["git", *argv], cwd=root, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "c"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+
+        GitRepository(root).materialise("HEAD", [root / "-x"], tmp_path / "out" / "repo")
+
+        assert (tmp_path / "out" / "repo" / "-x" / "a.sql").read_text() == "-- a\n"

@@ -4,10 +4,16 @@ Provides git operations needed for pre-commit hooks and CI/CD workflows:
 - File retrieval from git refs
 - Changed file detection
 - Staged file detection
+- A ref's tree, copied into a scratch directory the build's own selection reads
 """
 
+import os
+import posixpath
 import re
 import subprocess
+import time
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from confiture.exceptions import GitError, NotAGitRepositoryError
@@ -68,6 +74,7 @@ class GitRepository:
                 See the class docstring: this is not the repository root.
         """
         self.repo_path = repo_path or Path.cwd()
+        self._root: Path | None = None
 
     def get_repo_root(self) -> Path:
         """Return the repository root (``git rev-parse --show-toplevel``).
@@ -85,6 +92,8 @@ class GitRepository:
             NotAGitRepositoryError: If not in a git repository.
             GitError: If the git command fails or times out.
         """
+        if self._root is not None:
+            return self._root
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
@@ -100,7 +109,8 @@ class GitRepository:
         if result.returncode != 0 or not result.stdout.strip():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
-        return Path(result.stdout.strip())
+        self._root = Path(result.stdout.strip())
+        return self._root
 
     def is_git_repo(self) -> bool:
         """Check if directory is a git repository.
@@ -430,6 +440,74 @@ class GitRepository:
 
         return result.stdout.strip()
 
+    def tree_oid(self, ref: str) -> str:
+        """The OID of the tree *ref* names: a commit's tree, or a tree OID itself.
+
+        Raises:
+            GitError: *ref* is option-shaped or names no tree.
+        """
+        validate_ref(ref)
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", f"{ref}^{{tree}}"],
+                cwd=self.get_repo_root(),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(f"Git command timed out resolving '{ref}'") from e
+        if result.returncode != 0:
+            raise GitError(f"Cannot read '{ref}': {result.stderr.strip() or 'it names no tree'}")
+        return result.stdout.strip()
+
+    def materialise(self, ref: str, paths: Sequence[Path] | None, dest: Path) -> str:
+        """Copy what *ref*'s tree holds under *paths* into *dest*, which stands for the repository root.
+
+        The copy is unfiltered and unordered: every blob under each path, written as
+        its raw bytes — no ``export-ignore``, no ``export-subst``, no line-ending
+        conversion — so that a reader of *dest* selects from it exactly as it would
+        select from a checkout. A path the tree does not hold is skipped. A symlink
+        whose target lies elsewhere in the repository has that target copied too,
+        round by round, as a checkout would let it be read.
+
+        The tree is untrusted: nothing is written outside *dest*, and each of these
+        is refused before anything is written — a path component that is empty,
+        ``.``, ``..`` or ``.git``; a mode other than a file, an executable or a
+        symlink (a submodule among them); two paths that collide, case folded; a
+        symlink whose target leaves the repository.
+
+        Args:
+            ref: A revision, or a tree OID (the staged index, written as a tree).
+            paths: Directories (or files) in the working tree, each inside the
+                repository; ``None`` copies the whole tree.
+            dest: The directory to copy into; created when missing.
+
+        Returns:
+            The OID of the tree that was read.
+
+        Raises:
+            GitError: *ref* is option-shaped or names no tree; a path is outside the
+                repository; the tree holds something refused above; git failed or the
+                read took longer than its one deadline.
+        """
+        validate_ref(ref)
+        root = self.get_repo_root().resolve()
+        specs = None if paths is None else [_root_relative(path, root) for path in paths]
+        reader = _TreeReader(root, ref, time.monotonic() + _TREE_TIMEOUT)
+        tree = reader.git("rev-parse", "--verify", f"{ref}^{{tree}}").decode().strip()
+        listing = (
+            b""
+            if specs == []
+            else reader.git("ls-tree", "-r", "-z", "--full-tree", tree, "--", *(specs or []))
+        )
+        entries = _tree_entries(listing, ref)
+        blobs = _write_blobs(reader, entries)
+        entries, blobs, directories = _link_targets(reader, tree, (entries, blobs), specs)
+        _write_tree(dest, entries, blobs, directories, ref)
+        return tree
+
     def get_merge_base(self, base_ref: str, target_ref: str) -> str | None:
         """Return the merge-base commit of two refs (``git merge-base``).
 
@@ -519,3 +597,280 @@ class GitRepository:
             return []
 
         return [Path(line) for line in result.stdout.strip().split("\n")]
+
+
+#: One deadline for reading a whole tree: resolving it, listing it, fetching its blobs.
+_TREE_TIMEOUT = 120.0
+
+#: The modes of a file confiture copies, mapped to whether it is executable.
+_FILE_MODES = {"100644": False, "100755": True}
+_LINK_MODE = "120000"
+_SUBMODULE_MODE = "160000"
+
+#: ``cat-file --batch`` heads each object with its OID, type and size; a missing one with two fields.
+_BATCH_HEADER_FIELDS = 3
+
+#: How many symlink hops are followed before giving up — the kernel's own ELOOP bound.
+_MAX_LINK_ROUNDS = 40
+
+
+@dataclass(frozen=True)
+class _Entry:
+    """One blob a tree holds: its mode, its object and its path from the repository root."""
+
+    mode: str
+    oid: str
+    path: str
+
+
+@dataclass(frozen=True)
+class _TreeReader:
+    """Runs git in the repository root, every call against one shared deadline."""
+
+    root: Path
+    ref: str
+    deadline: float
+
+    def git(self, *args: str, stdin: bytes | None = None) -> bytes:
+        """git's stdout, or a ``GitError`` carrying its stderr or naming the deadline."""
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise self._timed_out()
+        try:
+            process = subprocess.Popen(
+                ["git", "--literal-pathspecs", *args],
+                cwd=self.root,
+                stdin=subprocess.DEVNULL if stdin is None else subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except OSError as e:
+            raise GitError(f"git could not run: {e}") from e
+        try:
+            out, err = process.communicate(stdin, timeout=remaining)
+        except subprocess.TimeoutExpired as e:
+            process.kill()
+            process.communicate()
+            raise self._timed_out() from e
+        if process.returncode != 0:
+            message = err.decode(errors="replace").strip()
+            raise GitError(f"Cannot read '{self.ref}': git {args[0]} failed: {message}")
+        return out
+
+    def _timed_out(self) -> GitError:
+        return GitError(f"Reading the tree at '{self.ref}' timed out after {_TREE_TIMEOUT}s")
+
+
+def _refused(path: str, ref: str, why: str, hint: str | None = None) -> GitError:
+    return GitError(
+        f"'{path}' at '{ref}' is refused: {why}",
+        resolution_hint=hint
+        or "Remove it from the tree, or keep it out of the include directories.",
+    )
+
+
+def _root_relative(path: Path, root: Path) -> str:
+    """*path* as a pathspec from the repository root, or a refusal when it is outside it."""
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root):
+        raise GitError(
+            f"'{path}' is outside the repository ({root}); a git ref cannot hold it",
+            resolution_hint="Keep every include directory inside the repository.",
+        )
+    return resolved.relative_to(root).as_posix()
+
+
+def _component_refusal(path: str) -> str | None:
+    for component in path.split("/"):
+        if component in ("", ".", "..") or "\0" in component:
+            return f"its path holds the component {component!r}"
+        if component.rstrip(". ").casefold() == ".git":
+            return f"its path holds the component {component!r}, git's own directory"
+    return None
+
+
+def _tree_entries(listing: bytes, ref: str) -> list[_Entry]:
+    """The blobs an ``ls-tree -r -z`` listing names, each one checked."""
+    entries: list[_Entry] = []
+    for record in listing.split(b"\0"):
+        if not record:
+            continue
+        meta, _, raw_path = record.partition(b"\t")
+        mode, _kind, oid = meta.decode().split(" ")
+        path = os.fsdecode(raw_path)
+        why = _component_refusal(path)
+        if why is None and mode == _SUBMODULE_MODE:
+            why = "it is a submodule, whose files this repository does not hold"
+        elif why is None and mode not in _FILE_MODES and mode != _LINK_MODE:
+            why = f"it has mode {mode}, neither a file nor a symlink"
+        if why is not None:
+            raise _refused(path, ref, why)
+        entries.append(_Entry(mode, oid, path))
+    return entries
+
+
+def _refuse_collisions(entries: Iterable[_Entry], ref: str) -> None:
+    """Refuse two paths that are one path once case is folded, or a file that is also a directory."""
+    seen: dict[str, str] = {}
+    directories: set[str] = set()
+    for entry in entries:
+        key = entry.path.casefold()
+        if key in seen:
+            raise _refused(entry.path, ref, f"it collides with '{seen[key]}'")
+        seen[key] = entry.path
+        parts = key.split("/")
+        directories.update("/".join(parts[:end]) for end in range(1, len(parts)))
+    for key, path in seen.items():
+        if key in directories:
+            raise _refused(path, ref, "it collides with a directory of the same name")
+
+
+def _write_blobs(reader: _TreeReader, entries: Sequence[_Entry]) -> dict[str, bytes]:
+    """Every blob *entries* name, by OID, fetched through one ``git cat-file --batch``."""
+    wanted = sorted({entry.oid for entry in entries})
+    if not wanted:
+        return {}
+    out = reader.git("cat-file", "--batch", stdin="".join(f"{oid}\n" for oid in wanted).encode())
+    blobs: dict[str, bytes] = {}
+    at = 0
+    for oid in wanted:
+        end = out.index(b"\n", at)
+        header = out[at:end].decode().split(" ")
+        if len(header) != _BATCH_HEADER_FIELDS:
+            raise GitError(f"Cannot read '{reader.ref}': object {oid} is missing")
+        size = int(header[2])
+        blobs[oid] = out[end + 1 : end + 1 + size]
+        at = end + 1 + size + 1
+    return blobs
+
+
+def _link_target(entry: _Entry, text: str, ref: str) -> str:
+    """Where a symlink points, from the repository root, or a refusal when it leaves it."""
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(entry.path), text))
+    if posixpath.isabs(text) or target == ".." or target.startswith("../"):
+        raise _refused(entry.path, ref, f"its symlink target {text!r} leaves the repository")
+    return target
+
+
+def _link_targets(
+    reader: _TreeReader,
+    tree: str,
+    listed: tuple[list[_Entry], dict[str, bytes]],
+    complete: Sequence[str] | None,
+) -> tuple[list[_Entry], dict[str, bytes], set[str]]:
+    """The *listed* entries plus whatever their symlinks point at elsewhere in the tree, round by round.
+
+    *complete* names the paths listed whole (``None``: the whole tree), under which
+    a target is already present or absent. Returns the entries, their blobs, and the
+    directories a symlink points at, created empty: a reader that does not descend
+    a directory symlink still sees a directory there.
+    """
+    entries, blobs = listed
+    directories: set[str] = set()
+    for _round in range(_MAX_LINK_ROUNDS):
+        _refuse_collisions(entries, reader.ref)
+        wanted = _unlisted_targets(entries, blobs, directories, complete, reader.ref)
+        if not wanted:
+            return entries, blobs, directories
+        listing = reader.git("ls-tree", "-z", "--full-tree", tree, "--", *wanted)
+        found = _tree_entries(_without_trees(listing, directories), reader.ref)
+        entries = entries + found
+        blobs = blobs | _write_blobs(reader, found)
+    raise GitError(
+        f"Cannot read '{reader.ref}': its symlinks do not resolve in {_MAX_LINK_ROUNDS} hops"
+    )
+
+
+def _unlisted_targets(
+    entries: Sequence[_Entry],
+    blobs: dict[str, bytes],
+    directories: set[str],
+    complete: Sequence[str] | None,
+    ref: str,
+) -> list[str]:
+    """The symlink targets in *entries* that nothing listed so far accounts for."""
+    if complete is None:
+        return []
+    present = {entry.path for entry in entries} | directories
+    for entry in entries:
+        parts = entry.path.split("/")
+        present.update("/".join(parts[:end]) for end in range(1, len(parts)))
+    targets = {
+        _link_target(entry, os.fsdecode(blobs[entry.oid]), ref)
+        for entry in entries
+        if entry.mode == _LINK_MODE
+    }
+    return sorted(
+        target
+        for target in targets - present
+        if target != "."
+        and not any(spec in (".", target) or target.startswith(f"{spec}/") for spec in complete)
+    )
+
+
+def _without_trees(listing: bytes, directories: set[str]) -> bytes:
+    """*listing* without its tree records — each a directory a symlink points at, kept in *directories*."""
+    kept: list[bytes] = []
+    for record in listing.split(b"\0"):
+        if b" tree " in record.partition(b"\t")[0]:
+            directories.add(os.fsdecode(record.partition(b"\t")[2]))
+        elif record:
+            kept.append(record)
+    return b"\0".join(kept)
+
+
+def _directory(dest: Path, parts: Sequence[str]) -> Path:
+    """``dest/<parts>``, each component created as a real directory under *dest*, never followed out of it."""
+    here = dest
+    for part in parts:
+        here = here / part
+        if not here.exists() and not here.is_symlink():
+            here.mkdir()
+        if (
+            here.is_symlink()
+            or not here.is_dir()
+            or not here.resolve().is_relative_to(dest.resolve())
+        ):
+            raise GitError(
+                f"'{here}' resolves outside the scratch tree {dest}, or is not a directory",
+                resolution_hint="A path in the tree passes through a symlink; it is refused.",
+            )
+    return here
+
+
+def _place(dest: Path, path: str, data: bytes, *, executable: bool) -> None:
+    """Write one regular file at *path* under *dest*: a new file, never through a symlink."""
+    parts = path.split("/")
+    parent = _directory(dest, parts[:-1])
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    flags |= getattr(os, "O_BINARY", 0)
+    descriptor = os.open(parent / parts[-1], flags, 0o755 if executable else 0o644)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(data)
+
+
+def _write_tree(
+    dest: Path, entries: Sequence[_Entry], blobs: dict[str, bytes], directories: set[str], ref: str
+) -> None:
+    """Write *entries* under *dest*: the regular files, then the directories links point at, then the links."""
+    dest.mkdir(parents=True, exist_ok=True)
+    for entry in entries:
+        if entry.mode in _FILE_MODES:
+            _place(dest, entry.path, blobs[entry.oid], executable=_FILE_MODES[entry.mode])
+    for directory in sorted(directories):
+        _directory(dest, directory.split("/"))
+    for entry in entries:
+        if entry.mode == _LINK_MODE:
+            parts = entry.path.split("/")
+            parent = _directory(dest, parts[:-1])
+            text = os.fsdecode(blobs[entry.oid])
+            try:
+                (parent / parts[-1]).symlink_to(text, target_is_directory=(parent / text).is_dir())
+            except OSError as e:
+                raise _refused(
+                    entry.path,
+                    ref,
+                    f"the symlink could not be created: {e}",
+                    hint="On Windows, enable Developer Mode (or run with the symlink privilege) "
+                    "so a symlink in the repository can be copied.",
+                ) from e

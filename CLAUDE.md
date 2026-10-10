@@ -236,7 +236,12 @@ compared against a schema without its subdirectories. `tests/unit/test_one_sql_t
 fails on a `glob`/`rglob` of `.sql`, an `iterdir()` that keeps `.sql` files, or an
 `os.walk` elsewhere; its allow-list, keyed
 `module:receiver`, names the directories that are flat listings read by name
-(migrations, schema snapshots, `.verify.sql` sidecars), not trees.
+(migrations, schema snapshots, `.verify.sql` sidecars), not trees. A git ref is read
+by `GitRepository.materialise` — the ref's include directories copied, unfiltered,
+into a scratch tree — plus `SchemaBuilder._select()` over the copy, the only place
+confiture lists a git tree: the same guard fails on a git argv naming `ls-tree`,
+`ls-files`, `archive` or `cat-file` elsewhere, and its second table,
+`ALLOWED_GIT_READS`, keyed `module:function`, names the materialiser's own functions.
 
 **One schema read** — `core/schema_read.py`: a tree is read as the files it is made of
 (`Segment`), **each parsed once, on its own** (`sql_lexer.parse_file` → `ParsedFile`,
@@ -249,8 +254,8 @@ reader comparing with a database reads `catalogued`; a reader generating DDL rea
 line in that file** — never at a line of the files joined together — and an `offset`
 is the tree's (`ParsedFile.base` plus the offset in the file), so "declared before"
 holds across files. A position is not what a column is (`compare=False`). `drift`,
-`squash`, `migrate diff`, `platform.parse_schema`/`diff`, the signature checkers and
-`confiture lint` read through it; a file PostgreSQL rejects is `DIFFER_400`
+`squash`, `migrate diff`, `platform.parse_schema`/`diff`, the signature checkers,
+`compare_refs` (the `migrate validate` git checks) and `confiture lint` read through it; a file PostgreSQL rejects is `DIFFER_400`
 (`SCHEMA_202` from drift, `UNPARSEABLE` from lint) naming that file and line, and
 costs that file alone.
 
@@ -392,7 +397,8 @@ two trees `AUTHOR` (renames by similarity, everything as written), a tree and a 
 `CATALOGUED` (every `PARITY_NORMALISATIONS` rule applied as code, no fuzzy renames, and
 `policy.author` names the tree's side, whose unnamed constraints and indexes pair by what
 they say whatever PostgreSQL named them), two databases `EXACT`. `migrate diff` (any
-sides), `platform.diff` and `confiture drift` all ask it. **Drift is a rendering**:
+sides), `platform.diff`, `confiture drift` and `migrate validate --check-drift`/
+`--require-migration` between two refs all ask it. **Drift is a rendering**:
 `drift.DRIFT_OF` maps every change variant to a drift kind and severity or says why drift
 has none (`tests/unit/test_drift_renders_the_engine.py` holds it exhaustive and fails on a
 `_compare_*` in `drift.py`), and `tests/integration/test_drift_agrees_with_diff.py`

@@ -13,6 +13,13 @@ read by name — a version prefix, a ``.up.sql`` suffix — and the migrator nev
 descends into it, so the modules that list one are named below with the reason.
 Each entry is ``module:receiver`` for one walk; an entry that matches nothing
 fails, so the table is an edit, never an escape.
+
+A git ref is a tree too. It is read by copying what the ref holds under the
+include directories into a scratch directory (``GitRepository.materialise``) and
+running the build's own selection there, so a git command that lists or fetches
+a tree (``ls-tree``, ``ls-files``, ``archive``, ``cat-file``) anywhere else is a
+second listing — ``ALLOWED_GIT_READS``, keyed ``module:function``, names the
+functions of the one materialiser.
 """
 
 import ast
@@ -76,6 +83,23 @@ ALLOWED: dict[str, str] = {
 }
 
 
+_MATERIALISER = (
+    "copies everything under the include directories a ref holds, unfiltered and "
+    "unordered, into a scratch tree; the build's own selection then reads it — see "
+    "test_ref_read_is_the_build_selection[include_pattern], which selects a non-.sql file"
+)
+
+# ``module:function`` → why that git tree read is not a second listing.
+ALLOWED_GIT_READS: dict[str, str] = {
+    "core/git.py:GitRepository.materialise": _MATERIALISER,
+    "core/git.py:_write_blobs": _MATERIALISER + " (the blobs, fetched in one batch)",
+    "core/git.py:_link_targets": _MATERIALISER + " (the in-repository targets of its symlinks)",
+}
+
+#: The git subcommands that list or fetch a tree.
+_TREE_READS = frozenset({"ls-tree", "ls-files", "archive", "cat-file"})
+
+
 def _names_sql(pattern: ast.expr) -> bool:
     """Whether a glob pattern selects ``.sql`` files — or cannot be read to say."""
     if isinstance(pattern, ast.Constant):
@@ -121,6 +145,43 @@ def _walks(path: Path) -> list[tuple[str, int]]:
     return found
 
 
+def _argv_names_a_tree_read(node: ast.AST) -> bool:
+    """A git argv — a list, a tuple or a call's arguments — naming a tree-reading subcommand."""
+    if isinstance(node, ast.List | ast.Tuple):
+        items = node.elts
+    elif isinstance(node, ast.Call):
+        items = node.args
+    else:
+        return False
+    return any(isinstance(i, ast.Constant) and i.value in _TREE_READS for i in items)
+
+
+def _git_reads(path: Path) -> list[tuple[str, int]]:
+    """``(function, line)`` for every git argv in *path* that reads a tree, by qualified name."""
+    found: list[tuple[str, int]] = []
+
+    def visit(node: ast.AST, scope: tuple[str, ...]) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                visit(child, (*scope, child.name))
+                continue
+            if _argv_names_a_tree_read(child):
+                found.append((".".join(scope) or "<module>", child.lineno))
+            visit(child, scope)
+
+    visit(ast.parse(path.read_text(encoding="utf-8")), ())
+    return found
+
+
+def _git_reads_by_key() -> dict[str, list[int]]:
+    result: dict[str, list[int]] = {}
+    for path in sorted(PACKAGE.rglob("*.py")):
+        module = path.relative_to(PACKAGE).as_posix()
+        for function, line in _git_reads(path):
+            result.setdefault(f"{module}:{function}", []).append(line)
+    return result
+
+
 def _by_key() -> dict[str, list[int]]:
     result: dict[str, list[int]] = {}
     for path in sorted(PACKAGE.rglob("*.py")):
@@ -145,14 +206,30 @@ def test_no_module_walks_an_sql_tree_by_hand() -> None:
     )
 
 
+def test_no_module_reads_a_git_tree_by_hand() -> None:
+    offenders = [
+        f"{key} (line {line})"
+        for key, lines in _git_reads_by_key().items()
+        if key not in ALLOWED_GIT_READS
+        for line in lines
+    ]
+    assert offenders == [], (
+        "a second listing of a git tree — read the ref through GitRepository.materialise "
+        "and the build's selection:\n  " + "\n  ".join(offenders)
+    )
+
+
 def test_allow_list_is_current() -> None:
     present = set(_by_key())
     stale = sorted(key for key in ALLOWED if key not in present)
+    present_git = set(_git_reads_by_key())
+    stale += sorted(key for key in ALLOWED_GIT_READS if key not in present_git)
     assert stale == [], f"allow-list entries with nothing left to allow: {stale}"
 
 
 def test_every_allow_list_entry_states_a_reason() -> None:
-    vague = [key for key, reason in ALLOWED.items() if len(reason) < 40]
+    entries = {**ALLOWED, **ALLOWED_GIT_READS}
+    vague = [key for key, reason in entries.items() if len(reason) < 40]
     assert vague == [], f"entries that explain nothing: {vague}"
 
 
@@ -169,3 +246,18 @@ def test_the_guard_sees_each_shape_of_walk(tmp_path: Path) -> None:
     probe = tmp_path / "probe.py"
     probe.write_text(source, encoding="utf-8")
     assert sorted(line for _, line in _walks(probe)) == [1, 2, 3, 4, 5]
+
+
+def test_the_guard_sees_each_shape_of_git_tree_read(tmp_path: Path) -> None:
+    source = (
+        "a = subprocess.run(['git', 'ls-tree', ref])\n"
+        "b = subprocess.run(('git', 'archive', ref))\n"
+        "ARCHIVE = 'archive'\n"
+        "class R:\n"
+        "    def read(self):\n"
+        "        return self.git('cat-file', '--batch')\n"
+        "c = mode == 'archive'\n"
+    )
+    probe = tmp_path / "probe.py"
+    probe.write_text(source, encoding="utf-8")
+    assert _git_reads(probe) == [("<module>", 1), ("<module>", 2), ("R.read", 6)]

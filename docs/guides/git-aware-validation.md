@@ -164,6 +164,47 @@ fi
 echo "✅ Schema validation passed"
 ```
 
+## How a ref is read
+
+`--check-drift` and `--require-migration` compare the schema at two refs (with
+`--staged`, the base and the staging index). Each ref is read the way
+`confiture build` reads the working tree:
+
+- **The environment comes from the working tree.** `--env` (default `local`) is
+  loaded from `db/environments/<env>.yaml` as it is checked out now, and every key
+  applies at the ref: `order`, `recursive`, `include`/`exclude` patterns,
+  `exclude_dirs`, overlapping entries, `build.sort_mode`.
+- **The build's own selection reads the ref's files.** The include directories are
+  copied out of the ref's tree into a temporary directory — raw bytes, no
+  `.gitattributes` filter, `export-ignore` included — and the build's selection runs
+  over the copy. The files, their order and their text are what a checkout of the ref
+  would build, file by file, so a statement PostgreSQL rejects is named by its file
+  and line (`DIFFER_400`, the path as it sits in the working tree).
+- **A directory the ref does not hold is empty.** A ref older than an include
+  directory reads as a schema without it. When *neither* ref holds anything the
+  working tree's build selects, the check refuses (`GIT_001`, exit 7): the include
+  directories are untracked. Commit them, or stage them and pass `--staged`.
+- **Renaming an include directory reads the base as empty.** The configuration is
+  the working tree's, so a branch that moves `db/schema` to `db/ddl` and updates
+  `include_dirs` reads the base through the new path, finds nothing, and reports every
+  object as added. That fails closed — the gate asks for a migration — but it is
+  noisy: land the rename on its own, with no schema change.
+- **Symlinks and submodules.** A symlink whose target is elsewhere in the repository
+  reads its target, as in a checkout; a directory symlink is not descended, as the
+  build does not descend one. A symlink that leaves the repository, a submodule, or a
+  path through `..` or `.git` under an include directory is refused (`GIT_001`,
+  exit 7). On Windows, copying a symlink needs Developer Mode or the symlink
+  privilege.
+
+Two refs that name the same tree are one schema and are not read at all; each tree is
+read once however many checks ask. A git failure exits 7; a schema the differ refuses
+keeps its own code — `--check-drift` exits with it (a `DIFFER_406` exits 5), and
+`--require-migration` reports it as a check that could not run (Scenario 4).
+
+`build --list-files --compare-to <ref>` reads a ref the same way, with one
+difference: it reads the environment file the ref holds, because it asks whether the
+ref's own build order survived.
+
 ## Command Reference
 
 ### Flags
@@ -327,20 +368,24 @@ The command has a 30-second timeout per git operation. If hitting timeout:
 **Problem**: `migrate validate --require-migration` reports:
 
 ```
-❌ The accompaniment check could not run: the schema does not parse
-   the schema does not parse: syntax error at or near ","
-   A schema PostgreSQL rejects is a schema `confiture build` rejects. Fix the
-   statement it names; the gate cannot tell you what a migration is missing
-   until it can read the tree.
+❌ The accompaniment check could not run: DIFFER_400 Cannot parse the schema
+(/repo/db/schema/20_views.sql:3): syntax error at or near ","
+   Fix what it names; the gate cannot tell you what a migration is missing until
+   it can read the tree.
 ```
 
-**Why**: pglast — PostgreSQL's own parser, via `libpg_query` — rejected a
-statement in the schema tree. Since it is the only parser confiture has,
-that means PostgreSQL itself would reject it: `confiture build` would fail on
-the same file.
+**Why**: the error's code says. `DIFFER_400` is pglast — PostgreSQL's own parser,
+via `libpg_query` — rejecting a statement in the schema tree at one of the two refs.
+Since it is the only parser confiture has, that means PostgreSQL itself would reject
+it: `confiture build` would fail on the same file. Other codes come from the
+comparison: `DIFFER_403` (a name that needs quotes), `DIFFER_406` (an index the build
+reads before the table it is on).
 
-**Fix**: correct the statement the error names. `confiture lint` reports the same
-file and line, and `confiture build --env local` fails on it directly.
+**Fix**: correct what the error names. For `DIFFER_400`, `confiture lint` reports the
+same file and line, and `confiture build --env local` fails on it directly.
+
+A git failure — an unreadable ref, a submodule under an include directory — is not
+this: it exits 7, as every git error does.
 
 **This is exit 1, and it is not the same failure as a missing migration.**
 Both are `is_valid: false`; the JSON envelope carries `was_skipped` so CI can
@@ -348,7 +393,7 @@ tell them apart:
 
 ```bash
 confiture migrate validate --require-migration --base-ref origin/main --format json \
-  | jq -r 'if .accompaniment.was_skipped then "schema does not parse" else "missing migration" end'
+  | jq -r 'if .accompaniment.was_skipped then "check could not run" else "missing migration" end'
 ```
 
 Until #288 a check that could not run returned exit `0` with a yellow warning, on

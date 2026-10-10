@@ -7,27 +7,27 @@ are paired through git's rename detection, so a rename is one file and not a
 delete plus an add, and only the files whose *relative* order moved are
 reported — the fewest files whose move explains the change.
 
-Both sides are the build's own answer. The ref's tree is extracted with
-``git archive`` into a temporary directory (nothing in the repository is
-written) and :meth:`SchemaBuilder.selection_report` runs there, reading the
-environment file the ref holds.
+Both sides are the build's own answer. The environment file the ref holds,
+then the include directories it names, are copied out of the ref's tree into a
+temporary directory (``GitRepository.materialise``; nothing in the repository is
+written), and :meth:`SchemaBuilder.selection_report` runs there.
 """
 
 import bisect
-import io
+import os
 import subprocess
-import tarfile
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from confiture.config.environment import _read_config_yaml
 from confiture.core.builder import SchemaBuilder
 from confiture.core.git import GitRepository, validate_ref
 from confiture.exceptions import ConfigurationError, GitError
 
-#: Seconds a git command may take: an archive of a large repository is the slow one.
+#: Seconds a git command may take: a rename-detecting diff of a large repository is the slow one.
 _GIT_TIMEOUT = 120
 
 
@@ -223,18 +223,14 @@ def selection_here(project_dir: Path, env: str) -> list[str]:
     return _selection(project_dir, env, [root])
 
 
-def _extract(archive: bytes, into: Path) -> None:
-    """Unpack a ``git archive`` tarball; a member the ``data`` filter refuses is left out.
-
-    That filter refuses a symlink that leaves the tree and a path that does;
-    neither can be a file the ref's build reads from inside it.
-    """
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        for member in tar:
-            try:
-                tar.extract(member, into, filter="data")
-            except tarfile.FilterError:
-                continue
+def _include_paths(env_file: Path, project: Path) -> list[Path]:
+    """The include directories *env_file* names, each where it sits under *project* in the repository."""
+    paths: list[Path] = []
+    for item in _read_config_yaml(env_file).get("include_dirs") or []:
+        spelled = item.get("path") if isinstance(item, dict) else item
+        if isinstance(spelled, str) and spelled:
+            paths.append(Path(os.path.normpath(project / spelled)))
+    return paths
 
 
 def selection_at_ref(project_dir: Path, env: str, ref: str) -> list[str]:
@@ -249,22 +245,32 @@ def selection_at_ref(project_dir: Path, env: str, ref: str) -> list[str]:
         The ref's selection in build order.
 
     Raises:
-        GitError: *ref* is option-shaped or names no commit, or git failed.
+        GitError: *ref* is option-shaped or names no commit, or git failed; the
+            ref's tree holds, under the environment's include directories,
+            something ``GitRepository.materialise`` refuses (a submodule, a path
+            through ``..`` or ``.git``, a symlink leaving the repository).
         ConfigurationError: The ref has no environment file *env*.
     """
     root = _repository(project_dir, ref)
     relative = project_dir.resolve().relative_to(root)
+    env_file = relative / "db" / "environments" / f"{env}.yaml"
+    repo = GitRepository(root)
     with tempfile.TemporaryDirectory(prefix="confiture-compare-") as scratch:
-        tree = Path(scratch).resolve()
-        _extract(_git(root, "archive", "--format=tar", ref), tree)
-        at_ref = tree / relative
-        env_file = (relative / "db" / "environments" / f"{env}.yaml").as_posix()
-        if not (at_ref / "db" / "environments" / f"{env}.yaml").is_file():
+        probe = Path(scratch) / "environment" / root.name
+        repo.materialise(ref, [root / env_file], probe)
+        if not (probe / env_file).is_file():
             raise ConfigurationError(
-                f"{env_file} does not exist at {ref}",
+                f"{env_file.as_posix()} does not exist at {ref}",
                 resolution_hint="Compare against a ref that tracks the environment file, "
                 "or commit it.",
             )
+        # The repository root's own name is kept: the seed rule reads it.
+        tree = Path(scratch) / "tree" / root.name
+        tree.mkdir(parents=True)
+        tree = tree.resolve()
+        includes = _include_paths(probe / env_file, root / relative)
+        repo.materialise(ref, [root / env_file, *includes], tree)
+        at_ref = tree / relative
         return _selection(at_ref, env, [tree, root])
 
 

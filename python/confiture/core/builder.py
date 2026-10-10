@@ -357,7 +357,7 @@ class SchemaBuilder:
         """
         return [record.path for record in self._select()]
 
-    def _select(self) -> list[SelectedFile]:
+    def _select(self, *, require_files: bool = True) -> list[SelectedFile]:
         """The files the build reads, in build order, each carrying its provenance.
 
         Overlapping entries — one for ``db/schema`` and one for
@@ -368,20 +368,26 @@ class SchemaBuilder:
         the owning entry before any other that would select the same file, so
         keeping the first occurrence keeps the right one.
 
+        Args:
+            require_files: Refuse an empty selection. A git ref read through this
+                selection passes ``False``: a tree that holds nothing yet is an
+                empty schema, not a broken build.
+
         Returns:
             One record per file, deduplicated on the resolved path and sorted
             the way the build concatenates them.
 
         Raises:
             SchemaError: If an include directory is missing and not auto-discovered,
-                or if nothing was selected.
+                or if nothing was selected and *require_files* holds.
         """
         selected: list[SelectedFile] = []
         for config in self.include_configs:
             selected.extend(self._select_entry(config))
 
         selected = self._without_excluded_dirs(_first_occurrences(selected))
-        self._require_non_empty(selected)
+        if require_files:
+            self._require_non_empty(selected)
         return self._in_build_order(selected)
 
     def _empty_selection_hint(self) -> str:

@@ -34,6 +34,8 @@ def validate_git_drift(
     target_ref: str,
     console: Printer,
     format_output: str = "text",
+    *,
+    differ: GitSchemaDiffer | None = None,
 ) -> dict:
     """Validate schema drift between git refs.
 
@@ -43,6 +45,8 @@ def validate_git_drift(
         target_ref: Target git reference
         console: Rich console for output
         format_output: Output format (text or json)
+        differ: A differ shared with the accompaniment check, so each tree is
+            read once; a new one by default.
 
     Returns:
         Dictionary with validation results
@@ -54,7 +58,7 @@ def validate_git_drift(
     try:
         validate_git_flags_in_repo()
 
-        differ = GitSchemaDiffer(env)
+        differ = differ or GitSchemaDiffer(env)
         diff = differ.compare_refs(base_ref, target_ref)
 
         if format_output == "text":
@@ -95,6 +99,7 @@ def validate_migration_accompaniment(
     *,
     check_bodies: bool = False,
     two_dot: bool = False,
+    differ: GitSchemaDiffer | None = None,
 ) -> dict:
     """Validate that DDL changes have migration files.
 
@@ -108,6 +113,8 @@ def validate_migration_accompaniment(
             migration (#178).
         two_dot: Diff two-dot rather than three-dot; set when *target_ref* is a
             tree (the staged index, #184) instead of a commit.
+        differ: A differ shared with the drift check, so each tree is read
+            once; a new one by default.
 
     Returns:
         Dictionary with validation results
@@ -119,7 +126,7 @@ def validate_migration_accompaniment(
     try:
         validate_git_flags_in_repo()
 
-        checker = MigrationAccompanimentChecker(env)
+        checker = MigrationAccompanimentChecker(env, differ=differ)
         report = checker.check_accompaniment(
             base_ref, target_ref, check_bodies=check_bodies, two_dot=two_dot
         )
@@ -127,14 +134,11 @@ def validate_migration_accompaniment(
         if format_output == "text":
             if report.was_skipped:
                 console.print(
-                    "[red]❌ The accompaniment check could not run: the schema does not parse[/red]"
+                    t"[red]❌ The accompaniment check could not run: {report.migration_error}[/red]"
                 )
-                console.print(t"   {report.migration_error}")
                 console.print(
-                    "   [yellow]A schema PostgreSQL rejects is a schema "
-                    "`confiture build` rejects. Fix the statement it names; the "
-                    "gate cannot tell you what a migration is missing until it "
-                    "can read the tree.[/yellow]"
+                    "   [yellow]Fix what it names; the gate cannot tell you what a "
+                    "migration is missing until it can read the tree.[/yellow]"
                 )
             elif (
                 not report.has_ddl_changes

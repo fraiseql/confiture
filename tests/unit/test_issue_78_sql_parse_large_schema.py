@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.schema_model import RelationName
+from confiture.exceptions import SchemaError
 
 
 class TestLargeSchemaDoesNotCrash:
@@ -234,7 +235,7 @@ class TestAccompanimentReportsAParseFailure:
             patch.object(
                 checker.differ,
                 "compare_refs",
-                side_effect=Exception('syntax error at or near ","'),
+                side_effect=SchemaError('syntax error at or near ","', error_code="DIFFER_400"),
             ),
             patch.object(checker, "_get_new_migrations", return_value=[]),
         ):
@@ -256,14 +257,13 @@ class TestAccompanimentReportsAParseFailure:
             patch.object(
                 checker.differ,
                 "compare_refs",
-                side_effect=Exception(original_error),
+                side_effect=SchemaError(original_error, error_code="DIFFER_400"),
             ),
             patch.object(checker, "_get_new_migrations", return_value=[]),
         ):
             report = checker.check_accompaniment("HEAD~1", "HEAD")
 
-        assert report.migration_error is not None
-        assert original_error in report.migration_error
+        assert report.migration_error == f"DIFFER_400 {original_error}"
 
     def test_validate_migration_accompaniment_fails_and_says_why(self):
         """The CLI names the parse failure rather than passing with a warning."""

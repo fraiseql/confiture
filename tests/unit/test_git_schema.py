@@ -3,11 +3,17 @@
 Tests schema building from git refs, comparison between refs, and DDL change detection.
 """
 
+import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import Any
+
+import pytest
 
 from confiture.core.git_schema import GitSchemaBuilder, GitSchemaDiffer
-from confiture.core.schema_change import TableAdded
+from confiture.core.schema_change import IndexAdded, IndexDropped, TableAdded
+from confiture.core.schema_sources import env_segments
+from confiture.exceptions import GitError, SchemaError
 
 
 class TestGitSchemaBuilder:
@@ -341,3 +347,117 @@ class TestGitSchemaDiffer:
             has_ddl_changes = differ.has_ddl_changes(diff)
 
             assert has_ddl_changes
+
+
+# ---------------------------------------------------------------------------
+# A ref is compared as the build reads it (#686)
+# ---------------------------------------------------------------------------
+
+_HEX_ENV = (
+    'database_url: "postgresql://localhost/test"\n'
+    "include_dirs:\n  - db/schema\nbuild:\n  sort_mode: hex\n"
+)
+_TABLE = "CREATE TABLE post (id int, slug text);\n"
+_INDEXES = "CREATE INDEX ix_post_id ON post (id);\nCREATE INDEX ix_post_slug ON post (slug);\n"
+
+
+def _repo(tmp_path: Path, env: str = _HEX_ENV) -> Path:
+    root = tmp_path / "repo"
+    (root / "db" / "environments").mkdir(parents=True)
+    (root / "db" / "environments" / "local.yaml").write_text(env)
+    for argv in (
+        ["init", "-q"],
+        ["config", "user.email", "t@t.com"],
+        ["config", "user.name", "t"],
+    ):
+        subprocess.run(["git", *argv], cwd=root, check=True, capture_output=True)
+    return root
+
+
+def _commit(root: Path, files: dict[str, str | None]) -> None:
+    for name, sql in files.items():
+        path = root / name
+        if sql is None:
+            path.unlink()
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(sql)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "c"], cwd=root, check=True, capture_output=True)
+
+
+def test_compare_refs_reads_hex_order_like_the_build(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    _commit(root, {"db/schema/9_tb_post.sql": _TABLE})
+    _commit(root, {"db/schema/10_ix_post.sql": "CREATE INDEX ix_post_id ON post (id);\n"})
+
+    diff = GitSchemaDiffer("local", root).compare_refs("HEAD~1", "HEAD")
+
+    assert [type(change) for change in diff.changes] == [IndexAdded]
+    assert diff.warnings == []
+
+
+def test_compare_refs_reports_drops_the_build_orders_correctly(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    _commit(root, {"db/schema/9_tb_post.sql": _TABLE, "db/schema/10_ix_post.sql": _INDEXES})
+    _commit(root, {"db/schema/10_ix_post.sql": None})
+
+    diff = GitSchemaDiffer("local", root).compare_refs("HEAD~1", "HEAD")
+
+    assert [type(change) for change in diff.changes] == [IndexDropped, IndexDropped]
+    assert [warning.code for warning in diff.warnings] == []
+
+
+def test_compare_refs_names_the_file_pglast_rejects(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    _commit(root, {"db/schema/10_tb_post.sql": _TABLE})
+    _commit(root, {"db/schema/20_bad.sql": "CREATE TABLE (;\n"})
+
+    with pytest.raises(SchemaError) as caught:
+        GitSchemaDiffer("local", root).compare_refs("HEAD~1", "HEAD")
+
+    working = {segment.label: segment.file for segment in env_segments("local", root)}
+    assert caught.value.error_code == "DIFFER_400"
+    assert caught.value.context["file"] == str(root.resolve() / "db/schema/20_bad.sql")
+    assert caught.value.context["file"] == str(working["db/schema/20_bad.sql"])
+
+
+def test_untracked_include_dirs_are_refused(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    _commit(root, {"README": "one\n"})
+    _commit(root, {"README": "two\n"})
+    (root / "db" / "schema").mkdir()
+    (root / "db" / "schema" / "a.sql").write_text(_TABLE)
+
+    with pytest.raises(GitError, match="not tracked") as caught:
+        GitSchemaDiffer("local", root).compare_refs("HEAD~1", "HEAD")
+
+    assert caught.value.error_code == "GIT_001"
+
+
+def test_equal_trees_read_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _repo(tmp_path)
+    _commit(root, {"db/schema/9_tb_post.sql": _TABLE})
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "e"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    differ = GitSchemaDiffer("local", root)
+    calls: list[list[str]] = []
+    real_run, real_popen = subprocess.run, subprocess.Popen
+
+    def run(argv: list[str], **kwargs: Any) -> Any:
+        calls.append(list(argv))
+        return real_run(argv, **kwargs)
+
+    def popen(argv: list[str], **kwargs: Any) -> Any:
+        calls.append(list(argv))
+        return real_popen(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+    assert not differ.compare_refs("HEAD~1", "HEAD").has_changes()
+    assert not [argv for argv in calls if {"ls-tree", "cat-file", "show"} & set(argv)]
