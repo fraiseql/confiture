@@ -561,8 +561,9 @@ _MATERIALISED = replace(MATERIALISED, author="new")
 #: one name is one ``constraint_mismatch``; an object's kind picks its pair of
 #: ``_OBJECT_DRIFT_TYPES``; a TVIEW redefined is one ``tview_option_mismatch`` per
 #: option the tree pins; the column order's severity is ``column_order_severity``.
-#: An index change on a materialized view is an index finding on it, as on a table;
-#: a matview redefined (its query, under the materialised fidelity) is none.
+#: An index change on a materialized view is an index finding on it, as on a table,
+#: and so is each index change a redefined matview carries; the redefinition itself
+#: is no finding (:data:`UNRENDERED_REDEFINITIONS`).
 def _missing_index_severity(change: SchemaChange) -> DriftSeverity:
     """A missing unique index is a missing constraint, valid or not; any other a warning (#689)."""
     assert isinstance(change, IndexAdded)
@@ -615,6 +616,23 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
     ObjectAdded: (None, DriftSeverity.CRITICAL),
     ObjectDropped: (None, DriftSeverity.INFO),
     ObjectReplaced: (DriftType.TVIEW_OPTION_MISMATCH, DriftSeverity.WARNING),
+}
+
+#: Each kind whose redefinition (``ObjectReplaced``) drift has no finding for, and
+#: why. Against a database these and a TVIEW are the only kinds redefined: a
+#: trigger is compared by existence under every parity rule, and a database reads
+#: its other objects at the ``existence`` depth.
+UNRENDERED_REDEFINITIONS: dict[str, str] = {
+    **dict.fromkeys(
+        ("view", "matview"),
+        "a changed query is no drift kind (#701); compare queries with "
+        "`migrate validate --check-body-views`",
+    ),
+    **dict.fromkeys(
+        ("function", "procedure", "aggregate"),
+        "a changed body is no drift kind; compare bodies with "
+        "`migrate validate --check-signatures --check-body`",
+    ),
 }
 
 _CONSTRAINT_ADDED = (
@@ -691,6 +709,9 @@ class _Findings:
         for change in changes:
             if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
                 objects.append(change)
+                carried = change.index_changes if isinstance(change, ObjectReplaced) else ()
+                for index in carried:
+                    on_table[(index.relation_kind, *index.table.identity)].append(index)
             elif isinstance(change, TableAdded | TableDropped):
                 on_table[("", "", "")].append(change)
             elif isinstance(change, _ON_TABLE) and (
@@ -958,9 +979,10 @@ class _Findings:
         silence from a section nobody asked the catalogue about is not absence.
 
         A matview whose indexes differ is not redefined: its index findings are
-        :meth:`_matview_indexes`'. Only a matview whose query also differs, under
-        the materialised fidelity, is one ``ObjectReplaced``, which is no finding
-        here, so its index differences go unreported with it.
+        :meth:`_matview_indexes`'. A matview whose query also differs, under the
+        materialised fidelity, is one ``ObjectReplaced``; its index findings are
+        still :meth:`_matview_indexes`', from the index changes it carries, and the
+        redefinition itself is no finding (:data:`UNRENDERED_REDEFINITIONS`).
         """
         sections = frozenset(
             section

@@ -20,7 +20,7 @@ from confiture.core.differ import (
     slot_side,
     stated_side,
 )
-from confiture.core.drift import DriftReport, DriftSeverity, _Findings
+from confiture.core.drift import DriftReport, DriftSeverity, DriftType, _Findings
 from confiture.core.schema_change import (
     IndexAdded,
     IndexDropped,
@@ -176,19 +176,52 @@ def test_a_side_that_did_not_read_views_compares_no_matview_index() -> None:
     assert _index_changes(changes) == []
 
 
-def test_a_redefined_matview_under_materialised_hides_a_lost_unique_index() -> None:
-    """A known limit: drift renders no redefined matview, so its lost index goes unsaid."""
-    actual, expected = _database(TABLE + VIEW), _database(TABLE + OTHER_VIEW + UNIQUE)
-    expected = replace(expected, model=replace(expected.model, source="author"))
-    policy = replace(MATERIALISED, author="new")
-    changes = SchemaDiffer().compare_sides(actual, expected, policy).changes
-    (change,) = changes
-    assert isinstance(change, ObjectReplaced)
-    assert [i.name for i in change.new_indexes] == ["ux_mv"]
+def _author(sql: str) -> Side:
+    """A tree as drift states it: the author's side of a materialised comparison."""
+    return stated_side(replace(read_text(sql).catalogued, source="author"))
+
+
+def _stored(sql: str) -> Side:
+    """A database holding *sql*, its views' queries as text: what ``migrate diff`` reads."""
+    read = read_text(sql)
+    return Side(replace(read.catalogued, source="catalog"), read.declared.objects)
+
+
+def _drift(database: Side, tree: Side) -> DriftReport:
+    """Drift at the materialised tier: *tree* is the author's side, *database* the catalog."""
+    changes = SchemaDiffer().compare_sides(database, tree, replace(MATERIALISED, author="new"))
     report = DriftReport(database_name="db", expected_schema_source="tree")
-    _Findings(expected.model, actual.model, DriftSeverity.WARNING).render(
-        changes, report, column_order=False
+    _Findings(tree.model, database.model, DriftSeverity.WARNING).render(
+        changes.changes, report, column_order=False
     )
+    return report
+
+
+def test_a_redefined_matview_under_materialised_reports_a_lost_unique_index() -> None:
+    """Its query and its unique index both differ: the index is still a finding (#701)."""
+    report = _drift(_database(TABLE + VIEW), _author(TABLE + OTHER_VIEW + UNIQUE))
+    (item,) = report.drift_items
+    assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
+    assert item.object_name == "public.mv.ux_mv"
+    assert item.subject is not None
+    assert item.subject.relation == "mv"
+    assert report.indexes_checked == 1
+
+
+def test_a_redefined_matview_with_an_invalid_live_index_is_the_critical_pair() -> None:
+    database = _database(TABLE + VIEW + UNIQUE, valid=False)
+    report = _drift(database, _author(TABLE + OTHER_VIEW + UNIQUE))
+    found = [(i.drift_type, i.severity) for i in report.drift_items]
+    assert found == [
+        (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL),
+        (DriftType.EXTRA_INDEX, DriftSeverity.INFO),
+    ]
+    assert "INVALID" in report.drift_items[0].message
+
+
+def test_a_redefined_matview_alone_is_no_finding() -> None:
+    """The query itself is a redefinition no drift kind says (``UNRENDERED_REDEFINITIONS``)."""
+    report = _drift(_database(TABLE + VIEW + UNIQUE), _author(TABLE + OTHER_VIEW + UNIQUE))
     assert report.drift_items == []
 
 
@@ -211,17 +244,6 @@ INDEX_SHAPES = {
     "index-added": ("", ON_N, [("IndexAdded", "ix_mv")]),
     "keys-changed": (ON_N, ON_ID, [("IndexDropped", "ix_mv"), ("IndexAdded", "ix_mv")]),
 }
-
-
-def _author(sql: str) -> Side:
-    """A tree as drift states it: the author's side of a materialised comparison."""
-    return stated_side(replace(read_text(sql).catalogued, source="author"))
-
-
-def _stored(sql: str) -> Side:
-    """A database holding *sql*, its views' queries as text: what ``migrate diff`` reads."""
-    read = read_text(sql)
-    return Side(replace(read.catalogued, source="catalog"), read.declared.objects)
 
 
 def _materialised(database: str, tree: str) -> list[SchemaChange]:
