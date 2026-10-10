@@ -63,6 +63,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "linting": (CRATE, TRANSFORM),
     "lock_profile.py": (CRATE, TRANSFORM),
     "migration_analyzer.py": (CRATE, TRANSFORM),
+    "migration_scope.py": (CRATE, TRANSFORM),
     "migration_grant_extractor.py": (CRATE, TRANSFORM),
     "model_facts.py": (CRATE, TRANSFORM),
     "parser_info.py": (CRATE, TRANSFORM),
