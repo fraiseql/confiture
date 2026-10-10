@@ -24,6 +24,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FraiseQL fixture gains `90_indexes.sql` and its expected migration the index. The model's wire
   gains `unattached_indexes`, empty for a database; an index written before its own table is now
   that table's rather than lost. `IndexAdded` and `IndexDropped` gain `table_declared`.
+- **⚠️ A desired state that indexes a relation it does not declare is refused against a database
+  or a tree that declares it** (#679): `DIFFER_406` (error, exit 5) from `migrate diff` and
+  `confiture drift`, naming the index and the relation. A desired state is whole, so a relation it
+  does not declare is one the migration drops — or, against a database that does not hold it, one
+  the index could not be created on. `--from db` used to skip such an index in silence (the model a
+  database is compared with lost it), and with a scratch server the fragment failed its build
+  with a psql error instead. The FraiseQL pipeline composes the artifact through `include_dirs`.
+- **An index on a TVIEW is a `DIFFER_407` warning** (exit 0) in `migrate diff`'s `warnings[]`,
+  naming the index and the TVIEW: the model holds no TVIEW index yet, so neither the diff nor drift
+  sees it, and it was dropped from the comparison without a word.
+
+### Added
+
+- **`migrate diff --to-env <env>`**: the desired state is the environment's build — what
+  `confiture build --env` selects, in build order, `order`/`include`/`exclude` honoured — so an
+  artifact composed into the tree through `include_dirs` is diffed as the deploy builds it. The
+  JSON `source` is `{"kind": "env", "path": <env>}` (`migrate-diff.schema.json`'s `kind` gains
+  `env`). The desired-state guide documents composition as the pipeline.
 
 ## [1.34.0] - 2026-10-09
 

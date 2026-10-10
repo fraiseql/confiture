@@ -1,8 +1,10 @@
 """Where ``migrate diff`` reads its desired state from (issue #196).
 
-The target of a diff is a hand-authored SQL file, or the canonical
-desired-state artifact ``fraiseql compile --emit-ddl <dir>`` writes: a directory
-of DDL files, one per type. A pipeline hands the same text over on stdin. Each
+The target of a diff is a hand-authored SQL file, the canonical desired-state
+artifact ``fraiseql compile --emit-ddl <dir>`` writes (a directory of DDL files,
+one per type), or an environment's build — the tree ``confiture build --env``
+selects, which is how an artifact composed through ``include_dirs`` is read. A
+pipeline hands the same text over on stdin. Each
 source yields DDL text; the differ parses it the same way whatever the source
 and never learns what an artifact is. ``describe()`` is what ``--format json``
 reports as ``source``.
@@ -15,6 +17,7 @@ from typing import ClassVar, Protocol
 
 from confiture.core.builder import files_under
 from confiture.core.schema_read import Segment, joined
+from confiture.core.schema_sources import env_segments
 from confiture.exceptions import SchemaError
 
 STDIN = "-"
@@ -67,6 +70,23 @@ class SqlFileSource:
                 resolution_hint="Check the path passed to --to / --from.",
             )
         return [Segment(path, path.read_text())]
+
+
+@dataclass(frozen=True)
+class EnvSource:
+    """DDL from an environment's build: the files ``confiture build --env`` selects, in its order."""
+
+    env: str
+    kind: ClassVar[str] = "env"
+
+    def describe(self) -> dict[str, str]:
+        return {"kind": self.kind, "path": self.env}
+
+    def read(self) -> str:
+        return joined(self.segments())
+
+    def segments(self) -> list[Segment]:
+        return env_segments(self.env)
 
 
 def load_desired_state(spec: str) -> DesiredStateSource:

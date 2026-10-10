@@ -103,6 +103,12 @@ def test_from_db_diffs_the_configured_database(
     clean_test_db.commit()
     config = tmp_path / "confiture.yaml"
     config.write_text(f"name: test\ndatabase_url: {test_db_url}\n")
+    # The artifact's tables: its index fragment is on a relation it does not
+    # declare, which a database side refuses (DIFFER_406, test_desired_state_roundtrip).
+    tables = tmp_path / "tables"
+    tables.mkdir()
+    for name in ("post.sql", "user.sql"):
+        (tables / name).write_text((FIXTURE / name).read_text())
 
     result = runner.invoke(
         app,
@@ -112,7 +118,7 @@ def test_from_db_diffs_the_configured_database(
             "--from",
             "db",
             "--to",
-            str(FIXTURE),
+            str(tables),
             "--config",
             str(config),
             "--format",
@@ -125,4 +131,4 @@ def test_from_db_diffs_the_configured_database(
     assert [(c["type"], "tb_post" in c["details"]) for c in payload["changes"]] == [
         ("ADD_TABLE", True)
     ]
-    assert payload["source"] == {"kind": "sql", "path": str(FIXTURE)}
+    assert payload["source"] == {"kind": "sql", "path": str(tables)}

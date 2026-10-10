@@ -293,8 +293,45 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
 
 
 def _declares(model: SchemaModel, ref: ObjectRef) -> bool:
-    """Whether *model* declares the relation *ref* keys as a table, or as a materialized view."""
-    return ref in model.tables or ref_for("matview", ref.schema, ref.name) in model.views
+    """Whether *model* declares the relation *ref* keys: a table, a materialized view or a TVIEW."""
+    return (
+        ref in model.tables
+        or ref_for("matview", ref.schema, ref.name) in model.views
+        or ref_for("tview", ref.schema, ref.name) in model.tviews
+    )
+
+
+def refuse_undeclared_relations(old: SchemaModel, new: SchemaModel) -> None:
+    """Refuse a desired state that indexes a relation it cannot have (``DIFFER_406``, #679).
+
+    A desired state is whole: a relation it does not declare is one the
+    migration drops. An index it writes on a relation the current side
+    declares therefore contradicts it — the migration would drop the table and
+    index it. Against a database, an index on a relation the database does
+    not hold could not be created either. Only between two trees, neither of
+    which declares the relation, is the index carried (``DIFFER_405``).
+
+    Raises:
+        DifferError: ``DIFFER_406``, naming the first such index and its relation.
+    """
+    for ref in sorted(new.unattached_indexes, key=_object_sort_key):
+        if _declares(old, ref):
+            reason = "the current schema declares it, so the migration would drop it"
+        elif old.source != "author":
+            reason = "the database does not hold it, so the migration could not create the index"
+        else:
+            continue
+        index = new.unattached_indexes[ref][0]
+        raise DifferError(
+            f"Index {comment_text(index.name or ', '.join(index.columns))} is on "
+            f"{comment_text(index.table.qualified)}, which the desired schema does not "
+            f"declare: {reason}",
+            error_code="DIFFER_406",
+            resolution_hint=(
+                "Declare the relation in the desired schema — compose the fragment into the "
+                "environment's include_dirs, after the file that creates it — or remove the index"
+            ),
+        )
 
 
 def _assumed(change: SchemaChange) -> BuildWarning:
@@ -626,10 +663,13 @@ class SchemaDiffer:
                 sources call for (:func:`policy_between`).
 
         Raises:
-            DifferError: ``DIFFER_403`` when either side names an object that needs quotes.
+            DifferError: ``DIFFER_403`` when either side names an object that needs quotes;
+                ``DIFFER_406`` when *new* indexes a relation it does not declare and
+                *old* declares, or, as a database, does not hold.
         """
         refuse_quoted_names("old", old.quoted)
         refuse_quoted_names("new", new.quoted)
+        refuse_undeclared_relations(old.model, new.model)
         if policy is None:
             policy = policy_between(old.model.source, new.model.source)
         if policy.rules and old.model.source != new.model.source:

@@ -1479,12 +1479,12 @@ def inherit_columns(inventory: Inventory) -> Inventory:
             resolved[id(table)] = _merged(table, inherited)
         return resolved[id(table)]
 
-    return Inventory(
+    return replace(
+        inventory,
         objects=[
             replace(obj, columns=columns_of(obj, frozenset())) if obj.kind == "table" else obj
             for obj in inventory.objects
         ],
-        schemas=inventory.schemas,
     )
 
 

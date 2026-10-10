@@ -30,6 +30,7 @@ from confiture.core.differ import (
     Fidelity,
     SchemaDiffer,
     refuse_quoted_names,
+    refuse_undeclared_relations,
     stated_side,
 )
 from confiture.core.ledger import bookkeeping_tables
@@ -1277,6 +1278,8 @@ class SchemaDriftDetector:
             _read_expected(lambda: read_segments(source.segments())), default_schema
         )
         actual = self.get_live_schema(expected.schemas, objects=True)
+        # Before a scratch build, which would fail on the index rather than name it.
+        refuse_undeclared_relations(actual, expected.model)
         if self.scratch_url is None:
             report = self.compare_schemas(expected.model, actual)
         else:

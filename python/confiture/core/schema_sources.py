@@ -98,6 +98,11 @@ def _segments(
     return [Segment(file, _read(file)) for path in paths for file in _files(path)]
 
 
+def env_segments(env: str, project_dir: Path | None = None) -> list[Segment]:
+    """*env*'s build, file by file: what ``confiture build --env`` selects, in build order."""
+    return _segments(None, env=env, project_dir=project_dir)
+
+
 def read_schema(
     source: SchemaSource | None = None,
     *,

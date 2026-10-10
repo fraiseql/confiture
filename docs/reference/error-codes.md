@@ -64,6 +64,8 @@ resolution hint surfaced in the envelope.
 | `DIFFER_403` | 5 | error | A schema being compared names an object that needs quotes | Rename it so it needs no quotes; `confiture lint` lists every such name (naming_003, naming_004) |
 | `DIFFER_404` | 0 | warning | {kind} '{identity}' is only in the {side} schema, a database that says it exists and not how it is made: the diff carries no statement for it | Write the statement by hand, or declare the object in the tree so the two sides agree |
 | `DIFFER_405` | 0 | warning | Index '{index}' is on {table}, which neither schema declares: the migration {action} it CONCURRENTLY and assumes the table exists | Make sure the table exists before the migration runs, or declare it in the schema |
+| `DIFFER_406` | 5 | error | Index '{index}' is on {table}, which the desired schema does not declare: {reason} | Declare the relation in the desired schema — compose the fragment into the environment's include_dirs, after the file that creates it — or remove the index |
+| `DIFFER_407` | 0 | warning | Index '{index}' is on TVIEW {tview}: migrate diff does not carry it and drift does not check it yet | Keep it in the schema (the build creates it, and pg_tviews keeps it across a rebuild); write any change to it in a migration by hand |
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
