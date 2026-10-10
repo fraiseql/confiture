@@ -13,41 +13,47 @@ CREATE TYPE new_status AS ENUM ('x', 'y');
 -- confiture:tier additive
 CREATE SEQUENCE IF NOT EXISTS new_seq;
 
+-- confiture:creates audit
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS audit (
+CREATE TABLE audit (
     id INTEGER NOT NULL,
     at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );
 
+-- confiture:creates ordered
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS ordered (
+CREATE TABLE ordered (
     b INTEGER,
     a INTEGER
 );
 
+-- confiture:creates parent
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS parent (
+CREATE TABLE parent (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)
 );
 
+-- confiture:creates people
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS people (
+CREATE TABLE people (
     id INTEGER NOT NULL,
     display_name TEXT,
     PRIMARY KEY (id)
 );
 
+-- confiture:creates rekeyed
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS rekeyed (
+CREATE TABLE rekeyed (
     a INTEGER NOT NULL,
     b INTEGER NOT NULL,
     CONSTRAINT rekeyed_pk PRIMARY KEY (a, b)
 );
 
+-- confiture:creates things
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS things (
+CREATE TABLE things (
     id INTEGER NOT NULL,
     created_at TIMESTAMPTZ,
     size VARCHAR(100),
@@ -65,8 +71,9 @@ CREATE TABLE IF NOT EXISTS things (
 );
 CREATE INDEX IF NOT EXISTS things_new_ix ON things (code, qty);
 
+-- confiture:creates ren.tb_orders_history
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS ren.tb_orders_history (
+CREATE TABLE ren.tb_orders_history (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)
 );

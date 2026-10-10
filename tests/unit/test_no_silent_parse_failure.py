@@ -54,6 +54,10 @@ ALLOWED: dict[str, str] = {
     "python/confiture/core/linting/seed_secrets.py:findings_in": (
         "a seed file the parser rejects is the lint's UNPARSEABLE notice for that file"
     ),
+    "python/confiture/core/migration_generator.py:_plain": (
+        "a generated up the parser rejects keeps every create re-appliable, as before; "
+        "migrate up reports the statement when it runs"
+    ),
     "python/confiture/core/plpgsql_parse.py:_compiles": (
         "the oracle's question is whether a body compiles; False is the answer"
     ),

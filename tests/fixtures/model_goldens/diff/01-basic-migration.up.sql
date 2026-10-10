@@ -7,8 +7,9 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;
 -- confiture:tier additive
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- confiture:creates users
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     email TEXT NOT NULL,
     display_name TEXT NOT NULL,

@@ -53,11 +53,15 @@ DISAGREEMENTS: dict[str, str] = {
     "ObjectAdded[type]": "as a domain: a composite or range type's CREATE is guarded in DO",
     "ObjectAdded[policy]": "as a domain: a policy's CREATE is guarded in DO",
     "TableAdded[indexed]": (
-        "declared additive; the written plain CREATE INDEX reads lock_risky, so "
-        "window_safe is false; which of the two a relation created with its indexes "
-        "should declare is still open"
+        "declared additive; the generator creates the table plainly in a file that runs "
+        "in one transaction, but its own plain CREATE INDEX still reads lock_risky, so "
+        "window_safe is false, until preflight exempts an index on a relation the same "
+        "migration creates"
     ),
-    "ObjectAdded[matview, indexed]": "as a table created with its indexes",
+    "ObjectAdded[matview, indexed]": (
+        "as a table created with its indexes: created plainly by the generator, its "
+        "plain CREATE INDEX still reads lock_risky"
+    ),
     "ObjectAdded[tview]": (
         "a pg_tviews TVIEW is written tviews.pg_tviews_create_or_replace() so the "
         "migration re-applies; the call reads as a replacement, the change is an addition"

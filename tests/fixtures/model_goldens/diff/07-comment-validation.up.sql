@@ -1,8 +1,9 @@
 -- Migration: golden
 -- Version: <version>
 
+-- confiture:creates users
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id SERIAL NOT NULL,
     username VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
@@ -12,8 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE (email)
 );
 
+-- confiture:creates posts
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS posts (
+CREATE TABLE posts (
     id SERIAL NOT NULL,
     user_id INTEGER NOT NULL,
     title VARCHAR(500) NOT NULL,

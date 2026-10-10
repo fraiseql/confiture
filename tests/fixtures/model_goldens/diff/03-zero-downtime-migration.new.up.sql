@@ -1,8 +1,9 @@
 -- Migration: golden
 -- Version: <version>
 
+-- confiture:creates users
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id BIGSERIAL NOT NULL,
     email TEXT NOT NULL,
     first_name TEXT NOT NULL,

@@ -4,8 +4,9 @@
 -- confiture:tier additive
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- confiture:creates tb_confiture
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS tb_confiture (
+CREATE TABLE tb_confiture (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     pk_confiture BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     slug TEXT NOT NULL,

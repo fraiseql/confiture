@@ -13,8 +13,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- confiture:tier additive
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- confiture:creates users
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     email TEXT NOT NULL,
     display_name TEXT NOT NULL,
@@ -32,8 +33,9 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_users_display_name_trgm ON users USING gin (display_name gin_trgm_ops);
 
+-- confiture:creates projects
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS projects (
+CREATE TABLE projects (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     owner_id UUID NOT NULL,
     name TEXT NOT NULL,
@@ -52,8 +54,9 @@ CREATE INDEX IF NOT EXISTS idx_projects_status ON projects (status) WHERE status
 CREATE INDEX IF NOT EXISTS idx_projects_owner_status ON projects (owner_id, status);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects (created_at DESC);
 
+-- confiture:creates tasks
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS tasks (
+CREATE TABLE tasks (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL,
     assigned_to UUID,
