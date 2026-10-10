@@ -347,3 +347,121 @@ def test_a_redefined_domain_is_a_change(
     payload = _diff_from_db(tree, _config(tmp_path, url), *extra)
 
     assert payload["changes"] != []
+
+
+#: A materialized view whose query and unique index both drifted (#701): the tree…
+MATVIEW_TREE = """
+CREATE TABLE t (id bigint PRIMARY KEY, c text);
+CREATE MATERIALIZED VIEW mv AS SELECT id, c FROM t WHERE c IS NOT NULL;
+CREATE UNIQUE INDEX ux_mv ON mv (id);
+"""
+#: …and the database: another query, and no index.
+MATVIEW_DATABASE = """
+CREATE TABLE t (id bigint PRIMARY KEY, c text);
+CREATE MATERIALIZED VIEW mv AS SELECT id, c FROM t;
+"""
+
+
+def _findings(report) -> set[tuple[str, str, str]]:
+    return {(i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items}
+
+
+@pytest.fixture
+def matview_tree(tmp_path: Path) -> Path:
+    path = tmp_path / "matview.sql"
+    path.write_text(MATVIEW_TREE)
+    return path
+
+
+def test_a_redefined_matview_that_lost_its_unique_index_is_critical_drift(
+    matview_tree: Path, test_db_url: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    url = _built(fresh_database_factory, MATVIEW_DATABASE)
+
+    materialised = _drift(url, matview_tree, test_db_url)
+    structural = _drift(url, matview_tree, None)
+
+    assert _findings(materialised) == {("missing_index", "critical", "public.mv.ux_mv")}
+    assert materialised.fidelity == "materialised"
+    # The tiers agree on the index: the scratch server no longer hides it.
+    assert _findings(structural) == _findings(materialised)
+
+
+def test_the_drift_command_fails_on_it_with_a_scratch_server(
+    matview_tree: Path,
+    test_db_url: str,
+    fresh_database_factory: Callable[[str], str],
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, _built(fresh_database_factory, MATVIEW_DATABASE))
+    result = runner.invoke(
+        app,
+        ["drift", "--config", str(config), "--schema", str(matview_tree),
+         "--scratch-url", test_db_url, "--format", "json"],
+    )  # fmt: skip
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.stdout)
+    assert payload["has_drift"] is True
+    assert payload["fidelity"] == "materialised"
+    assert [(i["type"], i["severity"]) for i in payload["drift_items"]] == [
+        ("missing_index", "critical")
+    ]
+
+
+def test_check_live_drift_fails_on_it_with_scratch_url_in_the_environment(
+    matview_tree: Path,
+    test_db_url: str,
+    fresh_database_factory: Callable[[str], str],
+    tmp_path: Path,
+) -> None:
+    """What a deploy gate runs: the environment names the scratch server."""
+    url = _built(fresh_database_factory, MATVIEW_DATABASE)
+    config = _config(tmp_path, url, scratch_url=test_db_url)
+    result = runner.invoke(
+        app,
+        ["migrate", "validate", "--check-live-drift", "--config", str(config),
+         "--schema", str(matview_tree), "--format", "json"],
+    )  # fmt: skip
+
+    assert result.exit_code != 0, result.output
+    assert "ux_mv" in result.stdout
+    assert "missing_index" in result.stdout
+
+
+def test_a_redefined_matview_with_an_invalid_unique_index_is_the_critical_pair_live(
+    test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    """A failed concurrent build over duplicates leaves the matview's unique index INVALID."""
+    unique = "CREATE UNIQUE INDEX ux_mv ON mv (c);\n"
+    tree = tmp_path / "matview.sql"
+    tree.write_text(MATVIEW_TREE.replace("CREATE UNIQUE INDEX ux_mv ON mv (id);\n", unique))
+    url = _built(
+        fresh_database_factory,
+        "CREATE TABLE t (id bigint PRIMARY KEY, c text);\n"
+        "INSERT INTO t VALUES (1, 'a'), (2, 'a');\n"
+        "CREATE MATERIALIZED VIEW mv AS SELECT id, c FROM t;\n",
+    )
+    with psycopg.connect(url, autocommit=True) as conn, pytest.raises(psycopg.Error):
+        conn.execute(unique.replace("INDEX", "INDEX CONCURRENTLY"))
+
+    report = _drift(url, tree, test_db_url)
+
+    assert _findings(report) == {
+        ("missing_index", "critical", "public.mv.ux_mv"),
+        ("extra_index", "info", "public.mv.ux_mv"),
+    }
+    missing = next(i for i in report.drift_items if i.drift_type is DriftType.MISSING_INDEX)
+    assert "INVALID" in missing.message
+
+
+def test_migrate_diff_still_recreates_it_once(
+    matview_tree: Path,
+    test_db_url: str,
+    fresh_database_factory: Callable[[str], str],
+    tmp_path: Path,
+) -> None:
+    """The recreate writes the index; the index changes it carries are drift's to read."""
+    config = _config(tmp_path, _built(fresh_database_factory, MATVIEW_DATABASE))
+    payload = _diff_from_db(matview_tree, config, "--scratch-url", test_db_url)
+    assert [c["type"] for c in payload["changes"]] == ["REPLACE_MATVIEW"]

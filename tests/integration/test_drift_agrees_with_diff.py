@@ -13,6 +13,7 @@ comparison and not the other used to see: a primary key, a foreign key's action,
 default's value, an index's keys.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 import psycopg
@@ -20,8 +21,10 @@ import pytest
 from test_live_drift_identity import MUTATIONS, corpus_sql
 
 from confiture import platform
+from confiture.core.differ import MATERIALISED, SchemaDiffer
 from confiture.core.drift import (
     DRIFT_OF,
+    UNRENDERED_REDEFINITIONS,
     DriftItem,
     DriftType,
     SchemaDriftDetector,
@@ -54,6 +57,8 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
+from confiture.core.schema_read import read_text
+from confiture.core.schema_sources import database_side, materialised_side
 
 #: ``(family, schema, relation, name)``: the object a finding or a change is about.
 Key = tuple[str, str, str | None, str | None]
@@ -260,4 +265,102 @@ def test_drift_and_diff_are_about_the_same_objects(
         f"{mutation} ({drift_type})\n  drift only: {drift_only}\n  diff only:  {diff_only}"
     )
     reported, expected = _index_severities(url, schema_file)
+    assert reported == expected, mutation
+
+
+# The materialised tier (a scratch server reads the tree back) compares a
+# matview's query, so a matview whose query drifted is one redefinition; the index
+# changes it carries are drift's findings, and the redefinition itself is no
+# finding (``UNRENDERED_REDEFINITIONS``). ``platform.diff`` has no scratch tier, so
+# the diff is asked as ``migrate diff --from db --scratch-url`` asks it.
+
+
+def _change_keys(change: SchemaChange) -> set[Key]:
+    """The objects *change* is about, a redefinition drift does not render by what it carries."""
+    if isinstance(change, ObjectReplaced) and change.ref.kind in UNRENDERED_REDEFINITIONS:
+        return {key for carried in change.index_changes if (key := _change_key(carried))}
+    key = _change_key(change)
+    return set() if key is None else {key}
+
+
+def _flattened(changes: list[SchemaChange]) -> list[SchemaChange]:
+    """*changes*, with the index changes each redefinition carries beside it."""
+    return [
+        found
+        for change in changes
+        for found in (
+            [change, *change.index_changes] if isinstance(change, ObjectReplaced) else [change]
+        )
+    ]
+
+
+def _materialised(
+    url: str, schema_file: Path, scratch_url: str
+) -> tuple[list[DriftItem], list[SchemaChange]]:
+    """Drift and the diff from the database, both at the materialised tier."""
+    with psycopg.connect(url) as conn:
+        report = SchemaDriftDetector(conn, scratch_url=scratch_url).compare_with_schema_file(
+            str(schema_file)
+        )
+    sql = schema_file.read_text(encoding="utf-8")
+    declared = read_text(sql).model
+    database = database_side(url, against=declared)
+    built = materialised_side(sql, scratch_url, declared=declared)
+    policy = replace(MATERIALISED, author="new")
+    return report.drift_items, SchemaDiffer().compare_sides(database, built, policy).changes
+
+
+def test_a_pristine_corpus_is_no_drift_and_no_change_at_the_materialised_tier(
+    built: tuple[str, Path], test_db_url: str
+) -> None:
+    assert _materialised(*built, test_db_url) == ([], [])
+
+
+_REDEFINED_MATVIEW = (
+    "DROP MATERIALIZED VIEW core.mv_widget; "
+    "CREATE MATERIALIZED VIEW core.mv_widget AS SELECT count(*) + 0 AS n FROM core.tb_widget; "
+)
+
+#: ``(mutation SQL, drift type or None)``: a matview redefined, with what drift reports.
+MATERIALISED_MORE = [
+    pytest.param(_REDEFINED_MATVIEW, "missing_index", id="redefine-matview-drop-unique-index"),
+    pytest.param(
+        _REDEFINED_MATVIEW
+        + "CREATE UNIQUE INDEX ux_mv_widget_n ON core.mv_widget (n); "
+        + "CREATE INDEX ix_mv_widget_extra ON core.mv_widget (n)",
+        "extra_index",
+        id="redefine-matview-add-index",
+    ),
+    pytest.param(
+        _REDEFINED_MATVIEW + "CREATE UNIQUE INDEX ux_mv_widget_n ON core.mv_widget (n)",
+        None,
+        id="redefine-matview-only",
+    ),
+]
+
+
+@pytest.mark.parametrize(("mutation", "drift_type"), MATERIALISED_MORE)
+def test_drift_and_diff_agree_at_the_materialised_tier(
+    built: tuple[str, Path], test_db_url: str, mutation: str, drift_type: str | None
+) -> None:
+    url, schema_file = built
+    apply_sql_via_psql(url, sql=mutation)
+    items, changes = _materialised(url, schema_file, test_db_url)
+
+    assert [c.ref.kind for c in changes if isinstance(c, ObjectReplaced)] == ["matview"]
+    assert {item.drift_type.value for item in items} == ({drift_type} if drift_type else set())
+    found = {_drift_key(item) for item in items}
+    changed = set().union(*map(_change_keys, changes))
+    assert (found - changed, changed - found) == (set(), set()), mutation
+    reported = {
+        (_drift_key(item), item.drift_type.value): item.severity.value
+        for item in items
+        if _DRIFT_FAMILY[item.drift_type] == "index"
+    }
+    expected = {
+        (key, DRIFT_OF[type(change)][0].value): severity_of(change).value
+        for change in _flattened(changes)
+        if isinstance(change, IndexAdded | IndexDropped)
+        and (key := _change_key(change)) is not None
+    }
     assert reported == expected, mutation
