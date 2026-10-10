@@ -236,6 +236,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "Write the statement by hand, or declare the object in the tree so the two sides agree"
         ),
     },
+    {
+        "code": "DIFFER_405",
+        "message_template": (
+            "Index '{index}' is on {table}, which neither schema declares: the migration "
+            "{action} it CONCURRENTLY and assumes the table exists"
+        ),
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Make sure the table exists before the migration runs, or declare it in the schema"
+        ),
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",

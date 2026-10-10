@@ -294,6 +294,7 @@
   ],
   "triggers": [],
   "tviews": [],
+  "unattached_indexes": [],
   "views": [
     {
       "definition": "SELECT p.id, p.title, p.content, u.username AS author, p.created_at FROM posts AS p INNER JOIN users AS u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 100",

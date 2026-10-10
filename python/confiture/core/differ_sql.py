@@ -374,11 +374,21 @@ def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
     )
 
 
+def _undeclared(change: IndexAdded | IndexDropped) -> str:
+    """The comment above an index on a table neither tree declares (#679): it assumes the table."""
+    if change.table_declared:
+        return ""
+    return _comment(
+        f"{change.table.qualified} is not declared in this schema: the index assumes it exists"
+    )
+
+
 def _create_index(change: IndexAdded | IndexDropped) -> str:
     """``CONCURRENTLY``: the table exists and is in use while the index builds."""
     if not change.index.name:
         return _unnamed(change, "index")
-    return _index_statement(change.index, relation(change.table), concurrently=True)
+    statement = _index_statement(change.index, relation(change.table), concurrently=True)
+    return _undeclared(change) + statement
 
 
 def _table_indexes(table: Table) -> str:
@@ -409,7 +419,7 @@ def _drop_index(change: IndexAdded | IndexDropped) -> str:
         return _unnamed(change, "index")
     # An index is in its table's schema, and a bare name would drop nothing there.
     index = relation(RelationName(change.table.schema, change.index.name))
-    return f"DROP INDEX CONCURRENTLY IF EXISTS {index};\n"
+    return f"{_undeclared(change)}DROP INDEX CONCURRENTLY IF EXISTS {index};\n"
 
 
 def _add_foreign_key(change: ForeignKeyAdded | ForeignKeyDropped) -> str:

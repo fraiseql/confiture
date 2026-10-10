@@ -286,6 +286,10 @@ class Inventory:
     schemas: list[SchemaObject] = field(default_factory=list)
     #: Each ``CREATE`` whose name its schema already held as another kind when it ran.
     name_collisions: list[NameCollision] = field(default_factory=list)
+    #: Each ``CREATE INDEX`` on a relation the tree had not declared when it ran,
+    #: in order: the model attaches one to a relation the tree declares later and
+    #: holds the rest as unattached (#679).
+    unattached_indexes: list[Index] = field(default_factory=list)
 
     @property
     def uncreated(self) -> frozenset[tuple[int, str]]:
@@ -1187,12 +1191,16 @@ def _takes_name(obj: SchemaObject, inventory: Inventory) -> bool:
 def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
     """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared.
 
+    One on a relation the tree has not declared is kept aside, unattached (#679).
     An index takes its name in its table's schema, among every relation there;
     a statement naming one already taken creates nothing (#638).
     """
     relation = raw.stmt.relation
     found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
     if not found:
+        table = relation_name(relation)
+        if table is not None:
+            inventory.unattached_indexes.append(read_index(raw.stmt, table=table))
         return
     target = found[0]
     index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
@@ -1285,6 +1293,11 @@ def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
             continue
         if edit.schema is None or target.folded_schema in (None, edit.schema):
             target.indexes = [ix for ix in target.indexes if ix.name != edit.name]
+    inventory.unattached_indexes = [
+        ix
+        for ix in inventory.unattached_indexes
+        if ix.name != edit.name or edit.schema not in (None, ix.table.identity[0])
+    ]
 
 
 def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> None:
@@ -1605,6 +1618,7 @@ def schema_model(inventory: Inventory) -> SchemaModel:
         elif obj.tview is not None:
             tview = replace(obj.tview, name=obj.folded_name, schema=obj.folded_schema)
             tviews[tview_ref(tview)] = tview
+    unattached = _attach(inventory.unattached_indexes, tables, views, tviews)
     return SchemaModel(
         tables=tables,
         enum_types=enum_types,
@@ -1612,7 +1626,37 @@ def schema_model(inventory: Inventory) -> SchemaModel:
         routines={ref: tuple(found) for ref, found in routines.items()},
         views=views,
         tviews=tviews,
+        unattached_indexes=unattached,
     )
+
+
+def _attach(
+    indexes: list[Index],
+    tables: dict[Any, Table],
+    views: dict[ObjectRef, View],
+    tviews: dict[ObjectRef, TView],
+) -> dict[ObjectRef, tuple[Index, ...]]:
+    """Put each index on the table or materialized view the tree declares later, and keep the rest.
+
+    An index written before its table fails the build at that statement, which
+    lint reports; the model holds it where the table that is declared would. A
+    TVIEW's indexes are pg_tviews' to make, and the model holds none.
+    """
+    unattached: dict[ObjectRef, list[Index]] = {}
+    for index in indexes:
+        ref = index.table.ref()
+        if ref in tables:
+            table = tables[ref]
+            tables[ref] = replace(
+                table, indexes=(*table.indexes, replace(index, table=table.relation))
+            )
+        elif (view_key := index.table.ref("matview")) in views:
+            view = views[view_key]
+            relation = RelationName(view.schema, view.name)
+            views[view_key] = replace(view, indexes=(*view.indexes, replace(index, table=relation)))
+        elif index.table.ref("tview") not in tviews:
+            unattached.setdefault(ref, []).append(index)
+    return {ref: tuple(found) for ref, found in unattached.items()}
 
 
 def label_for(path: Path, root: Path | None) -> str:

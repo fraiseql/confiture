@@ -438,6 +438,10 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
             ref_for("tview", t.schema or default_schema, t.name): t for t in model.tviews.values()
         },
         other_objects=model.other_objects,
+        unattached_indexes={
+            ref_for("table", found[0].table.schema or default_schema, found[0].table.name): found
+            for found in model.unattached_indexes.values()
+        },
     )
 
 

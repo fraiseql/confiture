@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **⚠️ `migrate diff` carries an index on a table the desired state does not declare** (#679).
+  `CREATE INDEX … ON tv_product (…)` in a tree that declares no `tv_product` was dropped without a
+  word; between two trees it is now an `ADD_INDEX` the migration writes as `CREATE INDEX
+  CONCURRENTLY IF NOT EXISTS`, under a comment naming the undeclared table, with a `DIFFER_405`
+  warning (exit 0) naming the index and the table. This changes the desired-state contract: the
+  FraiseQL fixture gains `90_indexes.sql` and its expected migration the index. The model's wire
+  gains `unattached_indexes`, empty for a database; an index written before its own table is now
+  that table's rather than lost. `IndexAdded` and `IndexDropped` gain `table_declared`.
+
 ## [1.34.0] - 2026-10-09
 
 **A TVIEW's `time_refresh` and `function_reads` are in the model.** ⚠️ pg_tviews

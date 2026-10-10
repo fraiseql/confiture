@@ -190,6 +190,7 @@ it is made.
 | `triggers` | `Mapping[ObjectRef, Trigger]` | empty |
 | `tviews` | `Mapping[ObjectRef, TView]` | empty |
 | `other_objects` | `Mapping[ObjectRef, OtherObject]` | empty |
+| `unattached_indexes` | `Mapping[ObjectRef, tuple[Index, ...]]` | empty |
 | `coverage` | `Coverage` | empty |
 | `source` | `Provenance` | `'author'` |
 
@@ -1519,12 +1520,16 @@ migration writes nothing for it. `old` and `new` are each side's order.
 class IndexAdded(_OnTable)
 ```
 
-An index only the new tree declares on a table both hold.
+An index only the new tree declares on a table both hold, or on one neither declares.
+
+`table_declared` is false for an index on a table neither tree declares
+(#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
 |---|---|---|
 | `table` | `RelationName` | required |
 | `index` | `Index` | required |
+| `table_declared` | `bool` | `True` |
 
 ### `IndexDropped`
 
@@ -1532,12 +1537,16 @@ An index only the new tree declares on a table both hold.
 class IndexDropped(_OnTable)
 ```
 
-An index only the old tree declares on a table both hold.
+An index only the old tree declares on a table both hold, or on one neither declares.
+
+`table_declared` is false for an index on a table neither tree declares
+(#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
 |---|---|---|
 | `table` | `RelationName` | required |
 | `index` | `Index` | required |
+| `table_declared` | `bool` | `True` |
 
 ### `ForeignKeyAdded`
 

@@ -103,7 +103,10 @@ def test_a_duplicate_definition_is_published_as_a_warning(tmp_path, schemas_dir,
 def test_a_clean_diff_publishes_an_empty_warnings_array(tmp_path, schemas_dir, schema_registry):
     """Present and empty, never absent-on-success (the `was_skipped` precedent, #311)."""
     current = tmp_path / "current.sql"
-    current.write_text((FIXTURE / "user.sql").read_text())
+    # The artifact's indexes on a table it does not declare are on both sides: no warning.
+    current.write_text(
+        (FIXTURE / "user.sql").read_text() + (FIXTURE / "90_indexes.sql").read_text()
+    )
     result = CliRunner().invoke(
         app, ["migrate", "diff", "--from", str(current), "--to", str(FIXTURE), "--format", "json"]
     )
@@ -111,3 +114,19 @@ def test_a_clean_diff_publishes_an_empty_warnings_array(tmp_path, schemas_dir, s
     payload = json.loads(result.output)
     _validator(schemas_dir, schema_registry).validate(payload)
     assert payload["warnings"] == []
+
+
+def test_an_index_on_an_undeclared_table_publishes_differ_405(
+    tmp_path, schemas_dir, schema_registry
+):
+    """The index the migration carries onto a table neither side declares is named (#679)."""
+    current = tmp_path / "current.sql"
+    current.write_text((FIXTURE / "user.sql").read_text())
+    result = CliRunner().invoke(
+        app, ["migrate", "diff", "--from", str(current), "--to", str(FIXTURE), "--format", "json"]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert [(w["code"], w["severity"]) for w in payload["warnings"]] == [("DIFFER_405", "warning")]
+    assert "ix_tv_product_name_fr" in payload["warnings"][0]["message"]

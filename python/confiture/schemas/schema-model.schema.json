@@ -14,6 +14,7 @@
     "triggers",
     "tviews",
     "other_objects",
+    "unattached_indexes",
     "coverage",
     "source"
   ],
@@ -65,6 +66,13 @@
       "description": "Every object of the kinds no typed section holds (a schema, an extension, a domain, a composite or range type, a policy, a rule, …), by identity and definition; `definition` is null from a reader that read only that the object exists.",
       "items": {
         "$ref": "#/$defs/OtherObject"
+      }
+    },
+    "unattached_indexes": {
+      "type": "array",
+      "description": "Indexes the schema writes on a relation it does not declare (a table someone else authors, which the index assumes exists), each naming its relation in `table`; ordered by that relation, then as written. A database holds every index on a table it has, so only a tree has any.",
+      "items": {
+        "$ref": "#/$defs/Index"
       }
     },
     "coverage": {
