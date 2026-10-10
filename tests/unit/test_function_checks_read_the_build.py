@@ -9,18 +9,28 @@ checks off. They now compare the routines of the two trees ``compare_refs``
 reads — the build's selection at each ref, whole — from the fork point.
 """
 
+import ast
 import json
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
+import confiture
 from confiture.cli.main import app
+from confiture.core import git_schema
+from confiture.core.function_signature_drift import routines_of
 from confiture.core.git import GitRepository
 from confiture.core.git_accompaniment import MigrationAccompanimentChecker
+from confiture.core.schema_model import routine_ref
+from confiture.core.schema_read import SchemaRead
 from confiture.models.git import MigrationAccompanimentReport
+
+PACKAGE = Path(confiture.__file__).resolve().parent
+ROUTINE_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "routine_drift" / "git"
 
 runner = CliRunner()
 
@@ -70,9 +80,34 @@ class Repo:
     def check(
         self, base: str = "HEAD~1", target: str = "HEAD", **kwargs: bool
     ) -> MigrationAccompanimentReport:
-        return MigrationAccompanimentChecker("local", self.root).check_accompaniment(
-            base, target, **kwargs
-        )
+        """The gate's report — after holding it to the gate's two shortcuts.
+
+        The checks run only when the diff holds a routine change: every report is
+        compared with one the checks ran for unconditionally. And the routines they
+        read (the model's) are the routines the diff compared (``declared``).
+        """
+        checker = MigrationAccompanimentChecker("local", self.root)
+        report = checker.check_accompaniment(base, target, **kwargs)
+        with patch("confiture.core.git_accompaniment._touches_routines", return_value=True):
+            ungated = MigrationAccompanimentChecker("local", self.root).check_accompaniment(
+                base, target, **kwargs
+            )
+        assert violations(ungated) == violations(report)
+        if report.migration_error is None:
+            for ref in (base, target):
+                assert_one_routine_set(checker.differ.builder.read_at_ref(ref))
+        return report
+
+
+def violations(report: MigrationAccompanimentReport) -> list[dict]:
+    return [v.to_dict() for v in (*report.signature_violations, *report.body_violations)]
+
+
+def assert_one_routine_set(read: SchemaRead) -> None:
+    """The routines the checks read are the ones ``compare_refs`` compared."""
+    assert {routine_ref(routine) for routine in routines_of(read)} == {
+        ref for ref in read.declared.objects if ref.kind in ("function", "procedure")
+    }
 
 
 @pytest.fixture
@@ -296,6 +331,75 @@ def test_a_migration_is_read_from_the_repository_not_the_cwd(
     monkeypatch.chdir(elsewhere)
 
     assert repo.check().is_valid
+
+
+# --- what the gate reads -------------------------------------------------------------
+
+
+def test_the_routine_golden_fixture_reads_alike_gated_or_not(make_repo) -> None:
+    repo = make_repo(
+        files={"db/schema/10_routines.sql": (ROUTINE_FIXTURES / "base.sql").read_text()}
+    )
+    repo.commit(
+        "head",
+        {
+            "db/schema/10_routines.sql": (ROUTINE_FIXTURES / "head.sql").read_text(),
+            "db/migrations/002_carried.up.sql": (ROUTINE_FIXTURES / "migration.sql").read_text(),
+        },
+    )
+
+    report = repo.check(check_bodies=True)
+
+    assert [v.function_key for v in report.signature_violations] == [
+        "public.fn_retype",
+        "public.fn_when",
+    ]
+    assert bodies(report) == ["public.fn_body(integer)", "app.fn_array(bigint[])"]
+
+
+def test_the_function_checks_read_nothing_again(make_repo) -> None:
+    repo = make_repo(files={"db/schema/a.sql": fn("h", "integer")})
+    repo.commit("move and edit", {"db/schema/a.sql": None, "db/schema/b.sql": fn("h", "bigint")})
+
+    with (
+        patch.object(git_schema, "read_segments", wraps=git_schema.read_segments) as reads,
+        patch.object(
+            GitRepository, "materialise", autospec=True, side_effect=GitRepository.materialise
+        ) as copies,
+    ):
+        report = MigrationAccompanimentChecker("local", repo.root).check_accompaniment(
+            "HEAD~1", "HEAD", check_bodies=True
+        )
+
+    assert report.signature_violations
+    assert (reads.call_count, copies.call_count) == (2, 2)
+
+
+def test_no_routine_change_builds_no_checker(make_repo) -> None:
+    repo = make_repo(files={"db/schema/a.sql": fn("h", "integer")})
+    repo.commit("a table", {"db/schema/u.sql": "CREATE TABLE u (id bigint);\n"})
+
+    with (
+        patch("confiture.core.git_accompaniment.FunctionSignatureChecker") as signature,
+        patch("confiture.core.git_accompaniment.FunctionBodyChecker") as body,
+    ):
+        MigrationAccompanimentChecker("local", repo.root).check_accompaniment(
+            "HEAD~1", "HEAD", check_bodies=True
+        )
+
+    assert (signature.call_count, body.call_count) == (0, 0)
+
+
+@pytest.mark.parametrize("module", ["function_signature_checker.py", "function_body_checker.py"])
+def test_the_checkers_hold_no_repository(module: str) -> None:
+    """Routines in, verdict out: the git read is the glue's (``git_accompaniment``)."""
+    tree = ast.parse((PACKAGE / "core" / module).read_text(encoding="utf-8"))
+    imported = {
+        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module
+    }
+    named = {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+    assert "confiture.core.git" not in imported
+    assert "show_file_at_ref" not in named
 
 
 # --- the CLI ------------------------------------------------------------------------
