@@ -1345,9 +1345,8 @@ class SchemaDriftDetector:
             raise FileNotFoundError(f"Schema file not found: {schema_file_path}")
 
         source = load_desired_state(schema_file_path)
-        expected = expected_schema(
-            _read_expected(lambda: read_segments(source.segments())), default_schema
-        )
+        read = _read_expected(lambda: read_segments(source.segments()))
+        expected = expected_schema(read, default_schema)
         actual = self.get_live_schema(expected.schemas, objects=True)
         # Before a scratch build, which would fail on the index rather than name it.
         refuse_undeclared_relations(
@@ -1359,7 +1358,7 @@ class SchemaDriftDetector:
             built = materialised_side(
                 source.read(),
                 self.scratch_url,
-                declared=expected.model,
+                read=read,
                 schemas=sorted(expected.schemas),
                 default_schema=default_schema,
             )

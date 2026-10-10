@@ -30,6 +30,7 @@ from confiture.core.differ import (
     ComparisonPolicy,
     SchemaDiffer,
     Side,
+    refuse_quoted_names,
     refuse_undeclared_relations,
 )
 from confiture.core.migration_generator import MigrationGenerator
@@ -319,11 +320,14 @@ def _compared(
         tracking_table=_get_tracking_table(config_data),
     )
     scratch = _core_connection.scratch_url_from_config(config_data, scratch_url)
+    tree = Side.of(desired_read, held=True)
     if scratch is None:
-        return database, Side.of(desired_read, held=True), None, None
-    # Before the scratch build, which would fail on the index rather than name it.
-    refuse_undeclared_relations(database, Side.of(desired_read, held=True))
-    built = materialised_side(desired.read(), scratch, declared=desired_read.model)
+        return database, tree, None, None
+    # Before the scratch build: it would build a name that needs quotes, and fail
+    # on an index rather than name it.
+    refuse_quoted_names("new", tree.quoted)
+    refuse_undeclared_relations(database, tree)
+    built = materialised_side(desired.read(), scratch, read=desired_read)
     return database, built, replace(MATERIALISED, author="new"), "materialised"
 
 

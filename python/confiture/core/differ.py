@@ -591,7 +591,7 @@ def _section(kind: str) -> str:
     return _SECTIONS.get(kind, "other_objects")
 
 
-def _held(model: SchemaModel) -> set[ObjectRef]:
+def held_by_definition(model: SchemaModel) -> set[ObjectRef]:
     """Every object *model* holds that is compared by definition, by its bucket."""
     return {*model.routines, *model.views, *model.triggers, *model.tviews, *model.other_objects}
 
@@ -903,7 +903,7 @@ class SchemaDiffer:
         """
         changes: list[SchemaChange] = []
         unwritable: list[BuildWarning] = []
-        old_held, new_held = _held(old.model), _held(new.model)
+        old_held, new_held = held_by_definition(old.model), held_by_definition(new.model)
         refs = old.objects.keys() | new.objects.keys() | old_held | new_held
         for ref in sorted(refs, key=_object_sort_key):
             if not old.model.coverage.shared(new.model.coverage, _section(ref.kind)):

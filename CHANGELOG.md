@@ -63,6 +63,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (info) when the tree declares a routine in that schema. All three now see nothing. A live
   model (`schema dump-model` from a database, a baseline snapshot built on a scratch server)
   holds five fewer routines per range type.
+- **`migrate diff --scratch-url --generate` writes the objects the catalog reads by existence
+  alone** (#699). With a scratch server the tree is built there and read back, and the catalog
+  says a domain, a composite or range type, an aggregate, a policy, a rule (and every other kind
+  no typed section holds) exists, not how it is made. Such an object the tree added was a
+  `DIFFER_404` warning instead of a change, so the generated migration left it out and a column
+  typed with a new domain failed to apply. The materialised side now carries the tree's own
+  statement for each of them: its existence is compared, and the migration creates it as it does
+  without a scratch server. The side also carries the tree's read notes: two definitions of one
+  object are `DIFFER_402` under `--scratch-url` too, and ⚠️ a name that needs quotes is refused
+  (`DIFFER_403`, exit 5) where `--scratch-url` used to generate it. `warnings[]` loses the
+  `DIFFER_404` entries for objects the tree declares. A domain, type or policy redefined between
+  the database and the tree is still not seen, at either fidelity.
 
 ## [1.35.0] - 2026-10-10
 
