@@ -16,9 +16,13 @@ import pytest
 
 from confiture.core._migrator.loader import load_migration_class
 from confiture.core.differ import SchemaDiffer
+from confiture.core.idempotency.python_migration_extractor import (
+    extract_sql_from_python_migration,
+)
 from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.schema_change import SchemaDiff, TableAdded
+from confiture.core.sql_lexer import parse_file, split_statements
 from confiture.models.sql_file_migration import _detect_transactional
 from tests.unit._schema_changes import spelled
 from tests.unit._schema_models import table
@@ -207,3 +211,53 @@ def test_the_corpus_holds_both_modes(tmp_path: Path) -> None:
             work.mkdir()
             modes.add(_transactional(_python(work, diff)))
     assert modes == {True, False}
+
+
+def _bundled(path: Path) -> list[str]:
+    """Every ``execute`` text holding a statement no transaction may hold beside another.
+
+    Under autocommit PostgreSQL still runs a multi-statement string as one implicit
+    block, which ``CREATE INDEX CONCURRENTLY`` refuses. The one exception is a run of
+    ``ALTER TYPE … ADD VALUE``: several apply in one block on PostgreSQL 12 and later.
+    """
+    extracted = extract_sql_from_python_migration(path)
+    assert extracted.warnings == []
+    bundled = []
+    for snippet in extracted.snippets:
+        statements = split_statements(snippet.sql)
+        if len(statements) < 2 or all(runs_in_one_transaction(s) for s in statements):
+            continue
+        kinds = {type(raw.stmt).__name__ for raw in parse_file(snippet.sql).statements}
+        if kinds != {"AlterEnumStmt"}:
+            bundled.append(snippet.sql)
+    return bundled
+
+
+@pytest.mark.parametrize("case", sorted(CORPUS))
+def test_a_statement_no_transaction_may_hold_is_alone_in_its_execute(
+    case: str, tmp_path: Path
+) -> None:
+    """``transactional = False`` is enough only while each such statement has its ``execute``.
+
+    An enum's change writes its labels in one ``execute`` and nothing else beside them.
+    """
+    old, new = CORPUS[case]
+    diff = SchemaDiffer().compare(old, new)
+    if not diff.has_changes():
+        pytest.skip(f"{case}: no change")
+    assert _bundled(_python(tmp_path, diff)) == []
+
+
+def test_a_bundled_concurrent_statement_is_seen(tmp_path: Path) -> None:
+    path = tmp_path / f"{VERSION}_planted.py"
+    path.write_text(
+        "from confiture.models.migration import Migration\n\n\n"
+        "class Planted(Migration):\n"
+        f'    version = "{VERSION}"\n'
+        '    name = "planted"\n'
+        "    transactional = False\n\n"
+        "    def up(self) -> None:\n"
+        '        self.execute("CREATE INDEX CONCURRENTLY ix ON t (c);\\nSELECT 1;")\n'
+        "        self.execute(\"ALTER TYPE m ADD VALUE 'b';\\nALTER TYPE m ADD VALUE 'c';\")\n"
+    )
+    assert _bundled(path) == ["CREATE INDEX CONCURRENTLY ix ON t (c);\nSELECT 1;"]
