@@ -1,7 +1,7 @@
 -- Migration: init_from_spec
 -- Version: 20260101000000
 
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE IF NOT EXISTS tb_post (
     id INTEGER NOT NULL,
     author_id INTEGER NOT NULL,
@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS tb_post (
     body TEXT,
     score DOUBLE PRECISION
 );
-CREATE INDEX IF NOT EXISTS ix_tb_post_title ON tb_post ((lower(title)));
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS tb_user (

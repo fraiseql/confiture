@@ -67,7 +67,8 @@ def test_dash_reads_the_artifact_from_stdin(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["source"] == {"kind": "sql", "path": "-"}
-    assert [c["type"] for c in payload["changes"]] == ["ADD_TABLE"]
+    # The artifact's index on a table it does not declare is carried (#679).
+    assert [c["type"] for c in payload["changes"]] == ["ADD_TABLE", "ADD_INDEX"]
 
 
 def test_positional_form_still_works_and_names_its_source(tmp_path: Path) -> None:
