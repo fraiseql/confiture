@@ -16,6 +16,7 @@ from confiture.models.results import (
     MigrateDiffResult,
     MigrateValidateResult,
 )
+from confiture.models.warnings import BuildWarning
 
 
 class TestMigrateDiffFormatter:
@@ -85,6 +86,33 @@ class TestMigrateDiffFormatter:
         format_migrate_diff_result(result, "text", None, console)
         output = capsys.readouterr().out
         assert output.strip(), "the formatter printed nothing"
+
+    def test_format_diff_text_prints_each_warning_with_its_code(self, capsys):
+        """A warning is what the diff could not write: text says so as JSON does."""
+        warning = BuildWarning.of("DIFFER_404", kind="Domain", identity="posint", side="old")
+        result = MigrateDiffResult(
+            success=True,
+            has_changes=True,
+            changes=[MigrateDiffChange("ADD_TABLE", "orders table")],
+            warnings=[warning],
+        )
+        format_migrate_diff_result(result, "text", None, Printer(Console(width=200)))
+        output = capsys.readouterr().out
+        assert "DIFFER_404" in output
+        assert warning.message in output
+
+    def test_format_diff_text_does_not_say_identical_while_a_warning_stands(self, capsys):
+        warning = BuildWarning.of("DIFFER_404", kind="Domain", identity="posint", side="old")
+        result = MigrateDiffResult(success=True, has_changes=False, warnings=[warning])
+        format_migrate_diff_result(result, "text", None, Printer(Console(width=200)))
+        output = capsys.readouterr().out
+        assert "identical" not in output
+        assert "DIFFER_404" in output
+
+    def test_format_diff_text_with_neither_changes_nor_warnings_says_identical(self, capsys):
+        result = MigrateDiffResult(success=True, has_changes=False)
+        format_migrate_diff_result(result, "text", None, Printer(Console(width=200)))
+        assert "Schemas are identical" in capsys.readouterr().out
 
     def test_format_diff_text_with_changes(self, capsys):
         """Test formatting diff result with changes."""

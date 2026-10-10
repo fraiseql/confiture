@@ -11,6 +11,7 @@ from typing import Any
 
 from confiture.cli.helpers import emit
 from confiture.cli.markup import Printer, markup
+from confiture.models.warnings import BuildWarning
 
 
 def csv_text(headers: list[str], rows: list[list[Any]]) -> str:
@@ -50,6 +51,27 @@ def print_csv(headers: list[str], rows: list[list[Any]]) -> None:
         rows: List of rows (each row is a list of values)
     """
     print(csv_text(headers, rows), end="")
+
+
+def print_warnings(warnings: list[BuildWarning], console: Printer) -> None:
+    """Print each warning with its code: the one place a :class:`BuildWarning` is rendered.
+
+    A warning is a fact the command could not act on (a duplicate definition, an
+    object the diff carries no statement for); the text says so as the JSON does.
+
+    Args:
+        warnings: The warnings to print; nothing is printed when there are none.
+        console: Rich console for output.
+    """
+    if not warnings:
+        return
+    console.print("\n[yellow]Warnings:[/yellow]")
+    for warning in warnings:
+        style = "yellow" if warning.severity == "warning" else "dim"
+        console.print(
+            t"  [{markup(style)}]{warning.code} {warning.message}[/{markup(style)}]",
+            soft_wrap=True,
+        )
 
 
 def display_drift_report(report: Any, console: Printer) -> None:

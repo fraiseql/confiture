@@ -16,6 +16,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+import pglast
 import psycopg
 import pytest
 from typer.testing import CliRunner
@@ -210,3 +211,139 @@ def test_drift_refuses_a_fragment_too(
         _drift(url, fragment, test_db_url if scratch else None)
 
     assert refused.value.error_code == "DIFFER_406"
+
+
+#: Objects the catalog reads by existence alone, beside a column typed with one.
+#: A rule is reported and never written (``-- WARNING: no SQL derived``), at either
+#: fidelity, so it is the one change left once the migration is applied.
+EXISTENCE_ONLY = """
+CREATE DOMAIN posint AS integer CHECK (VALUE > 0);
+CREATE TYPE pair AS (a int, b int);
+CREATE TYPE span AS RANGE (subtype = int4);
+CREATE AGGREGATE total(int) (sfunc = int4pl, stype = int);
+CREATE TABLE t (id bigint PRIMARY KEY, c text, d posint);
+ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+CREATE POLICY p_read ON t FOR SELECT USING (true);
+CREATE RULE no_delete AS ON DELETE TO t DO INSTEAD NOTHING;
+"""
+
+#: What each existence-only object is created with in the generated migration.
+CREATED_WITH = {
+    "CreateDomainStmt",
+    "CompositeTypeStmt",
+    "CreateRangeStmt",
+    "DefineStmt",
+    "CreatePolicyStmt",
+}
+
+
+def _generated(tree: Path, config: Path, tmp_path: Path, name: str, *extra: str) -> tuple:
+    migrations = tmp_path / name
+    result = runner.invoke(
+        app,
+        ["migrate", "diff", "--from", "db", "--to", str(tree), "--config", str(config),
+         "--format", "json", "--generate", "--name", name,
+         "--migrations-dir", str(migrations), *extra],
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    (up,) = migrations.glob("*.up.sql")
+    return json.loads(result.stdout), up.read_text()
+
+
+def _statement_kinds(sql: str) -> set[str]:
+    """Every statement *sql* runs, a ``DO`` block's body included."""
+    kinds: set[str] = set()
+    for raw in pglast.parse_sql(sql):
+        stmt = raw.stmt
+        if type(stmt).__name__ == "DoStmt":
+            body = next(arg.arg.sval for arg in stmt.args if arg.defname == "as")
+            inner = body.split("BEGIN", 1)[1].rsplit("EXCEPTION", 1)[0]
+            kinds |= _statement_kinds(inner)
+        kinds.add(type(stmt).__name__)
+    return kinds
+
+
+def _changed(payload: dict) -> list[tuple[str, str]]:
+    """``(type, object)`` of each change, the schema the catalog spells left off."""
+    return sorted((c["type"], c["details"].replace("public.", "")) for c in payload["changes"])
+
+
+def test_a_tree_adding_existence_only_objects_generates_them_under_scratch(
+    test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    url = _built(fresh_database_factory, "CREATE TABLE t (id bigint PRIMARY KEY, c text);")
+    tree = tmp_path / "schema.sql"
+    tree.write_text(EXISTENCE_ONLY)
+    config = _config(tmp_path, url)
+
+    structural, _ = _generated(tree, config, tmp_path, "structural")
+    materialised, up = _generated(tree, config, tmp_path, "scratch", "--scratch-url", test_db_url)
+
+    assert _changed(materialised) == _changed(structural)
+    assert {"ADD_DOMAIN", "ADD_TYPE", "ADD_AGGREGATE", "ADD_POLICY", "ADD_RULE"} <= {
+        c["type"] for c in materialised["changes"]
+    }
+    assert materialised["warnings"] == []
+    assert _statement_kinds(up) >= CREATED_WITH
+
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(up)
+    remaining = [("ADD_RULE", "ADD RULE t.no_delete")]
+    assert _changed(_diff_from_db(tree, config)) == remaining
+    assert _changed(_diff_from_db(tree, config, "--scratch-url", test_db_url)) == remaining
+
+
+def test_a_name_that_needs_quotes_is_refused_under_scratch_too(
+    test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    url = _built(fresh_database_factory, "CREATE TABLE t (id bigint PRIMARY KEY);")
+    tree = tmp_path / "schema.sql"
+    tree.write_text('CREATE TABLE t (id bigint PRIMARY KEY);\nCREATE TABLE "Quoted" (id int);\n')
+
+    result = runner.invoke(
+        app,
+        ["migrate", "diff", "--from", "db", "--to", str(tree),
+         "--config", str(_config(tmp_path, url)), "--format", "json",
+         "--scratch-url", test_db_url],
+    )  # fmt: skip
+
+    assert result.exit_code == 5, result.output
+    assert json.loads(result.stdout)["error"]["code"] == "DIFFER_403"
+
+
+def test_a_duplicate_definition_warns_under_scratch_too(
+    test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    url = _built(fresh_database_factory, "CREATE TABLE t (id bigint PRIMARY KEY);")
+    tree = tmp_path / "schema.sql"
+    tree.write_text(
+        "CREATE TABLE t (id bigint PRIMARY KEY);\n"
+        "CREATE VIEW v AS SELECT 1 AS a;\n"
+        "CREATE OR REPLACE VIEW v AS SELECT 1 AS a, 2 AS b;\n"
+    )
+    config = _config(tmp_path, url)
+
+    payload = _diff_from_db(tree, config, "--scratch-url", test_db_url)
+
+    assert [w["code"] for w in payload["warnings"]] == ["DIFFER_402"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "a domain, type or policy is read from a database by existence alone: "
+        "its redefinition needs a per-kind deparse the live reader does not have yet"
+    ),
+)
+@pytest.mark.parametrize("scratch", [True, False])
+def test_a_redefined_domain_is_a_change(
+    scratch: bool, test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    url = _built(fresh_database_factory, "CREATE DOMAIN posint AS integer CHECK (VALUE > 0);")
+    tree = tmp_path / "schema.sql"
+    tree.write_text("CREATE DOMAIN posint AS integer CHECK (VALUE > 1);\n")
+    extra = ("--scratch-url", test_db_url) if scratch else ()
+
+    payload = _diff_from_db(tree, _config(tmp_path, url), *extra)
+
+    assert payload["changes"] != []

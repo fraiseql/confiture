@@ -413,7 +413,10 @@ environment, `--scratch-url` on `drift` and `migrate diff`), `schema_sources.mat
 builds the tree into a throwaway database (`ExpectedSchemaDB`) and reads it back, and
 `MATERIALISED` compares PostgreSQL's reading with PostgreSQL's reading — every parity
 rule but `analysed_expressions` and `view_definitions`, so a CHECK, an index predicate
-and a view's query compare as stored. A payload carries `"fidelity"` only when it is
+and a view's query compare as stored. What the catalog reads by existence alone (a
+domain, a type, an aggregate, a policy, …) keeps the tree's statement on that side, so
+only its existence is compared and a migration still creates it; the side carries the
+read's notes (`DIFFER_402`, `DIFFER_403`) too. A payload carries `"fidelity"` only when it is
 `materialised`; `docs/reference/comparison-fidelity.md` says what each tier compares.
 Every other comparator is a rendering of the engine too: the body checks hand it sides
 whose statements carry one slot (`differ.slot_side`; `function_body_drift.changed_bodies`),

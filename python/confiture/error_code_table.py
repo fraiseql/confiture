@@ -285,6 +285,19 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "reports it as build_004"
         ),
     },
+    {
+        "code": "DIFFER_409",
+        "message_template": (
+            "{change} '{identity}' carries no statement: the side it came from is compared, "
+            "never generated from"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Generate from a side read from a tree (Side.of) or a database (database_side); "
+            "a stated or slot side is compared, never generated from"
+        ),
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",

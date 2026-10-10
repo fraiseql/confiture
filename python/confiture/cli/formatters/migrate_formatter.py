@@ -6,7 +6,7 @@ Handles text, JSON, and CSV formatting for migration results.
 from pathlib import Path
 from typing import Any
 
-from confiture.cli.formatters.common import handle_output
+from confiture.cli.formatters.common import handle_output, print_warnings
 from confiture.cli.markup import Printer, markup
 from confiture.exceptions import MigrationError, base_message
 from confiture.models.results import (
@@ -191,7 +191,11 @@ def format_diff_text(result: MigrateDiffResult, console: Printer) -> None:
         return
 
     if not result.has_changes:
-        console.print("[green]✅ No changes detected. Schemas are identical.[/green]")
+        if not result.warnings:
+            console.print("[green]✅ No changes detected. Schemas are identical.[/green]")
+            return
+        console.print("[yellow]No changes detected, with warnings:[/yellow]")
+        print_warnings(result.warnings, console)
         return
 
     console.print("[cyan]📊 Schema differences detected:[/cyan]\n")
@@ -200,6 +204,7 @@ def format_diff_text(result: MigrateDiffResult, console: Printer) -> None:
         console.print(t"  [{markup(change.change_type)}] {change.details}")
 
     console.print(t"\n📈 Total changes: {len(result.changes)}")
+    print_warnings(result.warnings, console)
 
     if result.migration_generated:
         console.print(t"\n[green]✅ Migration generated: {result.migration_file}[/green]")

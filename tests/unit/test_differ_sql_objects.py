@@ -8,9 +8,12 @@ whose whole definition the differ holds, so it can write the real statement.
 import pglast
 import pytest
 
-from confiture.core.ddl_objects import OBJECT_KEYWORD, REPLACE_IS_AUTHORS_WORK
+from confiture.core.ddl_objects import OBJECT_KEYWORD, REPLACE_IS_AUTHORS_WORK, DDLObject
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
+from confiture.core.schema_change import ObjectAdded, ObjectDropped, ObjectReplaced
+from confiture.core.schema_model import ref_for
+from confiture.exceptions import DifferError
 
 BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
 
@@ -570,3 +573,56 @@ class TestOnlyTheDerivedKindsDeriveSQL:
                     seen += 1
         assert seen == 2 * len(extras), f"expected one change per case, saw {seen}"
         assert rendered == DERIVED_KINDS
+
+
+#: The kinds a change renders from its statement, each with no statement at all —
+#: what a side that is compared and never generated from carries (``stated_side``).
+UNSTATED = ["domain", "type", "policy", "trigger", "view", "matview", "function", "aggregate"]
+
+
+def _unstated(kind: str) -> DDLObject:
+    return DDLObject(ref_for(kind, None, "t.x" if kind in {"policy", "trigger"} else "x"), "", "")
+
+
+def _refused(render, change) -> None:
+    with pytest.raises(DifferError) as refused:
+        render(change)
+    assert refused.value.error_code == "DIFFER_409"
+
+
+class TestAChangeWithNoStatementIsRefused:
+    """A change carrying no statement is refused, in both directions, never half-written."""
+
+    @pytest.mark.parametrize("kind", UNSTATED)
+    def test_creating_it(self, kind: str) -> None:
+        obj = _unstated(kind)
+        _refused(DifferSQLGenerator().generate_up, ObjectAdded(obj.ref, obj))
+
+    @pytest.mark.parametrize("kind", UNSTATED)
+    def test_undoing_its_creation(self, kind: str) -> None:
+        obj = _unstated(kind)
+        _refused(DifferSQLGenerator().generate_down, ObjectAdded(obj.ref, obj))
+
+    @pytest.mark.parametrize("kind", UNSTATED)
+    def test_dropping_it(self, kind: str) -> None:
+        obj = _unstated(kind)
+        _refused(DifferSQLGenerator().generate_up, ObjectDropped(obj.ref, obj))
+
+    @pytest.mark.parametrize("kind", ["view", "matview", "function"])
+    @pytest.mark.parametrize("direction", ["generate_up", "generate_down"])
+    def test_replacing_it(self, kind: str, direction: str) -> None:
+        obj = _unstated(kind)
+        _refused(getattr(DifferSQLGenerator(), direction), ObjectReplaced(obj.ref, obj, obj))
+
+    def test_a_tview_is_created_from_its_statement(self) -> None:
+        obj = _unstated("tview")
+        _refused(DifferSQLGenerator().generate_up, ObjectAdded(obj.ref, obj))
+
+    def test_a_tview_is_dropped_by_name(self) -> None:
+        obj = _unstated("tview")
+        down = DifferSQLGenerator().generate_down(ObjectAdded(obj.ref, obj))
+        assert down is not None and "pg_tviews_drop" in down
+
+    def test_a_kind_whose_redefinition_is_the_authors_renders_nothing(self) -> None:
+        obj = _unstated("domain")
+        assert DifferSQLGenerator().generate_up(ObjectReplaced(obj.ref, obj, obj)) is None

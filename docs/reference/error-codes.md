@@ -68,6 +68,7 @@ resolution hint surfaced in the envelope.
 | `DIFFER_406` | 5 | error | Index '{index}' is on {table}: {reason} | Declare the relation in the desired schema, before the index — compose the fragment into the environment's include_dirs, after the file that creates it — or remove the index |
 | `DIFFER_407` | 0 | warning | Index '{index}' is on TVIEW {tview}: migrate diff does not carry it and drift does not check it yet | Keep it in the schema (the build creates it, and pg_tviews keeps it across a rebuild); write any change to it in a migration by hand |
 | `DIFFER_408` | 0 | warning | Index '{index}' is written before {table}, the relation it is on: the current schema's build fails at it, so it is not compared | Move the index after the statement that creates its relation; confiture lint reports it as build_004 |
+| `DIFFER_409` | 5 | error | {change} '{identity}' carries no statement: the side it came from is compared, never generated from | Generate from a side read from a tree (Side.of) or a database (database_side); a stated or slot side is compared, never generated from |
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |

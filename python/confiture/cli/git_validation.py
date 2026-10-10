@@ -3,6 +3,7 @@
 Provides helpers for integrating git validation into CLI commands.
 """
 
+from confiture.cli.formatters.common import print_warnings
 from confiture.cli.markup import Printer
 from confiture.core.git import GitRepository
 from confiture.core.git_accompaniment import MigrationAccompanimentChecker
@@ -169,13 +170,11 @@ def validate_migration_accompaniment(
                         )
                 if report.body_violations:
                     _render_body_violations(report.body_violations, console)
-            for warning in report.warnings:
-                # Not a failure: a duplicate definition is `confiture lint`'s
-                # problem (build_001) and `build --fail-on-duplicates`' problem,
-                # both of which already exist and are opt-in. What the gate owes
-                # the reader is that the tree it compared may not be the tree the
-                # build produces (#313).
-                console.print(t"[yellow]⚠️  {warning.message}[/yellow]")
+            # Not a failure: a duplicate definition is `confiture lint`'s problem
+            # (build_001) and `build --fail-on-duplicates`' problem, both of which
+            # already exist and are opt-in. What the gate owes the reader is that
+            # the tree it compared may not be the tree the build produces (#313).
+            print_warnings(report.warnings, console)
 
         return report.to_dict()
 

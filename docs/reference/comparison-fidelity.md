@@ -65,6 +65,15 @@ writes them right after the `CREATE MATERIALIZED VIEW`, plain and `IF NOT EXISTS
 
 No tier compares a generated column's expression: no change says how one changed.
 
+A domain, a composite or range type, an aggregate, a policy, a rule and every other kind no
+typed section holds are read from a database **by existence alone**: the catalog says one
+exists, not how it is made. At every tier such an object is compared by existence, and one
+the tree adds is created, in a migration `migrate diff --generate` writes, with the tree's own
+statement. At the materialised tier the scratch database says it exists, and the tree's
+statement still creates it. One redefined between the database and the tree is not seen at
+any tier yet. One the database holds and the tree does not declare is a `DIFFER_404` warning:
+the diff has no statement to drop it with.
+
 ## What drift reports at each tier
 
 The drift kinds and severities are the same at every tier; the materialised tier reports
