@@ -394,3 +394,47 @@ def test_a_changed_declared_read_is_a_change() -> None:
 
     assert platform.diff(CALL, READS).changes != []
     assert platform.diff(READS, READS.replace("now_utc()", "now_local()")).changes != []
+
+
+TABLE_POLICIES = CALL.replace(
+    "$q$);",
+    """$q$, options => '{"uncascaded_tables": {"tb_setting": "warn",
+                                           "app.tb_post": "full_refresh"}}');""",
+)
+
+
+def test_a_call_pins_each_table_s_uncascaded_policy() -> None:
+    """``uncascaded_tables`` as written, sorted by table (fraiseql/pg_tviews#195)."""
+    from confiture.core.schema_model import UncascadedTable
+
+    (tview,) = read_text(TABLE_POLICIES).model.tviews.values()
+
+    assert tview.uncascaded_tables == (
+        UncascadedTable("app.tb_post", "full_refresh"),
+        UncascadedTable("tb_setting", "warn"),
+    )
+
+
+@pytest.mark.parametrize("tree", [CTAS, CALL], ids=["ctas", "call"])
+def test_a_tview_that_declares_no_table_policy_pins_none(tree: str) -> None:
+    (tview,) = read_text(tree).model.tviews.values()
+
+    assert tview.uncascaded_tables is None
+
+
+def test_a_generated_tview_passes_each_table_s_policy() -> None:
+    ((obj,),) = _tracked(TABLE_POLICIES).values()
+    assert obj.create_sql.endswith(
+        """options => '{"uncascaded_tables": {"app.tb_post": "full_refresh", """
+        """"tb_setting": "warn"}}')"""
+    )
+
+
+def test_a_changed_table_policy_is_a_change() -> None:
+    from confiture import platform
+
+    assert platform.diff(CALL, TABLE_POLICIES).changes != []
+    assert (
+        platform.diff(TABLE_POLICIES, TABLE_POLICIES.replace('"warn"', '"full_refresh"')).changes
+        != []
+    )

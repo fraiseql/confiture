@@ -56,6 +56,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "Trigger",
             "TView",
             "FunctionRead",
+            "UncascadedTable",
         ],
     ),
     ("Ordering", ["dependency_order", "DependencyCycleError"]),

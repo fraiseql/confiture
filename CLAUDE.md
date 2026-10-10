@@ -182,6 +182,17 @@ what `references` (and through it build_003, build_004 and prep-seed level 3) an
 `tests/unit/test_one_fragment_reader.py` fails on a module that picks a `PLpgSQL_expr`
 or its `query` out of a tree itself; its allow-list is empty.
 
+**One TVIEW read graph** — `core/linting/tview_reads.py` reads every view, matview, TVIEW
+(both spellings) and routine the build keeps once — its queries, where each node is
+written, and the plain views and routines it reads — and walks a TVIEW's **chain** as
+pg_tviews does: through plain views, stopping at a matview or another TVIEW, and through
+routines only for a rule that reads bodies (pg_tviews sees a called function's tables
+through `function_reads`, never through its body). `session_reads` and `tree_walks` read
+it; a query pglast rejects is an unread holder, reported `degraded`.
+`tests/unit/test_one_tview_read_graph.py` fails on a module that pairs `tview_calls` with
+`tview_query_tree` or resolves a `RangeVar` to an inventory view itself; its allow-list
+names `tview_preflight` (registered queries against a migration, no tree).
+
 **`plpgsql_check` is an analysis engine, not a second parser** (`core/linting/bodies.py`,
 the `body` rule family). Only a built schema knows that `v_pk` is `UUID`, so the DDL is
 materialised into a throwaway database (`ExpectedSchemaDB.from_source()`) and PostgreSQL
@@ -658,7 +669,7 @@ confiture/
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (20 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (5 modules)
-│   │   ├── linting/              # Rule Library System (44 modules)
+│   │   ├── linting/              # Rule Library System (46 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
 │   │   ├── seed/                 # Seed data management and optimization (28 modules)

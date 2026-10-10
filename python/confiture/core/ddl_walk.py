@@ -44,6 +44,7 @@ from confiture.core.schema_model import (
     Index,
     RelationName,
     TView,
+    UncascadedTable,
     Volatility,
 )
 from confiture.core.sql_lexer import name_parts as written_name_parts
@@ -220,9 +221,9 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
 class TViewOptions(TypedDict, total=False):
     """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent.
 
-    ``uncascaded_policy``, ``time_refresh`` and ``function_reads`` are passed in
-    ``options`` too, though pg_tviews stores them beside them (columns of
-    ``tviews.registry``).
+    ``uncascaded_policy``, ``time_refresh``, ``function_reads`` and
+    ``uncascaded_tables`` are passed in ``options`` too, though pg_tviews stores
+    them beside them (columns of ``tviews.registry``).
     """
 
     logged: bool
@@ -230,6 +231,7 @@ class TViewOptions(TypedDict, total=False):
     uncascaded_policy: str
     time_refresh: str
     function_reads: tuple[FunctionRead, ...]
+    uncascaded_tables: tuple[UncascadedTable, ...]
 
 
 def tview_of(name: str, definition: str | None, options: TViewOptions) -> TView:
@@ -242,6 +244,7 @@ def tview_of(name: str, definition: str | None, options: TViewOptions) -> TView:
         uncascaded_policy=options.get("uncascaded_policy"),
         time_refresh=options.get("time_refresh"),
         function_reads=options.get("function_reads"),
+        uncascaded_tables=options.get("uncascaded_tables"),
     )
 
 
@@ -448,7 +451,15 @@ def _options_passed(arg: Any) -> TViewOptions:
         for tables in reads.values()
     ):
         options["function_reads"] = function_reads(reads)
+    tables = passed.get("uncascaded_tables")
+    if isinstance(tables, dict) and all(isinstance(p, str) for p in tables.values()):
+        options["uncascaded_tables"] = uncascaded_tables(tables)
     return options
+
+
+def uncascaded_tables(declared: dict[str, str]) -> tuple[UncascadedTable, ...]:
+    """An ``uncascaded_tables`` object as :class:`TView` holds it: sorted by table."""
+    return tuple(UncascadedTable(table, policy) for table, policy in sorted(declared.items()))
 
 
 def function_reads(declared: dict[str, list[str]]) -> tuple[FunctionRead, ...]:
@@ -472,15 +483,36 @@ def tview_read_identities(tview: TView) -> TView:
     parser reads ``DROP FUNCTION <key>`` (its argument types canonical, its schema
     :data:`DEFAULT_SCHEMA` where none is written) and a table as a qualified name,
     so the two compare as the same declaration. A key or table that is no name is
-    kept as written: pg_tviews refuses it, and its spelling is all there is.
+    kept as written: pg_tviews refuses it, and its spelling is all there is. Each
+    ``uncascaded_tables`` entry's table is folded the same way.
     """
-    if not tview.function_reads:
-        return tview
-    folded: dict[str, list[str]] = {}
-    for read in tview.function_reads:
-        tables = folded.setdefault(_function_identity(read.function), [])
-        tables.extend(_table_identity(table) for table in read.tables)
-    return replace(tview, function_reads=function_reads(folded))
+    if tview.function_reads:
+        folded: dict[str, list[str]] = {}
+        for read in tview.function_reads:
+            tables = folded.setdefault(_function_identity(read.function), [])
+            tables.extend(_table_identity(table) for table in read.tables)
+        tview = replace(tview, function_reads=function_reads(folded))
+    if tview.uncascaded_tables:
+        tview = replace(
+            tview,
+            uncascaded_tables=uncascaded_tables(
+                {_table_identity(e.table): e.policy for e in tview.uncascaded_tables}
+            ),
+        )
+    return tview
+
+
+def uncascaded_policy_for(tview: TView, table: RelationName) -> str | None:
+    """The ``uncascaded_policy`` a write to *table* meets: its own entry's, else the TVIEW's.
+
+    An entry names its table as written, so it is compared by identity, a bare
+    name being on the read path; ``None`` where neither is pinned (pg_tviews'
+    default, ``error``).
+    """
+    for entry in tview.uncascaded_tables or ():
+        if _table_parts(entry.table) == table.identity:
+            return entry.policy
+    return tview.uncascaded_policy
 
 
 def _function_identity(key: str) -> str:
@@ -501,11 +533,17 @@ def _function_identity(key: str) -> str:
 
 
 def _table_identity(written: str) -> str:
+    found = _table_parts(written)
+    return written if found is None else f"{found[0]}.{found[1]}"
+
+
+def _table_parts(written: str) -> tuple[str, str] | None:
+    """A table name as written, as ``(schema, name)``; a bare one is on the read path."""
     parts = written_name_parts(written)
     if not parts:
-        return written
+        return None
     *schema, name = (identifier_identity(part) for part in parts[-2:])
-    return f"{(schema or [DEFAULT_SCHEMA])[0]}.{name}"
+    return (schema or [DEFAULT_SCHEMA])[0], name
 
 
 def tview_query_tree(text: str) -> Any:

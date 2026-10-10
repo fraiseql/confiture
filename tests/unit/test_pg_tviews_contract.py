@@ -46,7 +46,10 @@ def test_a_pg_tviews_without_a_contract_is_refused_with_its_migration(
 
 @pytest.mark.parametrize(
     "missing",
-    [("function_reads", "time_refresh"), ("view", "uncascaded_policy", "function_reads")],
+    [
+        ("function_reads", "time_refresh", "uncascaded_table_policies"),
+        ("view", "uncascaded_policy", "function_reads"),
+    ],
 )
 def test_a_registry_without_the_columns_confiture_reads_is_refused(
     missing: tuple[str, ...],

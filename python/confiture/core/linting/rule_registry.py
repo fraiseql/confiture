@@ -53,6 +53,12 @@ SESSION_CODES = frozenset(
     {"tview_003", "tview_004", "tview_005", "session_001", "session_002", "session_003"}
 )
 
+#: How a view walks a pg_treekey tree (#676), selected as ``treekey``.
+TREEKEY_CODES = frozenset({"treekey_001", "treekey_002"})
+
+#: How any view walks a pg_treekey tree, as a style (#676), selected as ``ancestry``.
+ANCESTRY_CODES = frozenset({"ancestry_001", "ancestry_002"})
+
 #: Retired rule ids that still resolve, lower-cased. ``GEN001``–``GEN004`` are
 #: ``tree_001``–``tree_004`` under the ids a pipeline may have typed, so they
 #: stay accepted *selectors* — it costs one mapping — while every emitted
@@ -427,6 +433,34 @@ LINT_RULES: tuple[LintRule, ...] = (
         family="session_reads",
         title="A view reads the time",
         severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="treekey_001",
+        family="treekey",
+        title="A TVIEW reads a pg_treekey tree in a WITH RECURSIVE pg_tviews cannot trace",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
+        code="treekey_002",
+        family="treekey",
+        title="A TVIEW unnests a pg_treekey tree's path WITH ORDINALITY, which pg_tviews cannot trace",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
+        code="ancestry_001",
+        family="ancestry",
+        title="A view walks a pg_treekey tree with WITH RECURSIVE over its parent key",
+        severity="info",
+        default_on=False,
+    ),
+    LintRule(
+        code="ancestry_002",
+        family="ancestry",
+        title="A view takes a pg_treekey tree's path apart with unnest or string_to_array",
+        severity="info",
         default_on=False,
     ),
     LintRule(
