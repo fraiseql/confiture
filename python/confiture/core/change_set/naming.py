@@ -1,11 +1,15 @@
 """Object naming for change entries: qualification, quoting, and the safe statement prefix."""
 
 import re
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
+from confiture.core.ddl_walk import read_constraint
 from confiture.core.lock_profile import (
+    LockProfile,
+    constraint_profile,
     profile_for_kind,
+    validated_under,
 )
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_facts import SchemaFacts
@@ -22,6 +26,7 @@ from confiture.core.change_set.models import (
     _DEFAULT_SCHEMA,
     _TIER_BY_KIND,
     ChangeEntry,
+    tier_for_add_constraint,
     tier_for_type_change,
 )
 
@@ -36,6 +41,14 @@ class _Context:
     facts: SchemaFacts | None = None
     """What a live database told us, when one was reachable (#199). Absent on the
     filesystem-only path, where every refinement falls back to its static answer."""
+    transactional: bool = True
+    """Whether the file runs as one transaction (``migration_analyzer.runs_in_one_transaction``)."""
+    added: dict[tuple[str, str | None, str], tuple[LockProfile, str | None]] = field(
+        default_factory=dict
+    )
+    """The constraints the file has added so far, in its transaction: each one's lock and,
+    for a foreign key, the table it references. Keyed by ``(schema, table, name)``,
+    the schema defaulted, never joined into one string."""
 
     @property
     def server_version(self) -> int | None:
@@ -48,13 +61,15 @@ class _Context:
         *,
         detail: str | None = None,
         tier: RiskTier | None = None,
+        lock: LockProfile | None = None,
         **lock_attrs: bool,
     ) -> ChangeEntry:
         """Build an entry, defaulting the tier from :data:`_TIER_BY_KIND`.
 
         ``lock_attrs`` are the statement attributes the lock table needs for the
         kinds whose cost is not decided by the kind alone (``concurrently``,
-        ``not_valid``, ``has_default``).
+        ``not_valid``, ``has_default``); ``lock`` is a profile the caller read
+        from more than the statement's own attributes.
         """
         return ChangeEntry(
             kind=kind,
@@ -62,8 +77,60 @@ class _Context:
             migration=self.migration,
             tier=tier if tier is not None else _TIER_BY_KIND.get(kind),
             detail=detail,
-            lock=profile_for_kind(kind, server_version=self.server_version, **lock_attrs),
+            lock=lock or profile_for_kind(kind, server_version=self.server_version, **lock_attrs),
         )
+
+    def add_constraint(self, schema: str | None, table: str | None, node: Any) -> ChangeEntry:
+        """``ADD CONSTRAINT``, remembered when the file runs as one transaction."""
+        not_valid = bool(getattr(node, "skip_validation", False))
+        name = getattr(node, "conname", None)
+        read = read_constraint(node)
+        kind = getattr(read, "kind", None)
+        lock = constraint_profile(not_valid=not_valid, foreign_key=kind == "foreign_key")
+        if name and self.transactional:
+            referenced = getattr(read, "ref_table", None) if kind == "foreign_key" else None
+            self.added[self._constraint_key(schema, table, name)] = (
+                lock,
+                referenced.qualified if referenced is not None else None,
+            )
+        return self.entry(
+            "add_constraint",
+            self.qualified(schema, table, name),
+            tier=tier_for_add_constraint(not_valid=not_valid),
+            detail="ADD CONSTRAINT" + (" NOT VALID" if not_valid else ""),
+            lock=lock,
+        )
+
+    def validate_constraint(
+        self, schema: str | None, table: str | None, name: str | None
+    ) -> ChangeEntry:
+        """``VALIDATE CONSTRAINT``: alone it blocks nothing; after its ADD in one transaction,
+        the scan holds the ADD's lock (Q4: ``lock_risky``)."""
+        target = self.qualified(schema, table, name)
+        added = self.added.get(self._constraint_key(schema, table, name)) if name else None
+        if added is None:
+            return self.entry(
+                "validate_constraint",
+                target,
+                detail=f"VALIDATE CONSTRAINT {_ident(name)} — scans the table; "
+                "reads and writes continue",
+            )
+        held, referenced = added
+        tables = self.qualified(schema, table) + (f" and {referenced}" if referenced else "")
+        waits = "reads and writes wait" if held.blocks_reads else "writes wait"
+        return self.entry(
+            "validate_constraint",
+            target,
+            tier=RiskTier.LOCK_RISKY,
+            detail=f"VALIDATE CONSTRAINT {_ident(name)} — scans the table in the transaction "
+            f"that added it, under its {held.lock.value} lock: {waits} on {tables}",
+            lock=validated_under(held),
+        )
+
+    def _constraint_key(
+        self, schema: str | None, table: str | None, name: str
+    ) -> tuple[str, str | None, str]:
+        return (_ident(schema) or self.default_schema, _ident(table), name)
 
     def unclassified(self, kind: str, obj: str | None, detail: str) -> ChangeEntry:
         """An entry confiture will not tier. Explicitly tier-less, never dropped."""

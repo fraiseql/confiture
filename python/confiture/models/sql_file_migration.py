@@ -40,7 +40,7 @@ import yaml
 
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.destructive import is_gated
-from confiture.core.migration_analyzer import MigrationAnalyzer
+from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.preconditions import (
     ColumnExists,
     ColumnNotExists,
@@ -96,7 +96,7 @@ def _detect_transactional(up_file: Path) -> bool:
     try:
         sql = up_file.read_text(encoding="utf-8")
         try:
-            return not MigrationAnalyzer().analyze(sql)
+            return runs_in_one_transaction(sql)
         except pglast.parser.ParseError:
             # The statement is about to be executed: PostgreSQL will reject it
             # with its own error inside the transaction. Nothing to classify.

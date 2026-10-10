@@ -57,8 +57,10 @@ __all__ = [
     "Duration",
     "LockLevel",
     "LockProfile",
+    "constraint_profile",
     "lock_profile",
     "profile_for_kind",
+    "validated_under",
     "worst_profile",
 ]
 
@@ -80,6 +82,9 @@ class LockLevel(Enum):
 
     SHARE = "share"
     """A plain ``CREATE INDEX``; blocks writes, allows reads."""
+
+    SHARE_ROW_EXCLUSIVE = "share_row_exclusive"
+    """``ADD FOREIGN KEY``, on both tables; blocks writes, allows reads."""
 
     ACCESS_EXCLUSIVE = "access_exclusive"
     """Most ``ALTER TABLE`` forms; blocks everything, including reads."""
@@ -176,6 +181,39 @@ _NO_LOCK = LockProfile(
 )
 
 
+def validated_under(held: LockProfile) -> LockProfile:
+    """``VALIDATE CONSTRAINT`` in the transaction whose ``ADD`` took *held*: the scan holds it."""
+    return LockProfile(
+        lock=held.lock,
+        rewrites_table=False,
+        blocks_reads=held.blocks_reads,
+        blocks_writes=held.blocks_writes,
+        duration=Duration.MINUTES_PLUS,
+        note="scans every row in the transaction that added the constraint, under its lock",
+    )
+
+
+def constraint_profile(*, not_valid: bool, foreign_key: bool) -> LockProfile:
+    """``ADD CONSTRAINT``: SHARE ROW EXCLUSIVE on both tables for a foreign key, else ACCESS EXCLUSIVE."""
+    lock = LockLevel.SHARE_ROW_EXCLUSIVE if foreign_key else LockLevel.ACCESS_EXCLUSIVE
+    if not_valid:
+        return LockProfile(
+            lock=lock,
+            rewrites_table=False,
+            blocks_reads=not foreign_key,
+            blocks_writes=True,
+            duration=Duration.METADATA,
+        )
+    return LockProfile(
+        lock=lock,
+        rewrites_table=False,
+        blocks_reads=not foreign_key,
+        blocks_writes=True,
+        duration=Duration.MINUTES_PLUS,
+        note="validates against every existing row; ADD … NOT VALID defers the scan",
+    )
+
+
 def profile_for_kind(
     kind: str | None,
     *,
@@ -199,6 +237,8 @@ def profile_for_kind(
     when it is ``None`` — the filesystem-only default — the row answers with its
     pre-improvement reading. ``rewrites`` overrides the heap
     verdict for ``alter_column_type``, where only the type lattice knows.
+    An ``add_constraint`` known to add a foreign key is :func:`constraint_profile`'s,
+    and a ``validate_constraint`` in its ``ADD``'s transaction :func:`validated_under`'s.
     """
     if kind == "add_column":
         return _add_column(
@@ -209,16 +249,7 @@ def profile_for_kind(
     if kind == "alter_column_type":
         return _alter_column_type(rewrites)
     if kind == "add_constraint":
-        if not_valid:
-            return _METADATA_ALTER
-        return LockProfile(
-            lock=LockLevel.ACCESS_EXCLUSIVE,
-            rewrites_table=False,
-            blocks_reads=True,
-            blocks_writes=True,
-            duration=Duration.MINUTES_PLUS,
-            note="validates against every existing row; ADD … NOT VALID defers the scan",
-        )
+        return constraint_profile(not_valid=not_valid, foreign_key=False)
     if kind == "create_index":
         if concurrently:
             return LockProfile(

@@ -23,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the change-set kind `validate_constraint`, tier `reversible` — a validation scans under `SHARE
   UPDATE EXCLUSIVE`, changes no row and breaks no reader. ⚠️ More permissive: a deploy gate on
   `window_safe` passes such a migration where it refused it.
+- **⚠️ A `VALIDATE CONSTRAINT` in the transaction that adds the constraint is `lock_risky`**
+  (#684). A `.up.sql` runs as one transaction unless it holds a statement PostgreSQL refuses there,
+  and its `BEGIN`/`COMMIT` lines are stripped, so `ADD … NOT VALID; VALIDATE` in one file scans every
+  row under the `ADD`'s lock: writes on both tables wait for a foreign key, reads too for a check.
+  The entry says so, with the lock it holds; alone, a validation stays `reversible` and blocks
+  nothing. A generated foreign key (`ForeignKeyAdded`, `tier_of`, the `-- confiture:tier` header)
+  is therefore `lock_risky`, named or not — a deploy gate that asks for approval at `lock_risky`
+  now asks for it. `window_safe` is unchanged.
+- **`ADD FOREIGN KEY` takes `SHARE ROW EXCLUSIVE`**, on both tables, in the change set's lock
+  profile (new lock level `share_row_exclusive`): it blocks writes, not reads. It was reported as
+  `ACCESS EXCLUSIVE`, which PostgreSQL takes for every other `ADD CONSTRAINT`.
 
 ## [1.34.0] - 2026-10-09
 
