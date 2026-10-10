@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-10-10
+
+**Every index the desired state declares reaches the migration and the drift gate, or is
+refused by name.** An index on a relation the desired state does not declare is carried
+between two trees (`DIFFER_405`) and refused against a database or a tree that declares the
+relation (`DIFFER_406`); `migrate diff --to-env` diffs an environment's build, which is how a
+generated fragment is composed into a tree. ⚠️ An INVALID index is rebuilt, not taken as
+present, and a missing unique index is critical drift; a materialized view's indexes are
+compared, carried and drift-checked like a table's. `migrate preflight --scope pending` judges
+only what the ledger has not applied; `VALIDATE CONSTRAINT` is classified (⚠️ `lock_risky` in
+the transaction that adds the constraint, so a generated foreign key is `lock_risky`). A git
+ref is read through the build's own selection, closing a `--require-migration` that passed
+with no migration. New lint rules `treekey_001`/`treekey_002` (on by default) and the
+`ancestry` style family (off).
+
 ### Added
 
 - **`treekey_001` and `treekey_002`: a TVIEW's chain walks a pg_treekey tree in a spelling
@@ -25,7 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the tree meets is `full_refresh` (its `uncascaded_tables` entry, else `uncascaded_policy`);
   under `warn` the finding says the rows go stale, under `error` that pg_tviews refuses the
   TVIEW. Every other unnest of the path is traced and not reported. On by default, family
-  `treekey`.
+  `treekey`. ⚠️ A project that lints with `--fail-on warning` may now fail: silence them with
+  `--ignore treekey_001,treekey_002`, or adopt them with `--baseline`.
 - **`ancestry_001` and `ancestry_002`: any view walking a tree, as a style** (#676). The
   judgement of `treekey.lint_views()` — a `WITH RECURSIVE` over the parent key, `unnest` or
   `string_to_array` over the path — on every view, materialized view and TVIEW that reads a
