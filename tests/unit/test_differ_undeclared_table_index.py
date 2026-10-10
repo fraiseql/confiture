@@ -16,7 +16,7 @@ import pytest
 from confiture.core.differ import SchemaDiffer, Side
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.schema_change import IndexAdded, IndexDropped, TableAdded
-from confiture.core.schema_model import RelationName, SchemaModel
+from confiture.core.schema_model import RelationName
 from confiture.exceptions import DifferError
 
 INDEX = "CREATE INDEX IF NOT EXISTS ix_tv_product_name ON tv_product ((data->>'name'));"
@@ -94,34 +94,32 @@ def test_the_schema_qualifier_is_the_identity() -> None:
     assert SchemaDiffer().compare(INDEX, qualified).changes == []
 
 
-def test_an_index_written_before_its_table_is_the_tables() -> None:
-    tree = f"{INDEX}\nCREATE TABLE tv_product (id INT, data JSONB);"
-
-    [change] = SchemaDiffer().compare("", tree).changes
-
-    assert isinstance(change, TableAdded)
-    assert [ix.name for ix in change.table.indexes] == ["ix_tv_product_name"]
-
-
 def test_a_dropped_index_is_not_carried() -> None:
     tree = f"{INDEX}\nDROP INDEX ix_tv_product_name;"
 
     assert SchemaDiffer().compare("", tree).changes == []
 
 
-def test_a_database_side_never_holds_one() -> None:
-    """A database holds every index on a table it has: none is unattached there."""
-    database = SchemaDiffer().parse_schema(INDEX).model
+def test_the_read_carries_it_and_the_model_wire_does_not() -> None:
+    """The index rides the read, as the names that need quotes do — never the model's wire."""
+    from confiture.core.schema_read import read_text
 
-    assert replace(database, source="database").unattached_indexes == database.unattached_indexes
+    read = read_text(INDEX)
 
-
-def test_the_model_wire_carries_it() -> None:
-    model = SchemaDiffer().parse_schema(INDEX).model
-
-    assert SchemaModel.from_json(model.to_json()) == model
-    [index] = model.unattached_indexes[RelationName(None, "tv_product").ref()]
+    [index] = read.dangling_indexes[RelationName(None, "tv_product").ref()]
     assert index.name == "ix_tv_product_name"
+    assert not hasattr(read.model, "unattached_indexes")
+    assert "unattached_indexes" not in read.model.to_json()
+
+
+def test_the_side_of_a_read_carries_it_either_way() -> None:
+    """``held`` is the side a database is compared with: it carries the same indexes."""
+    from confiture.core.schema_read import read_text
+
+    read = read_text(INDEX)
+
+    assert Side.of(read, held=True).dangling == Side.of(read).dangling == read.dangling_indexes
+    assert read.dangling_indexes != {}
 
 
 # DIFFER_406: the desired state indexes a relation it would drop, or one no side holds.
@@ -180,13 +178,40 @@ def test_an_old_tree_indexing_a_relation_the_new_declares_is_no_refusal() -> Non
     assert isinstance(change, TableAdded)
 
 
-def test_the_model_a_database_is_compared_with_keeps_them() -> None:
-    """``catalogued`` is the tree a database is compared with: it holds the same indexes."""
+@pytest.mark.parametrize("kind", list(_DECLARED))
+def test_an_index_written_before_its_relation_is_refused_not_attached(kind: str) -> None:
+    """The build fails at the index; the diff names it rather than placing it on the relation."""
+    desired = _BASE + INDEX + "\n" + _DECLARED[kind]
+
+    with pytest.raises(DifferError) as refused:
+        SchemaDiffer().compare(_BASE, desired)
+
+    assert refused.value.error_code == "DIFFER_406"
+    assert "ix_tv_product_name" in str(refused.value)
+    assert "only after the index" in str(refused.value)
+    assert "desired" in str(refused.value)
+
+
+def test_the_current_tree_written_out_of_order_is_a_warning() -> None:
+    """A ref already committed cannot be reordered: it is said, not refused, and not compared."""
+    current = _BASE + INDEX + "\n" + _DECLARED["table"]
+
+    diff = SchemaDiffer().compare(current, _BASE + _DECLARED["table"])
+
+    assert diff.changes == []
+    [warning] = diff.warnings
+    assert warning.code == "DIFFER_408"
+    assert "ix_tv_product_name" in warning.message
+
+
+def test_drift_carries_them_in_its_default_schema() -> None:
+    from confiture.core.drift import expected_schema
     from confiture.core.schema_read import read_text
 
-    read = read_text(INDEX)
+    expected = expected_schema(read_text(INDEX), "app")
 
-    assert read.catalogued.unattached_indexes == read.model.unattached_indexes != {}
+    [index] = expected.dangling[RelationName("app", "tv_product").ref()]
+    assert index.name == "ix_tv_product_name"
 
 
 # DIFFER_407: an index on a declared TVIEW is a warning until the model carries it.

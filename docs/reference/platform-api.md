@@ -190,7 +190,6 @@ it is made.
 | `triggers` | `Mapping[ObjectRef, Trigger]` | empty |
 | `tviews` | `Mapping[ObjectRef, TView]` | empty |
 | `other_objects` | `Mapping[ObjectRef, OtherObject]` | empty |
-| `unattached_indexes` | `Mapping[ObjectRef, tuple[Index, ...]]` | empty |
 | `coverage` | `Coverage` | empty |
 | `source` | `Provenance` | `'author'` |
 

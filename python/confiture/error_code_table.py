@@ -250,14 +250,13 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
     },
     {
         "code": "DIFFER_406",
-        "message_template": (
-            "Index '{index}' is on {table}, which the desired schema does not declare: {reason}"
-        ),
+        "message_template": ("Index '{index}' is on {table}: {reason}"),
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Declare the relation in the desired schema — compose the fragment into the "
-            "environment's include_dirs, after the file that creates it — or remove the index"
+            "Declare the relation in the desired schema, before the index — compose the "
+            "fragment into the environment's include_dirs, after the file that creates it — "
+            "or remove the index"
         ),
     },
     {
@@ -271,6 +270,19 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": (
             "Keep it in the schema (the build creates it, and pg_tviews keeps it across a "
             "rebuild); write any change to it in a migration by hand"
+        ),
+    },
+    {
+        "code": "DIFFER_408",
+        "message_template": (
+            "Index '{index}' is written before {table}, the relation it is on: the current "
+            "schema's build fails at it, so it is not compared"
+        ),
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Move the index after the statement that creates its relation; confiture lint "
+            "reports it as build_004"
         ),
     },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
