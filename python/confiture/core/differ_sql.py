@@ -754,7 +754,7 @@ def _definition_up(change: DefinitionChange) -> str | None:
             return _dropping(obj, change)
         case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
             return _replacing(old, new, change)
-        case ObjectReplaced(_, _, new, _, indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
+        case ObjectReplaced(new=new, new_indexes=indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
             created = _statement(_stated(new, change)) + _carried_indexes(indexes)
             return _drop(keyword, name) + created
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
@@ -792,7 +792,7 @@ def _definition_down(change: DefinitionChange) -> str | None:
             return _creating(obj, change) + _carried_indexes(indexes)
         case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
             return _replacing(new, old, change)
-        case ObjectReplaced(_, old, _, indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
+        case ObjectReplaced(old=old, old_indexes=indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
             created = _statement(_stated(old, change)) + _carried_indexes(indexes)
             return _drop(keyword, name) + created
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():

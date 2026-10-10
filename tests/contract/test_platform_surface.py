@@ -448,6 +448,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("new", "DDLObject"),
         ("old_indexes", "tuple[Index, ...]"),
         ("new_indexes", "tuple[Index, ...]"),
+        ("index_changes", "tuple[IndexAdded | IndexDropped, ...]"),
     ),
 }
 

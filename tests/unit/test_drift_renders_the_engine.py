@@ -66,3 +66,85 @@ def test_matview_index_changes_are_rendered() -> None:
     assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
     assert item.object_name == "public.mv.ux_mv"
     assert report.indexes_checked == 1
+
+
+def test_a_redefined_matviews_index_changes_are_rendered() -> None:
+    """A redefined matview is no finding; the index changes it carries are, as a paired one's."""
+    from dataclasses import replace
+
+    from confiture.core.drift import DriftReport, DriftSeverity, _Findings
+    from confiture.core.schema_change import IndexAdded, ObjectReplaced
+    from confiture.core.schema_model import ref_for
+    from confiture.core.schema_read import read_text
+
+    table = "CREATE TABLE t (id int);\n"
+    query = "CREATE MATERIALIZED VIEW mv AS SELECT id FROM t;\n"
+    other = "CREATE MATERIALIZED VIEW mv AS SELECT id FROM t WHERE id > 0;\n"
+    mv = ref_for("matview", None, "mv")
+    tree = read_text(table + other + "CREATE UNIQUE INDEX ux_mv ON mv (id);\n")
+    database = read_text(table + query)
+    (index,) = tree.catalogued.views[mv].indexes
+    change = ObjectReplaced(
+        mv,
+        database.declared.objects[mv][0],
+        tree.declared.objects[mv][0],
+        index_changes=(IndexAdded(index.table, index, relation_kind="matview"),),
+    )
+    report = DriftReport(database_name="db", expected_schema_source="tree")
+    _Findings(
+        tree.catalogued, replace(database.catalogued, source="catalog"), DriftSeverity.WARNING
+    ).render([change], report, column_order=False)
+    (item,) = report.drift_items
+    assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
+    assert item.object_name == "public.mv.ux_mv"
+
+
+def test_every_redefinition_drift_does_not_render_says_why() -> None:
+    """A TVIEW's is its options; a view's query and a routine's body are named, with the reason."""
+    from confiture.core.differ import _SECTIONS
+    from confiture.core.drift import UNRENDERED_REDEFINITIONS
+
+    redefinable = {kind for kind, section in _SECTIONS.items() if section in {"views", "routines"}}
+    assert set(UNRENDERED_REDEFINITIONS) == redefinable
+    assert redefinable == {"view", "matview", "function", "procedure", "aggregate"}
+    assert all(why.strip() for why in UNRENDERED_REDEFINITIONS.values())
+
+
+def test_drift_meets_no_other_redefinition() -> None:
+    """Against a database, a trigger is compared by existence and other objects as read.
+
+    Drift's policies carry parity rules, under which a trigger whose statement
+    differs is the same trigger, and a database reads its other objects at the
+    ``existence`` depth (``live_catalog.read``), so none is ever redefined.
+    """
+    from dataclasses import replace
+
+    from confiture.core.differ import CATALOGUED, MATERIALISED, SchemaDiffer, Side
+    from confiture.core.schema_change import ObjectReplaced
+    from confiture.core.schema_model import Coverage
+    from confiture.core.schema_read import read_text
+
+    base = "CREATE TABLE t (id int);\nCREATE FUNCTION f() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;\n"
+    before = read_text(
+        base
+        + "CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION f();\n"
+        + "CREATE DOMAIN d AS int CHECK (VALUE > 0);\n"
+    )
+    after = read_text(
+        base
+        + "CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION f();\n"
+        + "CREATE DOMAIN d AS int CHECK (VALUE > 1);\n"
+    )
+    # The control: two trees compare every statement as written, so both differ.
+    kinds = {
+        c.ref.kind for c in SchemaDiffer().compare_sides(Side.of(before), Side.of(after)).changes
+    }
+    assert kinds == {"trigger", "domain"}
+    read = dict(before.catalogued.coverage.sections)
+    coverage = Coverage.of({**read, "other_objects": "existence"})
+    database = Side(
+        replace(before.catalogued, source="catalog", coverage=coverage), before.declared.objects
+    )
+    for policy in (CATALOGUED, MATERIALISED):
+        changes = SchemaDiffer().compare_sides(database, Side.of(after, held=True), policy)
+        assert not [c for c in changes.changes if isinstance(c, ObjectReplaced)], policy.name

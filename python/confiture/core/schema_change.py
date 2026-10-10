@@ -908,6 +908,14 @@ class ObjectReplaced(_ObjectChange):
     object's shape moved. A materialized view is dropped and created again, so
     it carries its indexes: ``new_indexes`` are created after it, and its down
     creates the old one with ``old_indexes``; both ``()`` for every other kind.
+
+    ``index_changes`` is how the recreated matview's indexes differ from the
+    dropped one's, by the one index comparison under the comparison's policy:
+    what a reader that asks about the indexes rather than the recreate reads
+    (drift, #701). They are not changes of the diff: the recreate writes
+    ``new_indexes`` whole, so no SQL, order, tier or wire field reads them. A
+    TVIEW's index changes will be top-level changes instead, because a TVIEW
+    replaced in place keeps its user indexes.
     """
 
     VERB: ClassVar[str] = "REPLACE"
@@ -917,6 +925,7 @@ class ObjectReplaced(_ObjectChange):
     new: DDLObject
     old_indexes: tuple[Index, ...] = ()
     new_indexes: tuple[Index, ...] = ()
+    index_changes: tuple[IndexAdded | IndexDropped, ...] = ()
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
