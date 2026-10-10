@@ -14,6 +14,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`treekey_001` and `treekey_002`: a TVIEW's chain walks a pg_treekey tree in a spelling
+  pg_tviews cannot trace** (#676). A tree is a table a `treekey.manage_path()` call in the tree
+  declares. Measured on pg_tviews 0.1.0-beta.26, two spellings are uncascaded reads: a
+  `WITH RECURSIVE` reading the tree (`treekey_001`, `all_keys`) and the path unnested
+  `WITH ORDINALITY` (`treekey_002`). Each is reported, as a warning, on the TVIEWs that reach
+  it through plain views, once per walk, naming every such TVIEW — unless the policy a write to
+  the tree meets is `full_refresh` (its `uncascaded_tables` entry, else `uncascaded_policy`);
+  under `warn` the finding says the rows go stale, under `error` that pg_tviews refuses the
+  TVIEW. Every other unnest of the path is traced and not reported. On by default, family
+  `treekey`.
+- **`ancestry_001` and `ancestry_002`: any view walking a tree, as a style** (#676). The
+  judgement of `treekey.lint_views()` — a `WITH RECURSIVE` over the parent key, `unnest` or
+  `string_to_array` over the path — on every view, materialized view and TVIEW that reads a
+  tree directly. `info`, off unless selected (`--select ancestry`).
+- **One TVIEW read graph** (`core/linting/tview_reads.py`): `session_reads` and the tree walks
+  read every view, matview, TVIEW and routine once and walk a TVIEW's chain the same way;
+  `tests/unit/test_one_tview_read_graph.py` guards it.
+- **A TVIEW's per-table `uncascaded_tables` is in the model** (pg_tviews#195). pg_tviews
+  0.1.0-beta.26 lets one table carry its own `uncascaded_policy`, overriding the TVIEW's for a
+  write to it. `TView` gains `uncascaded_tables` (a tuple of the new `UncascadedTable(table,
+  policy)`, re-exported by `confiture.platform`), read from a `pg_tviews_create_or_replace()`
+  call's `options`, passed in the call `migrate diff --generate` writes, read live from
+  `tviews.registry.uncascaded_table_policies`, and compared by drift as the existing
+  `tview_option_mismatch` (subject `uncascaded_tables`), each table by identity. The model's
+  wire and `schema-model.schema.json` gain the key; an older wire reads as pinning none. No
+  drift kind or severity changes, and `MINIMUM_PG_TVIEWS` stays 0.1.0-beta.26, the first
+  registry with the column.
+
+### Fixed
+
+- **A TVIEW query or routine body the session-read rules could not read is reported degraded**
+  (#682). `tview_003`–`005` and `session_001`–`003` named what a chain reached and could not
+  read, but the linter dropped it, so an unparseable TVIEW query passed as clean. Each selected
+  code whose family's chains reached something unread now carries a `degraded` status naming
+  it; a routine only the view family reaches does not degrade the TVIEW rules.
+
 ## [1.34.0] - 2026-10-09
 
 **A TVIEW's `time_refresh` and `function_reads` are in the model.** ⚠️ pg_tviews

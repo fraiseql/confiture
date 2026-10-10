@@ -598,3 +598,35 @@ def test_the_seam_accepts_a_database_without_pg_tviews(
     from confiture import platform
 
     assert platform.require_supported_pg_tviews_on(fresh_database_factory("confiture_tv")) is None
+
+
+def test_the_live_side_reads_each_table_s_uncascaded_policy(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """``tviews.registry.uncascaded_table_policies``, the table as ``regclass`` text."""
+    from confiture.core.schema_model import UncascadedTable
+
+    tree = """
+CREATE TABLE tb_category (pk_category bigint PRIMARY KEY, id uuid, fk_parent bigint);
+SELECT tviews.pg_tviews_create_or_replace('tv_category', $q$
+WITH RECURSIVE up AS (
+  SELECT c.pk_category AS node, c.pk_category AS anc, c.fk_parent FROM tb_category c
+  UNION ALL
+  SELECT up.node, p.pk_category, p.fk_parent FROM up JOIN tb_category p
+    ON p.pk_category = up.fk_parent)
+SELECT n.pk_category, n.id, (SELECT count(*) FROM up WHERE up.node = n.pk_category) AS depth
+FROM tb_category n$q$,
+    options => '{"uncascaded_tables": {"public.tb_category": "full_refresh"}}');
+"""
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(tree)
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert found.uncascaded_tables == (UncascadedTable("tb_category", "full_refresh"),)
+    assert _drift(url, tree) == []

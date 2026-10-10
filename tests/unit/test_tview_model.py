@@ -8,7 +8,14 @@ compare a TVIEW, never its parts.
 
 import json
 
-from confiture.core.schema_model import FunctionRead, SchemaModel, TView, ref_for, tview_ref
+from confiture.core.schema_model import (
+    FunctionRead,
+    SchemaModel,
+    TView,
+    UncascadedTable,
+    ref_for,
+    tview_ref,
+)
 
 POST = TView(name="tv_post", schema="app", definition="SELECT 1 AS pk_post")
 
@@ -34,6 +41,7 @@ def test_the_wire_carries_tviews_and_reads_them_back() -> None:
             "uncascaded_policy": None,
             "time_refresh": None,
             "function_reads": None,
+            "uncascaded_tables": None,
         }
     ]
     assert SchemaModel.from_json(model.to_json()) == model
@@ -104,3 +112,34 @@ def test_a_wire_written_before_the_declared_reads_were_modelled_pins_none() -> N
 
     (read,) = SchemaModel.from_json(json.dumps(wire)).tviews.values()
     assert (read.time_refresh, read.function_reads) == (None, None)
+
+
+TABLES = TView(
+    name="tv_category",
+    schema="app",
+    uncascaded_tables=(
+        UncascadedTable("app.tb_category", "full_refresh"),
+        UncascadedTable("tb_setting", "warn"),
+    ),
+)
+
+
+def test_the_wire_carries_each_table_s_uncascaded_policy() -> None:
+    """pg_tviews' per-table ``uncascaded_tables`` (fraiseql/pg_tviews#195)."""
+    model = SchemaModel(tviews={tview_ref(TABLES): TABLES})
+
+    (tview,) = json.loads(model.to_json())["tviews"]
+    assert tview["uncascaded_tables"] == [
+        {"table": "app.tb_category", "policy": "full_refresh"},
+        {"table": "tb_setting", "policy": "warn"},
+    ]
+    assert SchemaModel.from_json(model.to_json()).tviews[tview_ref(TABLES)] == TABLES
+
+
+def test_a_wire_written_before_per_table_policies_were_modelled_pins_none() -> None:
+    wire = json.loads(SchemaModel(tviews={tview_ref(TABLES): TABLES}).to_json())
+    for tview in wire["tviews"]:
+        del tview["uncascaded_tables"]
+
+    (read,) = SchemaModel.from_json(json.dumps(wire)).tviews.values()
+    assert read.uncascaded_tables is None

@@ -32,8 +32,8 @@ Confiture reads pg_tviews through its **read contract 1**: `tviews.registry` for
 a database registers, `tviews.pg_tviews_create_or_replace()` and
 `tviews.pg_tviews_drop()` for what a migration writes, and `tviews.contract_version()`
 to say which contract they keep. pg_tviews grows contract 1 by appending registry
-columns, and confiture reads four of them (`view`, `uncascaded_policy`,
-`function_reads`, `time_refresh`), so it needs **pg_tviews 0.1.0-beta.26** or later.
+columns, and confiture reads five of them (`view`, `uncascaded_policy`,
+`function_reads`, `time_refresh`, `uncascaded_table_policies`), so it needs **pg_tviews 0.1.0-beta.26** or later.
 Where confiture reads TVIEWs from a live database (drift, `schema dump-model`,
 `migrate preflight --against`, the platform's `introspect`), a pg_tviews that answers
 another contract, has none, or whose registry lacks one of those columns is refused
@@ -58,8 +58,8 @@ reason.
 
 The TVIEW is named as the tree names it (`tv_x` or `app.tv_x`). `options` holds only
 what the tree pins: `UNLOGGED` is `"logged": false`, `WITH (fillfactor = n)` is
-`"fillfactor": n`, a call's `"uncascaded_policy"`, `"time_refresh"` and
-`"function_reads"` are passed as written (below), and a later `ALTER TABLE tv_x SET LOGGED` (or `SET UNLOGGED`) is
+`"fillfactor": n`, a call's `"uncascaded_policy"`, `"uncascaded_tables"`,
+`"time_refresh"` and `"function_reads"` are passed as written (below), and a later `ALTER TABLE tv_x SET LOGGED` (or `SET UNLOGGED`) is
 `"logged": true` (or `false`), the same pin drift compares and `tview_002` reads; a
 later `ALTER TABLE tv_x SET (fillfactor = n)` is `"fillfactor": n`, and `RESET
 (fillfactor)` is `"fillfactor": 100`, PostgreSQL's default, as pg_tviews' registry reads it. A key left out takes pg_tviews' default on
@@ -103,6 +103,14 @@ a policy set that way is no pin: drift does not compare it, and a migration
 `migrate diff --generate` writes for that TVIEW passes none, which pg_tviews refuses
 on a fresh database under the `error` default. Declare the policy in the call's
 `options` when the TVIEW reads an uncascaded table.
+
+`"uncascaded_tables"` gives one table its own policy, overriding the TVIEW's for a
+write to that table: `{"public.tb_category": "full_refresh"}` rebuilds the TVIEW when a
+category moves and keeps `error` for every other table. Confiture reads it as it reads
+`uncascaded_policy` — the tree pins it, `migrate diff --generate` passes it, drift
+compares it with `tviews.registry.uncascaded_table_policies` as `tview_option_mismatch`
+(subject `uncascaded_tables`) — with each table compared by identity, since the
+registry writes one on the read path unqualified. `uncascaded_tables: {}` pins none.
 
 ### `time_refresh` and `function_reads`: reads no write changes
 
@@ -169,6 +177,13 @@ is no change: `migrate diff` generates nothing for it.
 pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts
 `CREATE INDEX`, `ALTER TABLE … SET LOGGED` and `SET (fillfactor = n)` after the conversion, and `UNLOGGED` and
 `WITH (fillfactor = n)` on the `CREATE`. See the [rule reference](../reference/lint-rules.md).
+
+In a tree that also uses pg_treekey, `treekey_001` and `treekey_002` (on by default) report a
+TVIEW whose chain walks a tree in a spelling pg_tviews cannot trace — a `WITH RECURSIVE`
+reading it, or its path unnested `WITH ORDINALITY` — unless the policy a write to that tree
+meets is `full_refresh` (`uncascaded_tables`, above): under `error` pg_tviews refuses the
+TVIEW, under `warn` its rows go stale. See
+[the `treekey` family](../reference/lint-rules.md#the-treekey-family--how-a-tviews-chain-walks-a-pg_treekey-tree).
 
 ## Restore
 

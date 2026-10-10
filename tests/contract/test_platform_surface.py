@@ -46,6 +46,7 @@ MODEL = (
     "Trigger",
     "TView",
     "FunctionRead",
+    "UncascadedTable",
 )
 CHANGES = (
     "SchemaChange",
@@ -286,8 +287,10 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("uncascaded_policy", "str | None"),
         ("time_refresh", "str | None"),
         ("function_reads", "tuple[FunctionRead, ...] | None"),
+        ("uncascaded_tables", "tuple[UncascadedTable, ...] | None"),
     ),
     "FunctionRead": (("function", "str"), ("tables", "tuple[str, ...]")),
+    "UncascadedTable": (("table", "str"), ("policy", "str")),
     "SchemaModel": (
         ("tables", "Mapping[ObjectRef, Table]"),
         ("enum_types", "Mapping[ObjectRef, EnumType]"),
@@ -617,6 +620,7 @@ def test_diff_compares_two_sources_whole() -> None:
         "Trigger",
         "TView",
         "FunctionRead",
+        "UncascadedTable",
     ],
 )
 def test_the_published_schema_declares_every_field(name: str) -> None:

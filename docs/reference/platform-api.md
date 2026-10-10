@@ -659,6 +659,10 @@ tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
 `pg_tviews_create_or_replace()` call's `options` alone; `function_reads`
 `()` pins none, functions and tables sorted.
 
+`uncascaded_tables` is each table's own `uncascaded_policy`, which overrides
+the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
+call's `options` alone, `()` pinning none, sorted by table.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
@@ -669,6 +673,7 @@ tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
 | `uncascaded_policy` | `str \| None` | `None` |
 | `time_refresh` | `str \| None` | `None` |
 | `function_reads` | `tuple[FunctionRead, ...] \| None` | `None` |
+| `uncascaded_tables` | `tuple[UncascadedTable, ...] \| None` | `None` |
 
 ### `FunctionRead`
 
@@ -687,6 +692,24 @@ none. Both are spellings, the author's or the registry's.
 |---|---|---|
 | `function` | `str` | required |
 | `tables` | `tuple[str, ...]` | `()` |
+
+### `UncascadedTable`
+
+```python
+class UncascadedTable
+```
+
+What a write to one table no cascade reaches does to a TVIEW.
+
+One entry of pg_tviews' `uncascaded_tables` option (fraiseql/pg_tviews#195):
+`table` as written — the author's spelling, or the registry's `regclass`
+text, bare on the read path — and `policy` (`warn`, `error` or
+`full_refresh`), which overrides the TVIEW's `uncascaded_policy` for it.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `str` | required |
+| `policy` | `str` | required |
 
 ## Ordering
 

@@ -253,6 +253,39 @@ FIXTURES: dict[str, Fixture] = {
         }
     ),
     "session_003": Fixture({"010.sql": "CREATE VIEW v_p AS SELECT CURRENT_DATE AS d;\n"}),
+    "treekey_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
+            "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
+            "CREATE VIEW v_n AS WITH RECURSIVE w AS (SELECT n.pk_n, n.fk_up FROM tb_n n "
+            "UNION ALL SELECT p.pk_n, p.fk_up FROM w JOIN tb_n p ON p.pk_n = w.fk_up) "
+            "SELECT pk_n FROM w;\n"
+            "CREATE TABLE tv_n AS SELECT pk_n FROM v_n;\n"
+        }
+    ),
+    "treekey_002": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
+            "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
+            "CREATE TABLE tv_n AS SELECT n.pk_n, x.label FROM tb_n n, LATERAL "
+            "unnest(string_to_array(n.path::text, '.')) WITH ORDINALITY AS x (label, ord);\n"
+        }
+    ),
+    "ancestry_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
+            "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
+            "CREATE VIEW v_n AS WITH RECURSIVE w AS (SELECT n.pk_n FROM tb_n n "
+            "WHERE n.fk_up IS NULL) SELECT pk_n FROM w;\n"
+        }
+    ),
+    "ancestry_002": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
+            "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
+            "CREATE VIEW v_n AS SELECT unnest(string_to_array(n.path::text, '.')) FROM tb_n n;\n"
+        }
+    ),
     "replica_001": Fixture(
         {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, c INT);\n"},
         escalated_env_extra="infrastructure:\n  replicas:\n    - read-1\n",

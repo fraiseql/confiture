@@ -49,6 +49,10 @@ Adopt a rule on a schema that already trips it with a
 | `session_001` | session_reads | error | off | A view reads session state: a setting or the session's identity |
 | `session_002` | session_reads | warning | off | A view calls a non-immutable function outside pg_catalog |
 | `session_003` | session_reads | warning | off | A view reads the time |
+| `treekey_001` | treekey | warning | on | A TVIEW reads a pg_treekey tree in a WITH RECURSIVE pg_tviews cannot trace |
+| `treekey_002` | treekey | warning | on | A TVIEW unnests a pg_treekey tree's path WITH ORDINALITY, which pg_tviews cannot trace |
+| `ancestry_001` | ancestry | info | off | A view walks a pg_treekey tree with WITH RECURSIVE over its parent key |
+| `ancestry_002` | ancestry | info | off | A view takes a pg_treekey tree's path apart with unnest or string_to_array |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
@@ -1288,6 +1292,61 @@ db/schema/20_views/v_product.sql:4  tview_003  tv_product reads current_setting(
   `build_003` places what a body names.
 - A TVIEW query the parser rejects, or a routine body confiture cannot read, that a
   chain reaches is reported as a `degraded` rule rather than passed as clean.
+
+## The `treekey` family — how a TVIEW's chain walks a pg_treekey tree
+
+A tree is a table whose ltree path pg_treekey maintains: the tree declares it with
+`SELECT treekey.manage_path('app.tb_category', 'pk_category', 'fk_parent_category')`
+(the path column is the fourth argument, `path` by default; named arguments are read
+too). pg_tviews follows a TVIEW's query through the plain views it reads to decide which
+rows a write refreshes, and how that chain walks the tree decides what it can follow.
+Measured on pg_tviews 0.1.0-beta.26 (PostgreSQL 18.6):
+
+| Spelling of "the ancestors of n" | What pg_tviews does | Rule |
+|---|---|---|
+| `a.path @> n.path` in a correlated subquery | traced row by row | — |
+| the path unnested (`unnest(string_to_array(n.path::text, '.'))`) in a scalar subquery, `IN`, `= ANY`, a CTE or a plain `LATERAL` | traced (a sequential scan without a GIN index) | — (`ancestry_002`, off) |
+| the path unnested `WITH ORDINALITY` | no condition links a write to the TVIEW key: refused under `error`, rebuilt in full under `full_refresh`, **stale** under `warn` | `treekey_002` |
+| `WITH RECURSIVE` reading the tree | `all_keys` (fraiseql/pg_tviews#183): refused under `error`, rebuilt in full under `full_refresh`, **stale** under `warn` | `treekey_001` |
+
+Both rules are on, and report nothing in a tree that calls no `manage_path`. They judge
+the TVIEWs of the tree (both spellings) and the plain views each reaches, with no
+database; a chain stops at a materialized view and at another TVIEW. A function the
+chain calls is not followed: pg_tviews sees its tables through `function_reads`, never
+through its body (`tview_004` reports an undeclared one). One finding per walk, where it
+is written, naming every TVIEW that reaches it:
+
+```
+db/schema/20_views/v_category_path.sql:2  treekey_001  tv_item reads tb_category in a WITH
+    RECURSIVE through v_item_def → v_category_path: pg_tviews refuses tv_item at create, since
+    no condition links a write to the tree to the rows it changes (all_keys)
+```
+
+- **The policy decides.** A walk is not reported where the policy a write to the tree
+  meets is `full_refresh`: the TVIEW's `uncascaded_tables` entry for that table, else its
+  `uncascaded_policy`. Under `warn` the finding says the rows go stale. A TVIEW written as
+  `CREATE TABLE … AS` passes no options, so it meets pg_tviews' `error` default.
+- **What counts as reading the tree in a `WITH RECURSIVE`** (`treekey_001`): the recursive
+  CTE reads it, or reads a CTE of the same clause that does, or a plain view that does. A
+  sibling CTE the recursive one never reads is read as any CTE is.
+- **The fixes**, in the finding: walk the ancestors with a correlated `@>`
+  (`treekey.register_ancestry()` generates it), or drop `WITH ORDINALITY` and order by
+  `nlevel(path)`; or declare `"uncascaded_tables": {"<tree>": "full_refresh"}`; or
+  `"uncascaded_policy": "full_refresh"` for the whole TVIEW.
+- **A column is matched as PostgreSQL holds it**: `manage_path` takes the column's own
+  name (an `attname`), so a column that needs quotes is matched only where it is written
+  quoted.
+- A `manage_path` call whose arguments are not constants, or a TVIEW query the parser
+  rejects, is reported as a `degraded` rule rather than passed as clean.
+
+## The `ancestry` family — any view walking a tree, as a style
+
+`ancestry_001` (a `WITH RECURSIVE` whose CTE names the parent key) and `ancestry_002`
+(`unnest` or `string_to_array` over the path) report every view, materialized view and
+TVIEW that reads a tree directly, exactly as `treekey.lint_views()` judges the views a
+database holds. They are `info` and **off** unless selected (`--select ancestry`): a
+correlated `@>` reads one ancestor row each and uses the path's GIST index, but the other
+spellings are correct, and pg_tviews traces all but the two the `treekey` family reports.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 
