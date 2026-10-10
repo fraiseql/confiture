@@ -104,6 +104,14 @@ class TestADroppedTableIsRecreatedByItsDown:
         assert _parses(sql)
         assert "CREATE TABLE IF NOT EXISTS tenant.t" in sql
 
+    def test_the_down_recreates_the_table_plainly_when_asked(self) -> None:
+        sql = DifferSQLGenerator().generate_down(
+            _change(*self.DROPPED, TableDropped), plain_creates=True
+        )
+        [stmt] = [raw.stmt for raw in pglast.parse_sql(sql)]
+        assert (stmt.relation.schemaname, stmt.relation.relname) == ("tenant", "t")
+        assert not stmt.if_not_exists
+
     def test_the_recreated_table_keeps_its_constraints(self) -> None:
         sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, TableDropped))
         restored = SchemaDiffer().parse_schema(self.DROPPED[1] + "\n" + sql).tables[1]
