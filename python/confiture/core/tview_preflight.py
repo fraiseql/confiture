@@ -22,10 +22,10 @@ from confiture.core.ddl_walk import (
     tview_query_tree,
     walk_nodes,
 )
+from confiture.core.migration_scope import walk
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import TVIEW_PREFIX
 from confiture.core.schema_read import read_text
-from confiture.core.sql_lexer import ParsedStatement, parse
+from confiture.core.sql_lexer import ParsedStatement
 from confiture.models.results import PreflightIssue
 
 
@@ -40,16 +40,15 @@ def live_issues(files: Iterable[Path], tviews: Mapping[str, str]) -> list[Prefli
     for path in files:
         version = _version_from_migration_filename(path.name)
         try:
-            statements = parse(path.read_text(encoding="utf-8"))
+            steps = list(walk(path.read_text(encoding="utf-8")))
         except pglast.parser.ParseError, OSError:
             continue
-        dropped: set[str] = set()
-        for statement in statements:
-            dropped |= _dropped_tviews(statement.stmt)
+        for step in steps:
             issues.extend(
-                _issue(version, path.name, statement, tview, table, column)
-                for tview, table, column in _breaks(statement.stmt, reads)
-                if tview not in dropped
+                _issue(version, path.name, step.statement, tview, table, column)
+                for tview, table, column in _breaks(step.statement.stmt, reads)
+                # A TVIEW the same statement drops is gone too.
+                if tview not in step.after.dropped_tviews
             )
     return issues
 
@@ -57,14 +56,14 @@ def live_issues(files: Iterable[Path], tviews: Mapping[str, str]) -> list[Prefli
 def touches_tview(sql: str) -> bool:
     """Whether *sql* creates or drops a pg_tviews TVIEW; SQL the parser rejects touches none."""
     try:
-        statements = parse(sql)
+        steps = list(walk(sql))
     except pglast.parser.ParseError:
         return False
     return any(
-        _dropped_tviews(statement.stmt)
-        or _creates_tview(statement.stmt)
-        or tview_calls(statement.stmt)
-        for statement in statements
+        step.after.dropped_tviews != step.before.dropped_tviews
+        or _creates_tview(step.statement.stmt)
+        or tview_calls(step.statement.stmt)
+        for step in steps
     )
 
 
@@ -93,15 +92,6 @@ def _issue(
         line=statement.line,
         details={"tview": tview, "table": table, "column": column},
     )
-
-
-def _dropped_tviews(stmt: Any) -> set[str]:
-    """What *stmt* drops: ``DROP TABLE tv_*``, or ``tviews.pg_tviews_drop()``."""
-    return {
-        _key(edit.schema, edit.name)
-        for edit in object_edits(stmt)
-        if edit.kind == "drop" and edit.name.startswith(TVIEW_PREFIX)
-    }
 
 
 def _breaks(stmt: Any, reads: Mapping[str, _Reads]) -> Iterable[tuple[str, str, str | None]]:

@@ -105,6 +105,7 @@ module moves, not when one grows.
 | `lock_profile.py` | DDL transform |
 | `migration_analyzer.py` | DDL transform |
 | `migration_grant_extractor.py` | DDL transform |
+| `migration_scope.py` | DDL transform |
 | `model_facts.py` | DDL transform |
 | `parser_info.py` | DDL transform |
 | `path_globs.py` | DDL transform |

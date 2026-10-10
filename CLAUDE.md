@@ -189,6 +189,15 @@ is asked; its diagnosis is reported verbatim, message and SQLSTATE. The extensio
 no stock PostgreSQL, so the rule reports `skipped` rather than an empty result when it
 cannot run, and the `plpgsql-check` CI leg is where it does.
 
+**One migration scope** — `core/migration_scope.walk(sql)` is how a classifier reads a
+migration's statements: each with the scope the statements before it leave
+(`Step.before`/`after`: the transaction the file runs in, the constraints it added,
+the TVIEWs it dropped). The replica classifier, the change-set walker and the TVIEW
+preflight read it; `tests/unit/test_one_migration_walk.py` fails on one of them calling
+the lexer itself. A fact that **tightens** a verdict (a constraint added → its
+validation is `lock_risky`) matches by identity; one that **loosens** a verdict
+matches only as written, and a statement the fold cannot read is never assumed.
+
 **One type canonicaliser** — `core/type_lattice.py`: `canonical_type` decides that
 `int8` and `bigint` are one type, `same_type` whether two declarations are, and
 `core/ddl_walk.type_name` reads a pglast `TypeName` for it (drops the `pg_catalog`
@@ -605,6 +614,7 @@ confiture/
 │   │   ├── migration_generator.py # Migration file generator from schema diffs
 │   │   ├── migration_grant_extractor.py # Static extraction of ``CREATE TABLE`` and ``GRANT`` statements from a
 │   │   ├── migration_reads.py    # Which files a migration reads at run time, and which of them sit under…
+│   │   ├── migration_scope.py    # One migration scope: what the statements before this one did, as every…
 │   │   ├── migration_verifier.py # Migration verification using .verify.sql sidecar files
 │   │   ├── migrator.py           # The migrator's public face: :class:`Migrator`, :class:`MigratorSession`…
 │   │   ├── model_facts.py        # What the model says about the objects in it, for a caller that writes i…

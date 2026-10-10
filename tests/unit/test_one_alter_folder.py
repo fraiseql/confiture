@@ -41,6 +41,10 @@ ALLOWED: dict[str, str] = {
         "asks what risk tier the operation carries, which is a judgement about "
         "applying it rather than a statement about the schema it leaves behind"
     ),
+    "core/migration_scope.py": (
+        "asks which constraints an earlier statement of a migration added, the context a later "
+        "`VALIDATE CONSTRAINT` is judged in — not what the expected schema holds"
+    ),
     "core/idempotency/ast_detector.py": (
         "asks whether the statement carries its own `IF NOT EXISTS` guard; the "
         "subtype tells it which guard would even be available"
