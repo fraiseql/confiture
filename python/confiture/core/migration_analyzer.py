@@ -77,3 +77,12 @@ class MigrationAnalyzer:
                 results.append(node_type.replace("Stmt", "").upper())
 
         return results
+
+
+def runs_in_one_transaction(sql: str) -> bool:
+    """Whether a SQL migration runs as one transaction: it holds no statement PostgreSQL refuses there.
+
+    The one rule: the runner reads it to choose autocommit, and a classifier to
+    know which statements of a file share a transaction.
+    """
+    return not MigrationAnalyzer().analyze(sql)
