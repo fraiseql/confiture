@@ -87,14 +87,14 @@ more of them.
   `extra_index`.
 - An index on a materialized view is reported as an index on a table is: `missing_index`
   (critical when it is unique: a matview holds no constraints, so that index is its only
-  uniqueness guarantee) or `extra_index`. One limit: at the materialised tier, a matview
-  whose query also changed is one redefinition, which drift does not report, so its index
-  differences go unreported with it. `migrate diff` still writes the recreate with every
-  index.
-- A view whose query changed is not a drift item at any tier: drift reports that a view
-  exists (`missing_view`, `extra_view`). Compare view bodies with `migrate validate
-  --check-body-views`, or ask `migrate diff --from db` with a scratch server, which writes
-  the `CREATE OR REPLACE VIEW`.
+  uniqueness guarantee) or `extra_index`. At the materialised tier, a matview whose query
+  also changed is one redefinition, which `migrate diff` writes as a recreate with every
+  index; drift still reports its index differences, as for any matview.
+- A view's or a materialized view's query that changed is not a drift item at any tier:
+  drift reports that a view exists (`missing_view`, `extra_view`, `missing_matview`,
+  `extra_matview`). Compare view bodies with `migrate validate --check-body-views`, or ask
+  `migrate diff --from db` with a scratch server, which writes the `CREATE OR REPLACE VIEW`
+  or the matview's recreate.
 - A finding names an object the way the tree side spells it. At the materialised tier that
   side is PostgreSQL's reading of the tree, so every name is schema-qualified
   (`public.tv_post`).

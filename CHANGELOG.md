@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   materialized view being redefined, a `DROP MATERIALIZED VIEW` with no `CREATE` after it. It is
   now refused whole, in both directions. No command reaches it; it guards the next caller that
   would.
+- **`ObjectReplaced.index_changes`** (platform seam): a redefined materialized view carries
+  how its indexes differ from the dropped one's, compared by the one index comparison under
+  the comparison's own policy, for a reader that asks about the indexes rather than the
+  recreate. It is not a change of the diff: `migrate diff`, its SQL, order, tiers and wire are
+  unchanged.
 
 ### Fixed
 
@@ -90,6 +95,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Schemas are identical" while one stands. `build`, `migrate diff` and the git accompaniment
   check render a warning through one printer, so the accompaniment check's duplicate-definition
   line now carries its code (`DIFFER_402 …`).
+- **⚠️ `confiture drift --scratch-url` reports the indexes of a materialized view whose query
+  also drifted** (#701). At the materialised tier such a matview is one redefinition, and drift
+  said nothing about it: a matview that had lost its unique index exited 0 with
+  `has_drift: false`, where the structural tier reported a critical `missing_index`. Its index
+  differences are now reported as any matview's are — `missing_index` (critical when unique),
+  `extra_index`, the INVALID rebuild pair — at either tier. `--check-live-drift` with
+  `scratch_url` in the environment is the same check, so a gate green before can fail. No new
+  drift kind and no severity moved; `indexes_checked` grows by one per extra or INVALID index
+  reported. The changed query itself is still no drift item (`migrate validate
+  --check-body-views`).
 
 ## [1.35.0] - 2026-10-10
 
