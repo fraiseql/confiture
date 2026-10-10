@@ -824,15 +824,17 @@ def _directory(dest: Path, parts: Sequence[str]) -> Path:
     here = dest
     for part in parts:
         here = here / part
-        if here.is_symlink() or (here.exists() and not here.is_dir()):
-            break
-        if not here.exists():
+        if not here.exists() and not here.is_symlink():
             here.mkdir()
-    if not here.resolve().is_relative_to(dest.resolve()) or here.is_symlink():
-        raise GitError(
-            f"'{here}' resolves outside the scratch tree {dest}",
-            resolution_hint="A path in the tree passes through a symlink; it is refused.",
-        )
+        if (
+            here.is_symlink()
+            or not here.is_dir()
+            or not here.resolve().is_relative_to(dest.resolve())
+        ):
+            raise GitError(
+                f"'{here}' resolves outside the scratch tree {dest}, or is not a directory",
+                resolution_hint="A path in the tree passes through a symlink; it is refused.",
+            )
     return here
 
 
