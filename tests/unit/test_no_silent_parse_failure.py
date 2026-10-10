@@ -63,6 +63,9 @@ ALLOWED: dict[str, str] = {
     "python/confiture/core/sql_lexer.py:_scan_recovering": (
         "the scanner's recovery: the tokens before an error, and none past it, is the answer"
     ),
+    "python/confiture/core/preflight.py:invalid_index_issues": (
+        "a pending migration the parser rejects is preflight's PFLIGHT_UNPARSEABLE"
+    ),
     "python/confiture/core/stub_generator.py:jsonb_keys": (
         "a stub whose keys cannot be read is typed as a plain dict, which it says"
     ),

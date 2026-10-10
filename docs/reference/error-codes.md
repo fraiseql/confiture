@@ -165,6 +165,7 @@ warnings → 0 unless `--strict`.
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
+| `PFLIGHT_INVALID_INDEX` | warning | `--against`: a `CREATE INDEX … IF NOT EXISTS` names an index the database holds INVALID (a failed concurrent build), which the statement skips (#689) |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
 
 ### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)

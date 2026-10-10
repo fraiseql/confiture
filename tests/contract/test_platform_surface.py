@@ -239,6 +239,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("key_options", "tuple[str, ...]"),
         ("expressions", "tuple[bool, ...] | None"),
         ("nulls_not_distinct", "bool"),
+        ("valid", "bool"),
     ),
     "Table": (
         ("name", "str"),

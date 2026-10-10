@@ -1030,6 +1030,11 @@ class PreflightResult:
 # command's exit code is computed from the summary (preflight_exit_code), not
 # per issue code.
 PFLIGHT_CODES: dict[str, tuple[str, str]] = {
+    "PFLIGHT_INVALID_INDEX": (
+        "warning",
+        "Drop the INVALID index (DROP INDEX CONCURRENTLY) before this migration, or have "
+        "the migration drop and create it: IF NOT EXISTS skips an index that exists invalid.",
+    ),
     "PFLIGHT_UNPARSEABLE": (
         "error",
         "Fix the SQL syntax: confiture cannot analyse a migration PostgreSQL's parser rejects, "

@@ -643,7 +643,7 @@ def migrate_preflight(
     all_issues = (
         result.issues
         + replica_issues
-        + live_issues(pending_files, run.facts.tviews)
+        + _live_findings(pending_files, run.facts)
         + run.result.replay_issues
     )
     summary = _preflight_summary(
@@ -673,6 +673,17 @@ def migrate_preflight(
         raise typer.Exit(exit_code)
     if dependent_report is not None and dependent_report.has_blocking():
         raise typer.Exit(FINDINGS)
+
+
+def _live_findings(pending_files: list[Path], facts: SchemaFacts) -> list[Any]:
+    """What the pending set does to what the ``--against`` database holds: its TVIEWs'
+    reads, and an INVALID index a ``CREATE INDEX … IF NOT EXISTS`` would skip (#689)."""
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.preflight import invalid_index_issues
+
+    return live_issues(pending_files, facts.tviews) + invalid_index_issues(
+        pending_files, facts.invalid_indexes
+    )
 
 
 def _preflight_summary(all_issues: list[Any], **counts: Any) -> dict[str, Any]:

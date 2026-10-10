@@ -128,7 +128,7 @@
     "python/confiture/core/linting/selection.py": 2,
     "python/confiture/core/mcp_server.py": 1,
     "python/confiture/core/preconditions.py": 2,
-    "python/confiture/core/schema_facts.py": 3,
+    "python/confiture/core/schema_facts.py": 2,
     "python/confiture/core/seed/sequencer.py": 1,
     "python/confiture/core/seed/validation/prep_seed/level_4_runtime.py": 1,
     "python/confiture/core/seed/validation/prep_seed/level_5_execution.py": 1,
