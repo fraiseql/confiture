@@ -49,7 +49,7 @@ Adopt a rule on a schema that already trips it with a
 | `session_001` | session_reads | error | off | A view reads session state: a setting or the session's identity |
 | `session_002` | session_reads | warning | off | A view calls a non-immutable function outside pg_catalog |
 | `session_003` | session_reads | warning | off | A view reads the time |
-| `treekey_001` | treekey | warning | on | A view walks a pg_treekey tree with WITH RECURSIVE over its parent key |
+| `treekey_001` | treekey | warning | on | A TVIEW reads a pg_treekey tree in a WITH RECURSIVE pg_tviews cannot trace |
 | `treekey_002` | treekey | warning | on | A view takes a pg_treekey tree's path apart with unnest or string_to_array |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
