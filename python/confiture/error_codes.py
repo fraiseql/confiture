@@ -233,9 +233,9 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "DIFFER_404": 0,  # carve-out: an object a database holds by existence alone (#562)
     "DIFFER_405": 0,  # carve-out: an index on a table neither tree declares (#679)
     "DIFFER_406": 5,
-    "DIFFER_407": 0,  # carve-out: an index on a TVIEW, which the model does not hold yet
     "DIFFER_408": 0,  # carve-out: the current tree's index written before its relation
     "DIFFER_409": 5,
+    "DIFFER_410": 5,  # a tree index under a name pg_tviews uses on that TVIEW
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,
@@ -276,6 +276,12 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "SEED_002": 0,  # carve-out: a build warning in the envelope, never fatal (#268)
     "SEED_003": 0,  # carve-out: a build note in the envelope, never fatal (#268)
 }
+
+#: Codes removed under the stability contract (docs/reference/error-codes.md): each
+#: number stays out of use for good, so a consumer that matched it never meets it
+#: again with another meaning. ``DIFFER_407``, "an index on a TVIEW is not compared",
+#: ended when the model held a TVIEW's indexes.
+RETIRED_CODES: frozenset[str] = frozenset({"DIFFER_407"})
 
 
 # Human-readable meaning of each integer exit code in the canonical convention.

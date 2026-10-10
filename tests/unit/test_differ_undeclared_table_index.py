@@ -214,33 +214,24 @@ def test_drift_carries_them_in_its_default_schema() -> None:
     assert index.name == "ix_tv_product_name"
 
 
-# DIFFER_407: an index on a declared TVIEW is a warning until the model carries it.
+# An index on a declared TVIEW is the TVIEW's: carried, and no warning.
 
 _TVIEW_INDEX = "CREATE INDEX ix_tv_product_id ON tv_product (id);"
 
 
-def test_an_index_on_a_tview_is_a_warning_naming_both() -> None:
-    from confiture.core.schema_read import read_text
-
-    [warning] = read_text(_BASE + _DECLARED["tview"] + _TVIEW_INDEX).warnings
-
-    assert warning.code == "DIFFER_407"
-    assert warning.severity == "warning"
-    assert "ix_tv_product_id" in warning.message
-    assert "tv_product" in warning.message
-
-
-def test_the_diff_says_so_and_carries_nothing() -> None:
+def test_the_diff_carries_an_index_on_a_tview() -> None:
     tree = _BASE + _DECLARED["tview"]
 
     diff = SchemaDiffer().compare(tree, tree + _TVIEW_INDEX)
 
-    assert diff.changes == []
-    assert [w.code for w in diff.warnings] == ["DIFFER_407"]
+    [change] = diff.changes
+    assert isinstance(change, IndexAdded)
+    assert (change.index.name, change.relation_kind) == ("ix_tv_product_id", "tview")
+    assert diff.warnings == []
 
 
-def test_an_index_on_a_table_or_matview_is_no_warning() -> None:
+def test_an_index_on_a_declared_relation_is_no_warning() -> None:
     from confiture.core.schema_read import read_text
 
-    for kind in ("table", "matview"):
+    for kind in ("table", "matview", "tview"):
         assert read_text(_BASE + _DECLARED[kind] + _TVIEW_INDEX).warnings == []

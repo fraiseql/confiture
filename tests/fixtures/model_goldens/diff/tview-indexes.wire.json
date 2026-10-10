@@ -1,0 +1,116 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 0,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 2,
+      "indexes_dropped": 2,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TVIEW",
+        "table": "tv_author",
+        "column": null,
+        "old_value": null,
+        "new_value": "SELECT tviews.pg_tviews_create_or_replace('tv_author', $tview$SELECT a.pk_author, a.id, a.name, jsonb_build_object('id', a.id, 'name', a.name) AS data FROM tb_author AS a$tview$)",
+        "details": {
+          "kind": "tview",
+          "name": "tv_author",
+          "keyword": "TABLE"
+        }
+      },
+      {
+        "type": "REPLACE_TVIEW",
+        "table": "tv_post",
+        "column": null,
+        "old_value": "SELECT tviews.pg_tviews_create_or_replace('tv_post', $tview$SELECT p.pk_post, p.id, p.title, jsonb_build_object('id', p.id, 'title', p.title) AS data FROM tb_post AS p$tview$)",
+        "new_value": "SELECT tviews.pg_tviews_create_or_replace('tv_post', $tview$SELECT p.pk_post, p.id, p.title, p.body, jsonb_build_object('id', p.id, 'title', p.title, 'body', p.body) AS data FROM tb_post AS p$tview$)",
+        "details": {
+          "kind": "tview",
+          "name": "tv_post",
+          "keyword": "TABLE"
+        }
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "tv_post",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ix_tv_post_body",
+          "columns": [
+            "body"
+          ],
+          "unique": false,
+          "relation_kind": "tview"
+        }
+      },
+      {
+        "type": "DROP_INDEX",
+        "table": "tv_post",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ix_tv_post_title",
+          "columns": [
+            "title"
+          ],
+          "unique": false,
+          "relation_kind": "tview"
+        }
+      },
+      {
+        "type": "DROP_INDEX",
+        "table": "tv_post",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ix_tv_post_lookup",
+          "columns": [
+            "title"
+          ],
+          "unique": false,
+          "relation_kind": "tview"
+        }
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "tv_post",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "ix_tv_post_lookup",
+          "columns": [
+            "id",
+            "title"
+          ],
+          "unique": false,
+          "relation_kind": "tview"
+        }
+      }
+    ],
+    "ok": true,
+    "command": "diff",
+    "parser": {
+      "pglast": "8.5",
+      "pg_major": 18
+    }
+  }
+}

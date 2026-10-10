@@ -85,9 +85,10 @@ warning (also in `--format json`) naming the index and the table. The down drops
 A table either side declares is that side's whole, so its indexes come and go with it; an index on
 a relation only the current side declares is the contradiction `DIFFER_406` refuses.
 
-An index on a TVIEW is built by `confiture build` and kept by pg_tviews across a rebuild, but
-`migrate diff` does not carry it and drift does not check it yet: each one is a `DIFFER_407`
-warning naming the index and the TVIEW. Write a change to one in a migration by hand.
+An index on a TVIEW is the TVIEW's, as a matview's is: `migrate diff` carries it and drift
+checks it. An index the tree writes under the name of one of pg_tviews' own indexes on that TVIEW,
+and that is another index, is refused with `DIFFER_410`: pg_tviews skipped it (see
+[pg_tviews](pg-tviews.md)).
 
 The round trip closes with `drift`: `confiture drift --schema <dir>` accepts a directory of `.sql`
 files that is a whole schema — the composed tree — and reports nothing once the migration is

@@ -329,6 +329,43 @@ class TestTViewDDL:
         assert positional[1] == self._query(select)
 
 
+TV = "CREATE TABLE tv_user AS SELECT pk_user, name FROM tb_user;\n"
+TV_NAME = "CREATE INDEX ix_tv_user_name ON tv_user (name);\n"
+TV_UNIQUE = "CREATE UNIQUE INDEX ux_tv_user ON tv_user (pk_user);\n"
+
+
+class TestTViewIndexes:
+    """A TVIEW is created with its indexes, after ``pg_tviews_create_or_replace()``."""
+
+    def test_add_tview_creates_its_indexes_after_it(self):
+        change = change_of("", TV + TV_UNIQUE + TV_NAME, "ADD_TVIEW")
+        sql = DifferSQLGenerator().generate_up(change)
+        assert _kinds(sql) == ["SelectStmt", "IndexStmt", "IndexStmt"]
+        indexes = _indexes_of(sql)
+        assert [i.idxname for i in indexes] == ["ux_tv_user", "ix_tv_user_name"]
+        assert all(i.relation.relname == "tv_user" for i in indexes)
+        assert all(not i.concurrent and i.if_not_exists for i in indexes)
+        assert _kinds(DifferSQLGenerator().generate_down(change)) == ["SelectStmt"]
+
+    def test_drop_tview_down_recreates_its_indexes(self):
+        change = change_of(TV + TV_NAME, "", "DROP_TVIEW")
+        assert _kinds(DifferSQLGenerator().generate_up(change)) == ["SelectStmt"]
+        sql = DifferSQLGenerator().generate_down(change)
+        assert _kinds(sql) == ["SelectStmt", "IndexStmt"]
+        assert [i.idxname for i in _indexes_of(sql)] == ["ix_tv_user_name"]
+
+    def test_a_tview_index_change_is_concurrent(self):
+        change = change_of(TV, TV + TV_NAME, "ADD_INDEX")
+        (index,) = _indexes_of(DifferSQLGenerator().generate_up(change))
+        assert (index.idxname, index.concurrent, index.if_not_exists) == (
+            "ix_tv_user_name",
+            True,
+            True,
+        )
+        (drop,) = _statements(DifferSQLGenerator().generate_down(change))
+        assert (type(drop).__name__, drop.concurrent) == ("DropStmt", True)
+
+
 class TestTheMigrationIsNotShort:
     """A change the differ reports and the generator cannot render is named."""
 

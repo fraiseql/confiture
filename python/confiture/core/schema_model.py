@@ -134,9 +134,9 @@ class ObjectRef:
         return self.display
 
 
-#: The kind of relation an index is on, as the model keys it: a table, or a
-#: materialized view (``View.indexes``).
-RelationKind = Literal["table", "matview"]
+#: The kind of relation an index is on, as the model keys it: a table, a
+#: materialized view (``View.indexes``) or a pg_tviews TVIEW (``TView.indexes``).
+RelationKind = Literal["table", "matview", "tview"]
 
 
 def ref_for(kind: str, schema: str | None, name: str) -> ObjectRef:

@@ -260,19 +260,6 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         ),
     },
     {
-        "code": "DIFFER_407",
-        "message_template": (
-            "Index '{index}' is on TVIEW {tview}: migrate diff does not carry it and drift "
-            "does not check it yet"
-        ),
-        "severity": "warning",
-        "exit_code": 0,
-        "resolution_hint": (
-            "Keep it in the schema (the build creates it, and pg_tviews keeps it across a "
-            "rebuild); write any change to it in a migration by hand"
-        ),
-    },
-    {
         "code": "DIFFER_408",
         "message_template": (
             "Index '{index}' is written before {table}, the relation it is on: the current "
@@ -296,6 +283,20 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": (
             "Generate from a side read from a tree (Side.of) or a database (database_side); "
             "a stated or slot side is compared, never generated from"
+        ),
+    },
+    {
+        "code": "DIFFER_410",
+        "message_template": (
+            "Index '{index}' on TVIEW {tview} has the name of an index pg_tviews created on "
+            "it, and is another index: pg_tviews skipped its CREATE INDEX, so the database "
+            "does not hold it"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Rename the index in the schema: pg_tviews reserves the names of its own indexes "
+            "on a TVIEW (tviews.registry.managed_indexes)"
         ),
     },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========

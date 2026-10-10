@@ -153,3 +153,29 @@ def test_a_matview_index_pair_stays_drop_then_add() -> None:
         ("DROP_INDEX", "mv"),
         ("ADD_INDEX", "mv"),
     ]
+
+
+def test_a_tview_index_added_runs_after_its_tview_is_replaced() -> None:
+    """A replace may add the column the index names, and pg_tviews refuses a rebuild
+    over an invalid index: every drop runs before the replace, every add after it."""
+    base = "CREATE TABLE t (a int, b int);\n"
+    old = (
+        base + "CREATE TABLE tv_a AS SELECT a FROM t;\n"
+        "CREATE TABLE tv_b AS SELECT a FROM t;\n"
+        "CREATE INDEX ix_tv_a ON tv_a (a);\nCREATE INDEX ix_tv_b ON tv_b (a);\n"
+    )
+    new = (
+        base + "CREATE TABLE tv_a AS SELECT a, b FROM t;\n"
+        "CREATE TABLE tv_b AS SELECT a FROM t;\n"
+        "CREATE INDEX ix_tv_a ON tv_a (b);\n"
+    )
+    changes = apply_order(SchemaDiffer().compare(old, new).changes)
+    shapes = [
+        (type(c).__name__, getattr(c, "relation_kind", c.ref.kind), c.ref.name) for c in changes
+    ]
+    assert shapes == [
+        ("IndexDropped", "tview", "tv_a"),
+        ("IndexDropped", "tview", "tv_b"),
+        ("ObjectReplaced", "tview", "tv_a"),
+        ("IndexAdded", "tview", "tv_a"),
+    ]

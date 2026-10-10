@@ -58,6 +58,7 @@ DISAGREEMENTS: dict[str, str] = {
         "should declare is still open"
     ),
     "ObjectAdded[matview, indexed]": "as a table created with its indexes",
+    "ObjectAdded[tview, indexed]": "as a table created with its indexes",
     "ObjectAdded[tview]": (
         "a pg_tviews TVIEW is written tviews.pg_tviews_create_or_replace() so the "
         "migration re-applies; the call reads as a replacement, the change is an addition"
@@ -103,6 +104,10 @@ _DEFINITIONS: dict[str, tuple[str, str]] = {
     "table_indexed": (
         "CREATE TABLE ti (a int); CREATE INDEX ix_ti ON ti (a);",
         "CREATE TABLE ti (a int); CREATE INDEX ix_ti ON ti (a DESC);",
+    ),
+    "tview_indexed": (
+        "CREATE TABLE tv_i AS SELECT a FROM t; CREATE INDEX ix_tv_i ON tv_i (a);",
+        "CREATE TABLE tv_i AS SELECT a, a + 1 AS b FROM t; CREATE INDEX ix_tv_i ON tv_i (b);",
     ),
     "matview_indexed": (
         "CREATE MATERIALIZED VIEW mi AS SELECT 1 AS one; CREATE INDEX ix_mi ON mi (one);",
