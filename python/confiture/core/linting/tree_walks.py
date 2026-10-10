@@ -18,21 +18,13 @@ by row is a correlated ``a.path @> n.path``, which ``treekey.register_ancestry()
 generates.
 """
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import pglast.parser
-
-from confiture.core.ddl_walk import constant_text, tview_calls, tview_query_tree, walk_nodes
-from confiture.core.linting.inventory import (
-    Inventory,
-    SchemaObject,
-    group_definitions,
-    kept,
-    object_from_statement,
-    split_names,
-)
+from confiture.core.ddl_walk import constant_text, walk_nodes
+from confiture.core.linting.inventory import Inventory, SchemaObject, split_names
+from confiture.core.linting.tview_reads import Query, ReadGraph
 from confiture.core.schema_identity import identifier_identity
 from confiture.core.schema_model import RelationName
 from confiture.core.sql_lexer import ParsedFile, name_parts
@@ -105,11 +97,14 @@ def tree_walks(files: Sequence[ParsedFile], inventory: Inventory) -> TreeWalks:
                     trees.append(tree)
     if not trees:
         return TreeWalks([], unread)
-    built = {(obj.file, obj.offset) for obj in map(kept, group_definitions(inventory.objects))}
+    graph = ReadGraph.read(files, inventory)
     findings: list[TreeWalkFinding] = []
-    for parsed in files:
-        for obj, root, line_at in _definitions(parsed, inventory, built, unread):
-            findings.extend(_walks(parsed, obj, root, line_at, trees))
+    for holder in graph.holders.values():
+        if holder.obj.kind not in ("view", "matview", "tview"):
+            continue
+        for query in holder.queries:
+            findings.extend(_walks(holder.obj, query, trees))
+    unread.extend(graph.unread(graph.targets, routines=False))
     return TreeWalks(
         sorted(findings, key=lambda f: (f.file or "", f.line, f.code, f.object_name)),
         sorted(unread),
@@ -155,54 +150,9 @@ def _tree(arguments: dict[str, str | None]) -> Tree | None:
     return Tree(RelationName(schema, identifier_identity(parts[-1])), parent_fk, path)
 
 
-_LineAt = Callable[[int | None], int]
-
-
-def _definitions(
-    parsed: ParsedFile,
-    inventory: Inventory,
-    built: set[tuple[str | None, int]],
-    unread: list[str],
-) -> Iterator[tuple[SchemaObject, Any, _LineAt]]:
-    """Each view, materialized view and TVIEW the build keeps: its query, and how to place a node."""
-    text = parsed.text
-    for raw in parsed.statements:
-        obj = object_from_statement(text, raw)
-        if obj is not None and obj.kind in ("view", "matview", "tview"):
-            if (parsed.label, parsed.base + obj.offset) in built:
-                obj.file = parsed.label
-                yield obj, raw.stmt.query, lambda at: _line(text, at)
-            continue
-        if obj is not None:
-            continue
-        for call in tview_calls(raw.stmt):
-            if call.action == "drop" or call.name is None or call.written is None:
-                continue
-            tview = next(
-                (
-                    o
-                    for o in inventory.find_all(("tview",), call.schema, call.name)
-                    if o.file == parsed.label
-                ),
-                None,
-            )
-            if tview is None:
-                continue
-            written = call.written
-            try:
-                root = tview_query_tree(written)
-            except pglast.parser.ParseError, IndexError:
-                # Not read, so not judged: tree_walks() names it as unread.
-                unread.append(f"{tview.qualified} (its query does not parse)")
-                continue
-            first = _line(text, call.written_at)
-            yield tview, root, lambda at, w=written, f=first: f + w.count("\n", 0, at or 0)
-
-
-def _walks(
-    parsed: ParsedFile, obj: SchemaObject, root: Any, line_at: _LineAt, trees: list[Tree]
-) -> Iterator[TreeWalkFinding]:
-    nodes = list(walk_nodes(root))
+def _walks(obj: SchemaObject, query: Query, trees: list[Tree]) -> Iterator[TreeWalkFinding]:
+    nodes = list(walk_nodes(query.root))
+    line_at = query.line_at
     local = {n.ctename for n in nodes if type(n).__name__ == "CommonTableExpr"}
     read = {
         RelationName(n.schemaname, n.relname).identity
@@ -216,7 +166,7 @@ def _walks(
         if recursive is not None:
             yield _finding(
                 "treekey_001",
-                parsed,
+                query,
                 obj,
                 tree,
                 line_at(recursive),
@@ -229,7 +179,7 @@ def _walks(
             location, function = unnest
             yield _finding(
                 "treekey_002",
-                parsed,
+                query,
                 obj,
                 tree,
                 line_at(location),
@@ -276,7 +226,7 @@ def _names_column(root: Any, column: str) -> int | None:
 
 
 def _finding(
-    code: str, parsed: ParsedFile, obj: SchemaObject, tree: Tree, line: int, says: str
+    code: str, query: Query, obj: SchemaObject, tree: Tree, line: int, says: str
 ) -> TreeWalkFinding:
     return TreeWalkFinding(
         code=code,
@@ -284,12 +234,6 @@ def _finding(
         object_name=f"{obj.qualified}:{tree.relation.qualified}",
         message=f"{obj.qualified} {says}",
         fix=_FIX.format(tree=tree.relation.qualified, path=tree.path),
-        file=parsed.label,
+        file=query.file,
         line=line,
     )
-
-
-def _line(text: str, location: int | None) -> int:
-    if location is None or location < 0:
-        return 1
-    return text.count("\n", 0, min(location, len(text))) + 1
