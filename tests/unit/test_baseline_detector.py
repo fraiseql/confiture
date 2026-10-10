@@ -69,3 +69,21 @@ def test_a_snapshot_that_cannot_be_read_is_reported_not_dropped(tmp_path: Path) 
 
     assert [s.version for s in found] == ["001"]
     assert [path.name for path, _reason in detector.unreadable] == ["002_broken.sql"]
+
+
+def test_a_matview_index_counts_as_one_fact(monkeypatch, tmp_path: Path) -> None:
+    """One matview index apart is one change among facts that count matview indexes."""
+    from dataclasses import replace
+
+    from confiture.core import baseline_detector
+    from confiture.core.baseline_detector import Snapshot
+    from confiture.core.differ import stated_side
+
+    tree = TREE + "CREATE MATERIALIZED VIEW mv AS SELECT id FROM tb_x;"
+    live = replace(read_text(tree).catalogued, source="catalog")
+    snapshot = read_text(tree + "CREATE UNIQUE INDEX ux_mv ON mv (id);").catalogued
+    monkeypatch.setattr(baseline_detector, "database_side", lambda *_, **__: stated_side(live))
+    # tb_x, id, name and its primary key; mv and ux_mv
+    facts = 6
+    found = BaselineDetector(tmp_path).similarity(None, Snapshot("1", "x", snapshot))  # ty: ignore[invalid-argument-type]
+    assert found == 1 - 1 / facts

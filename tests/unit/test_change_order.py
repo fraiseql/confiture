@@ -139,3 +139,17 @@ def test_a_tables_indexes_are_detached_before_its_columns_change_and_attached_af
         "ADD_COLUMN",
         "ADD_INDEX",
     ]
+
+
+def test_a_matview_index_pair_stays_drop_then_add() -> None:
+    """Each rebuilt index keeps its drop before its add, whatever relation it is on."""
+    base = "CREATE TABLE t (a int, b int);\nCREATE MATERIALIZED VIEW mv AS SELECT a, b FROM t;\n"
+    old = base + "CREATE INDEX ix_t ON t (a);\nCREATE INDEX ix_mv ON mv (a);\n"
+    new = base + "CREATE INDEX ix_t ON t (b);\nCREATE INDEX ix_mv ON mv (b);\n"
+    changes = apply_order(SchemaDiffer().compare(old, new).changes)
+    assert [(c.to_wire().type, c.to_wire().table) for c in changes] == [
+        ("DROP_INDEX", "t"),
+        ("ADD_INDEX", "t"),
+        ("DROP_INDEX", "mv"),
+        ("ADD_INDEX", "mv"),
+    ]

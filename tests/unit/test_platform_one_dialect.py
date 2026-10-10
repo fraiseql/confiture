@@ -192,6 +192,15 @@ def test_a_diffs_references_are_the_models_keys() -> None:
     assert [c for c in changes if c.ref not in keys] == []
 
 
+def test_a_matview_index_change_names_the_matview() -> None:
+    old = "CREATE TABLE t (id INT);\nCREATE MATERIALIZED VIEW mv AS SELECT id FROM t;\n"
+    new = old + "CREATE UNIQUE INDEX ux_mv ON mv (id);\n"
+    after = platform.parse_schema(new)
+    changes = [c for c in platform.diff(old, new).changes if isinstance(c, platform.IndexAdded)]
+    assert changes
+    assert [c for c in changes if c.ref not in after.views] == []
+
+
 def test_validate_seeds_takes_seeds_and_database(tmp_path: Path) -> None:
     seeds, schema = tmp_path / "seeds", tmp_path / "schema"
     seeds.mkdir()

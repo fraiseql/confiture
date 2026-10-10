@@ -33,6 +33,7 @@ from confiture.core.schema_model import (
     EnumType,
     Index,
     ObjectRef,
+    RelationKind,
     RelationName,
     Sequence,
     Table,
@@ -252,9 +253,10 @@ class _OfTable(_Change):
 class _OnTable(_Change):
     """A change to what a table holds: a column, an index or a constraint.
 
-    ``table`` is the table, schema and name apart; :attr:`ref` is the key the model holds the
-    table under, since a column, an index and a constraint are keyed by nothing
-    of their own.
+    ``table`` is the relation, schema and name apart; :attr:`ref` is the key the
+    model holds it under, since a column, an index and a constraint are keyed by
+    nothing of their own. An index may be on a materialized view instead, which
+    its change says (``relation_kind``).
     """
 
     __slots__ = ()
@@ -263,7 +265,7 @@ class _OnTable(_Change):
 
     @property
     def ref(self) -> ObjectRef:
-        """The key of the table the change is on."""
+        """The key of the table the change is on: a column and a constraint are a table's."""
         return self.table.ref()
 
 
@@ -517,12 +519,38 @@ def _index_detail(index: Index) -> dict[str, Any]:
     return {"name": index.name, "columns": list(index.columns), "unique": index.unique}
 
 
-@dataclass(frozen=True)
-class IndexAdded(_OnTable):
-    """An index only the new tree declares on a table both hold, or on one neither declares.
+class _OnIndexed(_OnTable):
+    """A change to one index, on a table or a materialized view.
 
-    ``table_declared`` is false for an index on a table neither tree declares
-    (#679): someone else's table, which the migration assumes exists.
+    ``relation_kind`` says which the relation is, so :attr:`ref` is the key the
+    model holds it under. An index on a relation neither tree declares (#679)
+    keeps ``"table"``: nothing says what that relation is.
+    """
+
+    __slots__ = ()
+
+    index: Index
+    relation_kind: RelationKind
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The key of the table or materialized view the index is on."""
+        return self.table.ref(self.relation_kind)
+
+    def _wire_fields(self) -> dict[str, Any]:
+        details = _index_detail(self.index)
+        if self.relation_kind != "table":
+            details["relation_kind"] = self.relation_kind
+        return {"table": self.table.qualified, "details": details}
+
+
+@dataclass(frozen=True)
+class IndexAdded(_OnIndexed):
+    """An index only the new side holds on a relation both hold, or on one neither declares.
+
+    ``relation_kind`` is ``"matview"`` for an index on a materialized view both
+    sides hold. ``table_declared`` is false for an index on a table neither tree
+    declares (#679): someone else's table, which the migration assumes exists.
     """
 
     WIRE: ClassVar[str] = "ADD_INDEX"
@@ -531,17 +559,16 @@ class IndexAdded(_OnTable):
     table: RelationName
     index: Index
     table_declared: bool = True
-
-    def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table.qualified, "details": _index_detail(self.index)}
+    relation_kind: RelationKind = "table"
 
 
 @dataclass(frozen=True)
-class IndexDropped(_OnTable):
-    """An index only the old tree declares on a table both hold, or on one neither declares.
+class IndexDropped(_OnIndexed):
+    """An index only the old side holds on a relation both hold, or on one neither declares.
 
-    ``table_declared`` is false for an index on a table neither tree declares
-    (#679): someone else's table, which the migration assumes exists.
+    ``relation_kind`` is ``"matview"`` for an index on a materialized view both
+    sides hold. ``table_declared`` is false for an index on a table neither tree
+    declares (#679): someone else's table, which the migration assumes exists.
     """
 
     WIRE: ClassVar[str] = "DROP_INDEX"
@@ -550,9 +577,7 @@ class IndexDropped(_OnTable):
     table: RelationName
     index: Index
     table_declared: bool = True
-
-    def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table.qualified, "details": _index_detail(self.index)}
+    relation_kind: RelationKind = "table"
 
 
 def _fk_wire(fk: Constraint) -> dict[str, Any]:
@@ -832,12 +857,17 @@ class _ObjectChange(_Change):
 
 @dataclass(frozen=True)
 class ObjectAdded(_ObjectChange):
-    """An object only the new tree defines."""
+    """An object only the new tree defines.
+
+    ``indexes`` are the ones a materialized view is created with, as a table's
+    travel on ``TableAdded``; ``()`` for every other kind.
+    """
 
     VERB: ClassVar[str] = "ADD"
 
     ref: ObjectRef
     obj: DDLObject
+    indexes: tuple[Index, ...] = ()
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
@@ -849,12 +879,17 @@ class ObjectAdded(_ObjectChange):
 
 @dataclass(frozen=True)
 class ObjectDropped(_ObjectChange):
-    """An object only the old tree defines."""
+    """An object only the old tree defines.
+
+    ``indexes`` are the ones a materialized view held, which its down creates
+    again with it; ``()`` for every other kind.
+    """
 
     VERB: ClassVar[str] = "DROP"
 
     ref: ObjectRef
     obj: DDLObject
+    indexes: tuple[Index, ...] = ()
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
@@ -870,7 +905,9 @@ class ObjectReplaced(_ObjectChange):
 
     For a view or a routine that is the entire change a migration has to carry,
     and it is invisible to a structural comparison because nothing about the
-    object's shape moved.
+    object's shape moved. A materialized view is dropped and created again, so
+    it carries its indexes: ``new_indexes`` are created after it, and its down
+    creates the old one with ``old_indexes``; both ``()`` for every other kind.
     """
 
     VERB: ClassVar[str] = "REPLACE"
@@ -878,6 +915,8 @@ class ObjectReplaced(_ObjectChange):
     ref: ObjectRef
     old: DDLObject
     new: DDLObject
+    old_indexes: tuple[Index, ...] = ()
+    new_indexes: tuple[Index, ...] = ()
 
     def _wire_fields(self) -> dict[str, Any]:
         return {

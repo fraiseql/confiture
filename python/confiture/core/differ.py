@@ -68,6 +68,7 @@ from confiture.core.schema_model import (
     Index,
     ObjectRef,
     Provenance,
+    RelationKind,
     RelationName,
     Routine,
     SchemaModel,
@@ -634,12 +635,43 @@ def _redefined(
             return False
         return parity_routine(old_routine, rules) != parity_routine(new_routine, rules)
     if section == "views":
-        return parity_view(old.views[ref], rules) != parity_view(new.views[ref], rules)
+        # A matview's indexes are compared as a table's are, not as its definition.
+        old_view, new_view = (
+            replace(old.views[ref], indexes=()),
+            replace(new.views[ref], indexes=()),
+        )
+        return parity_view(old_view, rules) != parity_view(new_view, rules)
     if section == "tviews":
         return _tview_redefined(old.tviews[ref], new.tviews[ref], policy)
     if section == "other_objects" and old.coverage.shared(new.coverage, section) == "definition":
         return before.definition != after.definition
     return False
+
+
+def _matview_indexes(model: SchemaModel, ref: ObjectRef) -> tuple[Index, ...]:
+    """The indexes a materialized view is created with: none backs a constraint.
+
+    A side may hold a matview's statement and no model entry for it (a slot side
+    compares one slot of a view alone), and then it carries none.
+    """
+    found = getattr(model.views.get(ref), "indexes", ())
+    return tuple(index for index in found if not index.backs_constraint)
+
+
+def _with_indexes(change: SchemaChange, old: SchemaModel, new: SchemaModel) -> SchemaChange:
+    """*change*, carrying the indexes of the materialized view it adds, drops or redefines."""
+    if not isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
+        return change
+    ref = change.ref
+    if ref.kind != "matview":
+        return change
+    if isinstance(change, ObjectAdded):
+        return replace(change, indexes=_matview_indexes(new, ref))
+    if isinstance(change, ObjectDropped):
+        return replace(change, indexes=_matview_indexes(old, ref))
+    return replace(
+        change, old_indexes=_matview_indexes(old, ref), new_indexes=_matview_indexes(new, ref)
+    )
 
 
 def _tview_redefined(old: TView, new: TView, policy: ComparisonPolicy) -> bool:
@@ -742,7 +774,9 @@ class SchemaDiffer:
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
         # Objects compared by definition: views, routines and the rest (#288).
         objects, unwritable = self._compare_objects(old, new, policy)
-        changes.extend(objects)
+        changes.extend(_with_indexes(change, old.model, new.model) for change in objects)
+        whole = {c.ref for c in objects if c.ref.kind == "matview"}
+        changes.extend(self._compare_matview_indexes(old.model, new.model, policy, whole))
         return SchemaDiff(
             changes=changes,
             warnings=[
@@ -804,7 +838,9 @@ class SchemaDiffer:
         """What changed inside one table: columns, indexes and every constraint kind."""
         return [
             *self._compare_table_columns(old_table, new_table, policy),
-            *self._compare_indexes(old_table, new_table, policy),
+            *self._compare_indexes(
+                old_table.indexes, new_table.indexes, old_table.relation, policy
+            ),
             *self._compare_foreign_keys(old_table, new_table, policy),
             *self._compare_check_constraints(old_table, new_table, policy),
             *self._compare_unique_constraints(old_table, new_table, policy),
@@ -1022,22 +1058,31 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
 
     def _compare_indexes(
-        self, old_table: Table, new_table: Table, policy: ComparisonPolicy
+        self,
+        old_indexes: tuple[Index, ...],
+        new_indexes: tuple[Index, ...],
+        relation: RelationName,
+        policy: ComparisonPolicy,
+        relation_kind: RelationKind = "table",
+        *,
+        table_declared: bool = True,
     ) -> list[SchemaChange]:
-        """Detect added / dropped indexes.
+        """Added, dropped and rebuilt indexes on one relation: the one index comparison.
 
         The variant carries the ``Index`` itself, not its name under a key two
         modules have to spell alike: a generator that misses the key takes its
         fallback and creates ``idx_{table}`` instead of the index the author
-        declared.
+        declared. *relation_kind* names what the relation is, and
+        *table_declared* is false for a table neither tree declares (#679).
         """
+        kind = {"relation_kind": relation_kind, "table_declared": table_declared}
         return self._compare_named_objects(
             author=policy.author,
-            old=parity_indexes(old_table.indexes, policy.rules, _names(new_table.indexes)),
-            new=parity_indexes(new_table.indexes, policy.rules, _names(old_table.indexes)),
-            added=IndexAdded,
-            dropped=IndexDropped,
-            table=old_table.relation,
+            old=parity_indexes(old_indexes, policy.rules, _names(new_indexes)),
+            new=parity_indexes(new_indexes, policy.rules, _names(old_indexes)),
+            added=partial(IndexAdded, **kind),
+            dropped=partial(IndexDropped, **kind),
+            table=relation,
             # The access method is part of what an index *is*: a btree and a hash
             # index on one column are two indexes.
             identity=("columns", "unique", "method"),
@@ -1058,17 +1103,37 @@ class SchemaDiffer:
         for ref in sorted(before_all.keys() | after_all.keys(), key=_object_sort_key):
             if any(_declares(side.model, ref) for side in (old, new)):
                 continue
-            before = before_all.get(ref, ())
-            after = after_all.get(ref, ())
+            before, after = before_all.get(ref, ()), after_all.get(ref, ())
+            relation = (after or before)[0].table
             changes.extend(
-                self._compare_named_objects(
-                    old=[(index, index) for index in before],
-                    new=[(index, index) for index in after],
-                    added=partial(IndexAdded, table_declared=False),
-                    dropped=partial(IndexDropped, table_declared=False),
-                    table=(after or before)[0].table,
-                    identity=("columns", "unique", "method"),
-                    differs=_rebuilt,
+                self._compare_indexes(before, after, relation, AUTHOR, table_declared=False)
+            )
+        return changes
+
+    def _compare_matview_indexes(
+        self,
+        old: SchemaModel,
+        new: SchemaModel,
+        policy: ComparisonPolicy,
+        whole: set[ObjectRef],
+    ) -> list[SchemaChange]:
+        """The indexes of each materialized view both sides hold, compared as a table's are.
+
+        A matview added, dropped or redefined is in *whole*: its change carries its
+        indexes, which are created with it, so none of them is a change of its own.
+        A side that did not read views says nothing about a matview's indexes.
+        """
+        if not old.coverage.shared(new.coverage, "views"):
+            return []
+        changes: list[SchemaChange] = []
+        for ref in sorted(old.views.keys() & new.views.keys(), key=_object_sort_key):
+            before, after = old.views[ref], new.views[ref]
+            if ref in whole or not (before.materialized and after.materialized):
+                continue
+            relation = RelationName(before.schema, before.name)
+            changes.extend(
+                self._compare_indexes(
+                    before.indexes, after.indexes, relation, policy, relation_kind="matview"
                 )
             )
         return changes

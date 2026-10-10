@@ -42,14 +42,20 @@ class Snapshot:
 
 
 def _facts(model: SchemaModel) -> int:
-    """How many things *model* says: each table, column, constraint and index, and each object."""
+    """How many things *model* says: each table, column, constraint and index, and each object.
+
+    A materialized view's indexes count as a table's do: each is compared, and
+    each one apart is a change.
+    """
     tables = sum(
         1 + len(t.columns) + len(t.constraints) + len(t.indexes) for t in model.tables.values()
     )
     routines = sum(len(found) for found in model.routines.values())
+    matview_indexes = sum(len(v.indexes) for v in model.views.values() if v.materialized)
     return (
         tables
         + routines
+        + matview_indexes
         + sum(
             len(section)
             for section in (

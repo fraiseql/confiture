@@ -501,7 +501,7 @@ constraint, and every one a server before 18 holds, is enforced.
 class Index
 ```
 
-An index on one table.
+An index on one table or materialized view.
 
 `columns` holds each key as written — a column name or a rendered
 expression. `method` is the access method; PostgreSQL's grammar fills in
@@ -516,8 +516,8 @@ for a key that writes none, and `()` when no key writes any.
 any index and which constrains only a unique one. `valid` is false for an
 index a failed `CREATE INDEX CONCURRENTLY` left behind (#689): it enforces
 and serves nothing, and `CREATE … IF NOT EXISTS` skips it. Only the catalog
-knows it; it is not what the index *is* (a matview compared by equality is
-not redefined by it), so the comparison reads it where it rebuilds one.
+knows it; it is not what the index *is*, so two indexes are paired without
+it, and the comparison reads it where it rebuilds one.
 
 | Field | Type | Default |
 |---|---|---|
@@ -608,7 +608,8 @@ A view or a materialized view.
 `definition` is the query as the reader holds it: the DDL's `SELECT`
 rendered, or `pg_get_viewdef`'s deparse — two spellings of one query, which
 is why a definition is compared through one deparser or not at all.
-`indexes` are a materialized view's; a view has none.
+`indexes` are a materialized view's; a view has none. They are compared as
+a table's are, never as part of the view's definition.
 
 | Field | Type | Default |
 |---|---|---|
@@ -1544,36 +1545,40 @@ migration writes nothing for it. `old` and `new` are each side's order.
 ### `IndexAdded`
 
 ```python
-class IndexAdded(_OnTable)
+class IndexAdded(_OnIndexed)
 ```
 
-An index only the new tree declares on a table both hold, or on one neither declares.
+An index only the new side holds on a relation both hold, or on one neither declares.
 
-`table_declared` is false for an index on a table neither tree declares
-(#679): someone else's table, which the migration assumes exists.
+`relation_kind` is `"matview"` for an index on a materialized view both
+sides hold. `table_declared` is false for an index on a table neither tree
+declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
 |---|---|---|
 | `table` | `RelationName` | required |
 | `index` | `Index` | required |
 | `table_declared` | `bool` | `True` |
+| `relation_kind` | `RelationKind` | `'table'` |
 
 ### `IndexDropped`
 
 ```python
-class IndexDropped(_OnTable)
+class IndexDropped(_OnIndexed)
 ```
 
-An index only the old tree declares on a table both hold, or on one neither declares.
+An index only the old side holds on a relation both hold, or on one neither declares.
 
-`table_declared` is false for an index on a table neither tree declares
-(#679): someone else's table, which the migration assumes exists.
+`relation_kind` is `"matview"` for an index on a materialized view both
+sides hold. `table_declared` is false for an index on a table neither tree
+declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
 |---|---|---|
 | `table` | `RelationName` | required |
 | `index` | `Index` | required |
 | `table_declared` | `bool` | `True` |
+| `relation_kind` | `RelationKind` | `'table'` |
 
 ### `ForeignKeyAdded`
 
@@ -1775,10 +1780,14 @@ class ObjectAdded(_ObjectChange)
 
 An object only the new tree defines.
 
+`indexes` are the ones a materialized view is created with, as a table's
+travel on `TableAdded`; `()` for every other kind.
+
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
 | `obj` | `DDLObject` | required |
+| `indexes` | `tuple[Index, ...]` | `()` |
 
 ### `ObjectDropped`
 
@@ -1788,10 +1797,14 @@ class ObjectDropped(_ObjectChange)
 
 An object only the old tree defines.
 
+`indexes` are the ones a materialized view held, which its down creates
+again with it; `()` for every other kind.
+
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
 | `obj` | `DDLObject` | required |
+| `indexes` | `tuple[Index, ...]` | `()` |
 
 ### `ObjectReplaced`
 
@@ -1803,13 +1816,17 @@ An object both trees define, whose canonical definition differs.
 
 For a view or a routine that is the entire change a migration has to carry,
 and it is invisible to a structural comparison because nothing about the
-object's shape moved.
+object's shape moved. A materialized view is dropped and created again, so
+it carries its indexes: `new_indexes` are created after it, and its down
+creates the old one with `old_indexes`; both `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
 | `old` | `DDLObject` | required |
 | `new` | `DDLObject` | required |
+| `old_indexes` | `tuple[Index, ...]` | `()` |
+| `new_indexes` | `tuple[Index, ...]` | `()` |
 
 ### `DDLObject`
 

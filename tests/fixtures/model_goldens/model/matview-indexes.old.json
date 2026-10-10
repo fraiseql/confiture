@@ -1,0 +1,166 @@
+{
+  "coverage": {
+    "enum_types": "definition",
+    "other_objects": "definition",
+    "routines": "definition",
+    "sequences": "definition",
+    "tables": "definition",
+    "triggers": "definition",
+    "tviews": "definition",
+    "views": "definition"
+  },
+  "enum_types": [],
+  "other_objects": [],
+  "routines": [],
+  "sequences": [],
+  "source": "author",
+  "tables": [
+    {
+      "columns": [
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/matview_indexes/old.sql",
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 5,
+          "name": "id",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/matview_indexes/old.sql",
+          "folded": "customer",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 6,
+          "name": "customer",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/matview_indexes/old.sql",
+          "folded": "total",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 7,
+          "name": "total",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "NUMERIC",
+          "type_key": "numeric",
+          "type_text": "numeric"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "enforced": true,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "nulls_not_distinct": false,
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "temporal": false,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_order",
+      "schema": null
+    }
+  ],
+  "triggers": [],
+  "tviews": [],
+  "views": [
+    {
+      "definition": "SELECT id, customer, total FROM tb_order WHERE total > 100",
+      "indexes": [
+        {
+          "backs_constraint": false,
+          "columns": [
+            "customer"
+          ],
+          "expressions": [
+            false
+          ],
+          "key_options": [],
+          "method": "btree",
+          "name": "ix_order_big",
+          "nulls_not_distinct": false,
+          "table": {
+            "name": "mv_order_big",
+            "schema": null
+          },
+          "unique": false,
+          "valid": true,
+          "where": null
+        }
+      ],
+      "materialized": true,
+      "name": "mv_order_big",
+      "schema": null
+    },
+    {
+      "definition": "SELECT customer, count(*) AS n FROM tb_order GROUP BY customer",
+      "indexes": [],
+      "materialized": true,
+      "name": "mv_order_count",
+      "schema": null
+    },
+    {
+      "definition": "SELECT customer, sum(total) AS total FROM tb_order GROUP BY customer",
+      "indexes": [
+        {
+          "backs_constraint": false,
+          "columns": [
+            "customer"
+          ],
+          "expressions": [
+            false
+          ],
+          "key_options": [],
+          "method": "btree",
+          "name": "ux_order_total_customer",
+          "nulls_not_distinct": false,
+          "table": {
+            "name": "mv_order_total",
+            "schema": null
+          },
+          "unique": true,
+          "valid": true,
+          "where": null
+        }
+      ],
+      "materialized": true,
+      "name": "mv_order_total",
+      "schema": null
+    }
+  ]
+}

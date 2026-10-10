@@ -255,3 +255,45 @@ class TestMigrationAccompanimentChecker:
             has_new_migrations=False,
         )
         assert "No DDL" in report.summary()
+
+
+def test_a_matview_index_added_without_a_migration_is_reported(tmp_path: Path) -> None:
+    """A materialized view's index is a schema change, as a table's is (#690)."""
+    import subprocess
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init")
+    git("config", "user.email", "test@test.com")
+    git("config", "user.name", "Test User")
+    config_dir = tmp_path / "db" / "environments"
+    config_dir.mkdir(parents=True)
+    (config_dir / "local.yaml").write_text(
+        "database_url: postgresql://localhost/test\n"
+        "include_dirs:\n"
+        "  - path: db/schema\n"
+        "    recursive: true\n"
+    )
+    schema_dir = tmp_path / "db" / "schema"
+    schema_dir.mkdir(parents=True)
+    matview = (
+        "CREATE TABLE tb_order (id INT, customer TEXT);\n"
+        "CREATE MATERIALIZED VIEW mv_order AS SELECT id, customer FROM tb_order;\n"
+    )
+    (schema_dir / "orders.sql").write_text(matview)
+    (tmp_path / "db" / "migrations").mkdir()
+    git("add", ".")
+    git("commit", "-m", "Initial")
+    (schema_dir / "orders.sql").write_text(
+        matview + "CREATE UNIQUE INDEX ux_mv_order ON mv_order (id);\n"
+    )
+    git("add", ".")
+    git("commit", "-m", "Index the matview")
+
+    report = MigrationAccompanimentChecker("local", tmp_path).check_accompaniment("HEAD~1", "HEAD")
+
+    assert not report.is_valid
+    assert [(c.type, c.table, (c.details or {}).get("name")) for c in report.ddl_changes] == [
+        ("ADD_INDEX", "mv_order", "ux_mv_order")
+    ]

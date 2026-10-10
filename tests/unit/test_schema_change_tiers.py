@@ -8,8 +8,9 @@ statement's ``-- confiture:tier`` directive) gives the statement the renderer wr
 for it — over every kind, and over each kind compared by definition that a
 migration is derived for.
 
-Three disagreements are declared — a type change's source, an addition written
-``CREATE OR REPLACE``, and an addition guarded in a ``DO`` block — and each entry is asserted to **still disagree**: the day the renderer or the classifier closes one, its entry
+Four disagreements are declared — a type change's source, an addition written
+``CREATE OR REPLACE``, an addition guarded in a ``DO`` block, and a relation
+created with its indexes, which are written plain — and each entry is asserted to **still disagree**: the day the renderer or the classifier closes one, its entry
 fails and goes. A change the renderer writes no statement for has nothing to
 agree with and is not compared.
 """
@@ -23,7 +24,13 @@ from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
-from confiture.core.schema_change import ObjectAdded, ObjectDropped, ObjectReplaced, SchemaChange
+from confiture.core.schema_change import (
+    ObjectAdded,
+    ObjectDropped,
+    ObjectReplaced,
+    SchemaChange,
+    TableAdded,
+)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "every_change"
 
@@ -45,6 +52,12 @@ DISAGREEMENTS: dict[str, str] = {
     ),
     "ObjectAdded[type]": "as a domain: a composite or range type's CREATE is guarded in DO",
     "ObjectAdded[policy]": "as a domain: a policy's CREATE is guarded in DO",
+    "TableAdded[indexed]": (
+        "declared additive; the written plain CREATE INDEX reads lock_risky, so "
+        "window_safe is false; which of the two a relation created with its indexes "
+        "should declare is still open"
+    ),
+    "ObjectAdded[matview, indexed]": "as a table created with its indexes",
     "ObjectAdded[tview]": (
         "a pg_tviews TVIEW is written tviews.pg_tviews_create_or_replace() so the "
         "migration re-applies; the call reads as a replacement, the change is an addition"
@@ -87,13 +100,29 @@ _DEFINITIONS: dict[str, tuple[str, str]] = {
         "CREATE TABLE tv_t AS SELECT a FROM t;",
         "CREATE TABLE tv_t AS SELECT a, a + 1 AS b FROM t;",
     ),
+    "table_indexed": (
+        "CREATE TABLE ti (a int); CREATE INDEX ix_ti ON ti (a);",
+        "CREATE TABLE ti (a int); CREATE INDEX ix_ti ON ti (a DESC);",
+    ),
+    "matview_indexed": (
+        "CREATE MATERIALIZED VIEW mi AS SELECT 1 AS one; CREATE INDEX ix_mi ON mi (one);",
+        "CREATE MATERIALIZED VIEW mi AS SELECT 2 AS one; CREATE INDEX ix_mi ON mi (one);",
+    ),
 }
 
 
 def _label(change: SchemaChange) -> str:
-    if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
-        return f"{type(change).__name__}[{change.ref.kind}]"
-    return type(change).__name__
+    """The variant, its kind, and ``indexed`` for a relation added with its indexes."""
+    indexed = isinstance(change, TableAdded | ObjectAdded) and bool(
+        change.table.indexes if isinstance(change, TableAdded) else change.indexes
+    )
+    kind = (
+        [change.ref.kind]
+        if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced)
+        else []
+    )
+    tags = [*kind, *(["indexed"] if indexed else [])]
+    return f"{type(change).__name__}[{', '.join(tags)}]" if tags else type(change).__name__
 
 
 def _changes() -> list[SchemaChange]:
@@ -163,3 +192,10 @@ def test_a_tview_is_tiered_as_a_materialized_view(old: str, new: str, tier: Risk
     """
     (change,) = SchemaDiffer().compare(_TABLE + old, _TABLE + new).changes
     assert tier_of(change) == tier
+
+
+def test_a_matview_index_is_tiered_as_a_concurrent_create_index() -> None:
+    mv = "CREATE TABLE t (a int);\nCREATE MATERIALIZED VIEW mv AS SELECT a FROM t;\n"
+    (change,) = SchemaDiffer().compare(mv, mv + "CREATE INDEX ix_mv ON mv (a);\n").changes
+    assert tier_of(change) == RiskTier.ADDITIVE
+    assert _statement_tier(change) == (True, RiskTier.ADDITIVE)

@@ -381,3 +381,39 @@ class TestGenerateSql:
     def test_refuses_an_empty_diff(self, tmp_path):
         with pytest.raises(ValueError, match="No changes"):
             MigrationGenerator(migrations_dir=tmp_path).generate_sql(SchemaDiff(changes=[]), "x")
+
+
+def test_a_file_with_a_matview_recreate_and_a_paired_matview_index_runs_in_autocommit(tmp_path):
+    """A paired matview index is built ``CONCURRENTLY``, which takes the whole file out of
+    a transaction, as a table's does; the recreate is followed by its own indexes."""
+    import pglast
+
+    from confiture.core.differ import SchemaDiffer
+    from confiture.models.sql_file_migration import _detect_transactional
+
+    base = "CREATE TABLE t (id int, n int);\n"
+    old = (
+        base + "CREATE MATERIALIZED VIEW mv_a AS SELECT id FROM t;\n"
+        "CREATE MATERIALIZED VIEW mv_b AS SELECT id FROM t;\n"
+        "CREATE INDEX ix_a ON mv_a (id);\n"
+    )
+    new = (
+        base + "CREATE MATERIALIZED VIEW mv_a AS SELECT id, n FROM t;\n"
+        "CREATE MATERIALIZED VIEW mv_b AS SELECT id FROM t;\n"
+        "CREATE INDEX ix_a ON mv_a (id);\nCREATE UNIQUE INDEX ux_b ON mv_b (id);\n"
+    )
+    up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+        SchemaDiffer().compare(old, new), name="matviews", version="20260101000000"
+    )
+    statements = [raw.stmt for raw in pglast.parse_sql(up.read_text())]
+    shapes = [
+        (type(s).__name__, getattr(s, "idxname", None), getattr(s, "concurrent", None))
+        for s in statements
+    ]
+    assert shapes == [
+        ("IndexStmt", "ux_b", True),
+        ("DropStmt", None, False),
+        ("CreateTableAsStmt", None, None),
+        ("IndexStmt", "ix_a", False),
+    ]
+    assert _detect_transactional(up) is False

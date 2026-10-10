@@ -150,6 +150,61 @@ class TestMaterializedViewDDL:
         assert "name" in sql
 
 
+MV = "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user, name FROM tb_user;\n"
+MV_OTHER = "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;\n"
+MV_UNIQUE = "CREATE UNIQUE INDEX ux_mv_user ON mv_user (pk_user);\n"
+MV_NAME = "CREATE INDEX ix_mv_user_name ON mv_user (name);\n"
+
+
+def _kinds(sql: str) -> list[str]:
+    return [type(stmt).__name__ for stmt in _statements(sql)]
+
+
+def _indexes_of(sql: str) -> list:
+    return [stmt for stmt in _statements(sql) if type(stmt).__name__ == "IndexStmt"]
+
+
+class TestMaterializedViewIndexes:
+    """A matview is created with its indexes, as a table is: plain and ``IF NOT EXISTS``."""
+
+    def test_add_matview_creates_its_indexes_after_it(self):
+        change = change_of("", MV + MV_UNIQUE + MV_NAME, "ADD_MATVIEW")
+        sql = DifferSQLGenerator().generate_up(change)
+        assert _kinds(sql) == ["CreateTableAsStmt", "IndexStmt", "IndexStmt"]
+        indexes = _indexes_of(sql)
+        assert [i.idxname for i in indexes] == ["ux_mv_user", "ix_mv_user_name"]
+        assert all(i.relation.relname == "mv_user" for i in indexes)
+        assert all(not i.concurrent and i.if_not_exists for i in indexes)
+        assert indexes[0].unique
+
+    def test_replace_matview_recreates_its_new_indexes(self):
+        change = change_of(MV + MV_NAME, MV_OTHER + MV_UNIQUE, "REPLACE_MATVIEW")
+        sql = DifferSQLGenerator().generate_up(change)
+        assert _kinds(sql) == ["DropStmt", "CreateTableAsStmt", "IndexStmt"]
+        (index,) = _indexes_of(sql)
+        assert index.idxname == "ux_mv_user"
+        assert not index.concurrent
+
+    def test_replace_matview_down_recreates_its_old_indexes(self):
+        change = change_of(MV + MV_NAME, MV_OTHER + MV_UNIQUE, "REPLACE_MATVIEW")
+        sql = DifferSQLGenerator().generate_down(change)
+        assert _kinds(sql) == ["DropStmt", "CreateTableAsStmt", "IndexStmt"]
+        assert [i.idxname for i in _indexes_of(sql)] == ["ix_mv_user_name"]
+
+    def test_drop_matview_down_recreates_its_indexes(self):
+        change = change_of(MV + MV_UNIQUE, "", "DROP_MATVIEW")
+        assert _kinds(DifferSQLGenerator().generate_up(change)) == ["DropStmt"]
+        sql = DifferSQLGenerator().generate_down(change)
+        assert _kinds(sql) == ["CreateTableAsStmt", "IndexStmt"]
+        assert [i.idxname for i in _indexes_of(sql)] == ["ux_mv_user"]
+
+    def test_matview_unnamed_index_is_named_as_missing(self):
+        change = change_of("", MV + "CREATE INDEX ON mv_user (name);\n", "ADD_MATVIEW")
+        sql = DifferSQLGenerator().generate_up(change)
+        assert _kinds(sql) == ["CreateTableAsStmt"]
+        assert "WARNING: Cannot generate the index on mv_user (name) without an index name" in sql
+
+
 class TestTViewDDL:
     """A pg_tviews TVIEW (#504) is written through pg_tviews' own functions.
 

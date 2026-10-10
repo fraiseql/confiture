@@ -82,6 +82,7 @@ from confiture.core.schema_model import (
     SchemaModel,
     Signature,
     Table,
+    View,
     ref_for,
     routine_ref,
     trigger_ref,
@@ -508,12 +509,21 @@ _CONSTRAINT_KEYWORDS = {
 }
 
 
-def _named(table: Table) -> str:
-    """``schema.table``: how a finding names a table."""
+def _named(table: Table | View) -> str:
+    """``schema.table``: how a finding names a table or a materialized view."""
     return f"{table.schema or DEFAULT_SCHEMA}.{table.name}"
 
 
-def _subject(table: Table, name: str | None = None) -> DriftSubject:
+def _matviews(model: SchemaModel) -> dict[tuple[str, str, str], View]:
+    """*model*'s materialized views, keyed as drift routes the index changes on them."""
+    return {
+        ("matview", view.schema or DEFAULT_SCHEMA, view.name): view
+        for view in model.views.values()
+        if view.materialized
+    }
+
+
+def _subject(table: Table | View, name: str | None = None) -> DriftSubject:
     """A finding on *table*, or on the column, index or constraint *name* in it."""
     return DriftSubject(table.schema or DEFAULT_SCHEMA, table.name, name)
 
@@ -551,6 +561,8 @@ _MATERIALISED = replace(MATERIALISED, author="new")
 #: one name is one ``constraint_mismatch``; an object's kind picks its pair of
 #: ``_OBJECT_DRIFT_TYPES``; a TVIEW redefined is one ``tview_option_mismatch`` per
 #: option the tree pins; the column order's severity is ``column_order_severity``.
+#: An index change on a materialized view is an index finding on it, as on a table;
+#: a matview redefined (its query, under the materialised fidelity) is none.
 def _missing_index_severity(change: SchemaChange) -> DriftSeverity:
     """A missing unique index is a missing constraint, valid or not; any other a warning (#689)."""
     assert isinstance(change, IndexAdded)
@@ -674,24 +686,34 @@ class _Findings:
         self, changes: list[SchemaChange], report: DriftReport, *, column_order: bool
     ) -> None:
         """Every finding *changes* is, appended to *report* with what it counted."""
-        on_table: dict[tuple[str, str], list[SchemaChange]] = defaultdict(list)
+        on_table: dict[tuple[str, str, str], list[SchemaChange]] = defaultdict(list)
         objects: list[SchemaChange] = []
         for change in changes:
             if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
                 objects.append(change)
             elif isinstance(change, TableAdded | TableDropped):
-                on_table[("", "")].append(change)
+                on_table[("", "", "")].append(change)
             elif isinstance(change, _ON_TABLE) and (
                 column_order or not isinstance(change, ColumnOrderChanged)
             ):
-                on_table[change.table.identity].append(change)
-        self._tables(on_table.pop(("", ""), []), report)
-        expected = {t.relation.identity: t for t in self.expected.tables.values()}
-        actual = {t.relation.identity: t for t in self.actual.tables.values()}
+                kind = getattr(change, "relation_kind", "table")
+                on_table[(kind, *change.table.identity)].append(change)
+        self._tables(on_table.pop(("", "", ""), []), report)
+        expected = {("table", *t.relation.identity): t for t in self.expected.tables.values()}
+        actual = {("table", *t.relation.identity): t for t in self.actual.tables.values()}
         for key in sorted(expected.keys() & actual.keys(), key=lambda k: _named(expected[k])):
             report.tables_checked += 1
             self._table(expected[key], actual[key], on_table.get(key, []), report)
+        self._matview_indexes(on_table, report)
         self._objects(objects, report)
+
+    def _matview_indexes(
+        self, on_relation: dict[tuple[str, str, str], list[SchemaChange]], report: DriftReport
+    ) -> None:
+        """The index findings on each materialized view both models hold, as a table's are."""
+        expected, actual = _matviews(self.expected), _matviews(self.actual)
+        for key in sorted(expected.keys() & actual.keys(), key=lambda k: _named(expected[k])):
+            self._indexes(expected[key], actual[key], on_relation.get(key, []), report)
 
     def _tables(self, changes: list[SchemaChange], report: DriftReport) -> None:
         added = sorted((c.table for c in changes if isinstance(c, TableAdded)), key=_named)
@@ -791,9 +813,15 @@ class _Findings:
                 )
 
     def _indexes(
-        self, expected: Table, actual: Table, changes: list[SchemaChange], report: DriftReport
+        self,
+        expected: Table | View,
+        actual: Table | View,
+        changes: list[SchemaChange],
+        report: DriftReport,
     ) -> None:
         """A declared index the database lacks, and an index it has that nothing declares.
+
+        On a table or a materialized view alike: the comparison is the engine's.
 
         An index PostgreSQL created to back a constraint is the constraint's, never
         extra; one the DDL left unnamed is the live one that says the same thing.
@@ -928,6 +956,11 @@ class _Findings:
         here" and "this project has lost all its views" are indistinguishable from
         an empty expected set. Only the kinds both sides read are compared:
         silence from a section nobody asked the catalogue about is not absence.
+
+        A matview whose indexes differ is not redefined: its index findings are
+        :meth:`_matview_indexes`'. Only a matview whose query also differs, under
+        the materialised fidelity, is one ``ObjectReplaced``, which is no finding
+        here, so its index differences go unreported with it.
         """
         sections = frozenset(
             section

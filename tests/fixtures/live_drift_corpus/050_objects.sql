@@ -6,6 +6,9 @@ CREATE VIEW core.v_widget AS
 CREATE MATERIALIZED VIEW core.mv_widget AS
     SELECT count(*) AS n FROM core.tb_widget;
 
+-- Issue #690: a matview's indexes are compared as a table's are.
+CREATE UNIQUE INDEX ux_mv_widget_n ON core.mv_widget (n);
+
 CREATE FUNCTION core.fn_touch() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 BEGIN
