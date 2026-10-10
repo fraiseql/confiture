@@ -195,3 +195,23 @@ class TestAnAddedTableCarriesItsIndexes:
             .generate_up(change)
             .endswith("-- WARNING: Cannot generate the index on t (a) without an index name\n")
         )
+
+
+def test_a_paired_matview_index_is_created_concurrently() -> None:
+    """A matview both sides hold is in use: its index is built and dropped concurrently."""
+    import pglast
+
+    mv = "CREATE TABLE t (id int);\nCREATE MATERIALIZED VIEW app.mv AS SELECT id FROM t;\n"
+    unique = "CREATE UNIQUE INDEX ux_mv ON app.mv (id);\n"
+    (added,) = SchemaDiffer().compare(mv, mv + unique).changes
+    assert isinstance(added, IndexAdded)
+    assert added.relation_kind == "matview"
+    (create,) = [raw.stmt for raw in pglast.parse_sql(DifferSQLGenerator().generate_up(added))]
+    assert create.concurrent
+    assert create.if_not_exists
+    assert (create.relation.schemaname, create.relation.relname) == ("app", "mv")
+    (dropped,) = SchemaDiffer().compare(mv + unique, mv).changes
+    (drop,) = [raw.stmt for raw in pglast.parse_sql(DifferSQLGenerator().generate_up(dropped))]
+    assert drop.concurrent
+    assert drop.missing_ok
+    assert [n.sval for n in drop.objects[0]] == ["app", "ux_mv"]
