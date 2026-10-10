@@ -513,7 +513,11 @@ never *extra* to it; only the catalog knows it. `key_options` runs alongside
 operator class and ordering (`gin_trgm_ops`, `DESC NULLS LAST`), `""`
 for a key that writes none, and `()` when no key writes any.
 `nulls_not_distinct` is its `NULLS NOT DISTINCT`, which PostgreSQL records on
-any index and which constrains only a unique one.
+any index and which constrains only a unique one. `valid` is false for an
+index a failed `CREATE INDEX CONCURRENTLY` left behind (#689): it enforces
+and serves nothing, and `CREATE … IF NOT EXISTS` skips it. Only the catalog
+knows it; it is not what the index *is* (a matview compared by equality is
+not redefined by it), so the comparison reads it where it rebuilds one.
 
 | Field | Type | Default |
 |---|---|---|
@@ -527,6 +531,7 @@ any index and which constrains only a unique one.
 | `key_options` | `tuple[str, ...]` | `()` |
 | `expressions` | `tuple[bool, ...] \| None` | `None` |
 | `nulls_not_distinct` | `bool` | `False` |
+| `valid` | `bool` | `True` |
 
 ### `EnumType`
 

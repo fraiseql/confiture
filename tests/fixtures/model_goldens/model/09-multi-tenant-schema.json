@@ -413,6 +413,7 @@
             "schema": "app"
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],

@@ -589,6 +589,7 @@
             "schema": null
           },
           "unique": false,
+          "valid": true,
           "where": null
         }
       ],
