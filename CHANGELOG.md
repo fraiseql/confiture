@@ -79,6 +79,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An index on a TVIEW is a `DIFFER_407` warning** (exit 0) in `migrate diff`'s `warnings[]`,
   naming the index and the TVIEW: the model holds no TVIEW index yet, so neither the diff nor drift
   sees it, and it was dropped from the comparison without a word.
+- **`VALIDATE CONSTRAINT` is classified by preflight** (#684). The replica classifier read it as
+  an unknown `ALTER TABLE` subcommand (`PFLIGHT_REPLICA_UNCLASSIFIED`) and the change set as an
+  untiered entry, so every migration `migrate diff --generate` writes for a named foreign key
+  (`NOT VALID`, then `VALIDATE CONSTRAINT`) read `window_safe: false`. It is now replica-safe and
+  the change-set kind `validate_constraint`, tier `reversible` — a validation scans under `SHARE
+  UPDATE EXCLUSIVE`, changes no row and breaks no reader. ⚠️ More permissive: a deploy gate on
+  `window_safe` passes such a migration where it refused it.
 
 ## [1.34.0] - 2026-10-09
 

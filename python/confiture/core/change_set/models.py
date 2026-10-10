@@ -130,6 +130,8 @@ _TIER_BY_KIND: Final[dict[str, RiskTier | None]] = {
     "grant": RiskTier.REVERSIBLE,
     "revoke": RiskTier.REVERSIBLE,
     "comment": RiskTier.REVERSIBLE,
+    # validating a NOT VALID constraint fails or holds; it changes no row or reader
+    "validate_constraint": RiskTier.REVERSIBLE,
     # lock_risky — semantically safe, but takes a lock that can stall a hot table
     "set_not_null": RiskTier.LOCK_RISKY,
     "cluster": RiskTier.LOCK_RISKY,

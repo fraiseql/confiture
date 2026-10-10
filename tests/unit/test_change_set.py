@@ -45,6 +45,7 @@ _TAXONOMY = [
     ("GRANT SELECT ON tb_z TO r;", "grant", RiskTier.REVERSIBLE),
     ("REVOKE SELECT ON tb_z FROM r;", "revoke", RiskTier.REVERSIBLE),
     ("COMMENT ON TABLE tb_z IS 'x';", "comment", RiskTier.REVERSIBLE),
+    ("ALTER TABLE t VALIDATE CONSTRAINT fk;", "validate_constraint", RiskTier.REVERSIBLE),
     # lock_risky: semantically safe, but takes a lock that can stall a hot table
     ("CREATE INDEX idx ON tb_order (placed_at);", "create_index", RiskTier.LOCK_RISKY),
     ("ALTER TABLE t ADD COLUMN c text NOT NULL DEFAULT '';", "add_column", RiskTier.LOCK_RISKY),
