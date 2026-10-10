@@ -438,3 +438,27 @@ def test_a_changed_table_policy_is_a_change() -> None:
         platform.diff(TABLE_POLICIES, TABLE_POLICIES.replace('"warn"', '"full_refresh"')).changes
         != []
     )
+
+
+@pytest.mark.parametrize(
+    "create",
+    [
+        f"CREATE TABLE app.tv_post AS {SELECT};\n",
+        f"SELECT tviews.pg_tviews_create_or_replace('app.tv_post', $q${SELECT}$q$);\n",
+    ],
+    ids=["create-table-as", "create-or-replace"],
+)
+def test_an_index_written_on_a_tview_is_the_tview_s(create: str) -> None:
+    """Every index the tree writes on a TVIEW it declares, in the order written."""
+    model = read_text(
+        f"{TABLES}{create}"
+        "CREATE INDEX ix_tv_post_id ON app.tv_post (id);\n"
+        "CREATE UNIQUE INDEX ix_tv_post_pk ON app.tv_post (pk_post) WHERE id IS NOT NULL;\n"
+    ).model
+
+    tview = model.tviews[ref_for("tview", "app", "tv_post")]
+    assert [(i.name, i.columns, i.unique) for i in tview.indexes or ()] == [
+        ("ix_tv_post_id", ("id",), False),
+        ("ix_tv_post_pk", ("pk_post",), True),
+    ]
+    assert {i.table.identity for i in tview.indexes or ()} == {("app", "tv_post")}

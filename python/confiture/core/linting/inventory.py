@@ -1586,6 +1586,17 @@ def _model_view(obj: SchemaObject, view: View) -> View:
     )
 
 
+def _model_tview(obj: SchemaObject, tview: TView) -> TView:
+    """A TVIEW with every index the tree writes on it, as a matview holds its own."""
+    relation = RelationName(obj.folded_schema, obj.folded_name)
+    return replace(
+        tview,
+        name=obj.folded_name,
+        schema=obj.folded_schema,
+        indexes=tuple(replace(ix, table=relation) for ix in obj.indexes),
+    )
+
+
 def kept(group: list[SchemaObject]) -> SchemaObject:
     """The definition of one object a build keeps (``duplicates.wins``)."""
     # Reason: import cycle (duplicates reads SchemaObject from this module)
@@ -1624,7 +1635,7 @@ def schema_model(inventory: Inventory) -> SchemaModel:
             view = _model_view(obj, obj.view)
             views[view_ref(view)] = view
         elif obj.tview is not None:
-            tview = replace(obj.tview, name=obj.folded_name, schema=obj.folded_schema)
+            tview = _model_tview(obj, obj.tview)
             tviews[tview_ref(tview)] = tview
     return SchemaModel(
         tables=tables,
