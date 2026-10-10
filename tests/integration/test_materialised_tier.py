@@ -22,6 +22,7 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.core.drift import DriftType, SchemaDriftDetector
+from confiture.exceptions import DifferError
 
 runner = CliRunner()
 
@@ -176,3 +177,36 @@ def test_an_unqualified_name_lands_in_the_default_schema_on_the_scratch_server(
 
     assert report.drift_items == []
     assert report.tables_checked == 1
+
+
+def test_a_fragment_is_refused_before_it_is_built(
+    test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    """An index on a relation the tree does not declare is ``DIFFER_406``, not a build error."""
+    url = _built(fresh_database_factory, "CREATE TABLE tv_product (id int, data jsonb);")
+    fragment = tmp_path / "fragment.sql"
+    fragment.write_text("CREATE INDEX ix_tv_product_id ON tv_product (id);")
+
+    result = runner.invoke(
+        app,
+        ["migrate", "diff", "--from", "db", "--to", str(fragment),
+         "--config", str(_config(tmp_path, url)), "--format", "json",
+         "--scratch-url", test_db_url],
+    )  # fmt: skip
+
+    assert result.exit_code == 5, result.output
+    assert json.loads(result.stdout)["error"]["code"] == "DIFFER_406"
+
+
+@pytest.mark.parametrize("scratch", [True, False])
+def test_drift_refuses_a_fragment_too(
+    scratch: bool, test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    url = _built(fresh_database_factory, "CREATE TABLE tv_product (id int, data jsonb);")
+    fragment = tmp_path / "fragment.sql"
+    fragment.write_text("CREATE INDEX ix_tv_product_id ON tv_product (id);")
+
+    with pytest.raises(DifferError) as refused:
+        _drift(url, fragment, test_db_url if scratch else None)
+
+    assert refused.value.error_code == "DIFFER_406"

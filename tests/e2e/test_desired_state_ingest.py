@@ -67,7 +67,8 @@ def test_dash_reads_the_artifact_from_stdin(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["source"] == {"kind": "sql", "path": "-"}
-    assert [c["type"] for c in payload["changes"]] == ["ADD_TABLE"]
+    # The artifact's index on a table it does not declare is carried (#679).
+    assert [c["type"] for c in payload["changes"]] == ["ADD_TABLE", "ADD_INDEX"]
 
 
 def test_positional_form_still_works_and_names_its_source(tmp_path: Path) -> None:
@@ -102,6 +103,12 @@ def test_from_db_diffs_the_configured_database(
     clean_test_db.commit()
     config = tmp_path / "confiture.yaml"
     config.write_text(f"name: test\ndatabase_url: {test_db_url}\n")
+    # The artifact's tables: its index fragment is on a relation it does not
+    # declare, which a database side refuses (DIFFER_406, test_desired_state_roundtrip).
+    tables = tmp_path / "tables"
+    tables.mkdir()
+    for name in ("post.sql", "user.sql"):
+        (tables / name).write_text((FIXTURE / name).read_text())
 
     result = runner.invoke(
         app,
@@ -111,7 +118,7 @@ def test_from_db_diffs_the_configured_database(
             "--from",
             "db",
             "--to",
-            str(FIXTURE),
+            str(tables),
             "--config",
             str(config),
             "--format",
@@ -124,4 +131,4 @@ def test_from_db_diffs_the_configured_database(
     assert [(c["type"], "tb_post" in c["details"]) for c in payload["changes"]] == [
         ("ADD_TABLE", True)
     ]
-    assert payload["source"] == {"kind": "sql", "path": str(FIXTURE)}
+    assert payload["source"] == {"kind": "sql", "path": str(tables)}

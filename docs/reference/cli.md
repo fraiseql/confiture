@@ -1157,6 +1157,7 @@ confiture migrate diff [OPTIONS] [old_schema] [new_schema]
 |---|---|---|---|---|
 | `--from` | - | str | - | Current state: a schema file, a directory (every .sql under it, recursively), '-' for stdin, or 'db' for the configured database (default: the first positional) |
 | `--to` | - | str | - | Desired state: a schema file, a directory (every .sql under it, recursively — what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
+| `--to-env` | - | str | - | Desired state: the environment's build — the files `confiture build --env` selects, in build order (a fragment composed through include_dirs). Instead of --to |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` (default: db/environments/local.yaml) |
 | `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
 | `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |

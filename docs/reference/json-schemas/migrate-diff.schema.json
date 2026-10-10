@@ -102,13 +102,14 @@
             "kind": {
               "type": "string",
               "enum": [
-                "sql"
+                "sql",
+                "env"
               ],
-              "description": "`sql`: DDL text. Reserved for a structured export (`json`) when one exists."
+              "description": "`sql`: DDL text from a file, a directory or stdin; `env`: an environment's build (`--to-env`). Reserved for a structured export (`json`) when one exists."
             },
             "path": {
               "type": "string",
-              "description": "The file or directory, or `-` for stdin."
+              "description": "The file or directory, `-` for stdin, or the environment's name."
             }
           }
         }

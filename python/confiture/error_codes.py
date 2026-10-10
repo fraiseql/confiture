@@ -230,6 +230,10 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "DIFFER_403": 5,
     "DIFFER_402": 0,  # carve-out: a diff warning in the envelope, never fatal (#313)
     "DIFFER_404": 0,  # carve-out: an object a database holds by existence alone (#562)
+    "DIFFER_405": 0,  # carve-out: an index on a table neither tree declares (#679)
+    "DIFFER_406": 5,
+    "DIFFER_407": 0,  # carve-out: an index on a TVIEW, which the model does not hold yet
+    "DIFFER_408": 0,  # carve-out: the current tree's index written before its relation
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,

@@ -66,4 +66,4 @@ def test_change_order_does_not_depend_on_the_hash_seed() -> None:
         )
         orders.add(out.stdout.strip())
     assert len(orders) == 1, orders
-    assert next(iter(orders)) == "ADD_TABLE:tb_post|ADD_TABLE:tb_user"
+    assert next(iter(orders)) == "ADD_TABLE:tb_post|ADD_TABLE:tb_user|ADD_INDEX:tv_product"

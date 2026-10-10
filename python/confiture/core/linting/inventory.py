@@ -286,6 +286,11 @@ class Inventory:
     schemas: list[SchemaObject] = field(default_factory=list)
     #: Each ``CREATE`` whose name its schema already held as another kind when it ran.
     name_collisions: list[NameCollision] = field(default_factory=list)
+    #: Each ``CREATE INDEX`` on a relation the tree had not declared when it ran,
+    #: in order (#679). The model holds none of them: a relation the tree declares
+    #: later is one the build fails at the index for, and one it never declares is
+    #: someone else's — ``SchemaRead.dangling_indexes`` carries both to the diff.
+    unattached_indexes: list[Index] = field(default_factory=list)
 
     @property
     def uncreated(self) -> frozenset[tuple[int, str]]:
@@ -1187,16 +1192,27 @@ def _takes_name(obj: SchemaObject, inventory: Inventory) -> bool:
 def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
     """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared.
 
-    An index takes its name in its table's schema, among every relation there;
-    a statement naming one already taken creates nothing (#638).
+    One on a relation the tree has not declared *by then* is kept aside,
+    unattached (#679): the inventory lists every ``CREATE`` before it folds, so
+    a relation declared later is found, and an index the build fails at must
+    not be placed on it. An index takes its name in its table's schema, among
+    every relation there; a statement naming one already taken creates nothing
+    (#638).
     """
     relation = raw.stmt.relation
-    found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
+    offset = parsed.base + statement_offset(parsed.text, raw)
+    found = [
+        obj
+        for obj in inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
+        if obj.offset < offset
+    ]
     if not found:
+        table = relation_name(relation)
+        if table is not None:
+            inventory.unattached_indexes.append(read_index(raw.stmt, table=table))
         return
     target = found[0]
     index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
-    offset = parsed.base + statement_offset(parsed.text, raw)
     line = _line_of(parsed.text, offset - parsed.base)
     if_not_exists = bool(raw.stmt.if_not_exists)
     for holder in (
@@ -1285,6 +1301,11 @@ def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
             continue
         if edit.schema is None or target.folded_schema in (None, edit.schema):
             target.indexes = [ix for ix in target.indexes if ix.name != edit.name]
+    inventory.unattached_indexes = [
+        ix
+        for ix in inventory.unattached_indexes
+        if ix.name != edit.name or edit.schema not in (None, ix.table.identity[0])
+    ]
 
 
 def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> None:
