@@ -517,6 +517,8 @@ _VALID = "(i.indisvalid AND i.indisready) OR ic.relkind = 'I'"
 
 #: An index attached to a partitioned table's index (``pg_inherits``) is that
 #: index's, as a cloned constraint is: the tree declares it once, on the parent.
+#: The last column is pg_tviews' test of a TVIEW's user index: no constraint at all
+#: uses the index — a foreign key elsewhere that references it included.
 _INDEXES = f"""
 SELECT
     i.indrelid,
@@ -526,7 +528,8 @@ SELECT
         WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid
           AND k.contype IN ('p', 'u', 'x')
     ),
-    {_VALID}
+    {_VALID},
+    EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid)
 FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 WHERE i.indrelid = ANY(%s)
@@ -626,7 +629,8 @@ def _with_primary_keys(columns: list[Column], constraints: list[Constraint]) -> 
 
 def _tables(
     conn: psycopg.Connection, schemas: list[str], kinds: Sequence[str]
-) -> dict[ObjectRef, Table]:
+) -> tuple[dict[ObjectRef, Table], dict[ObjectRef, frozenset[str]]]:
+    """The tables of *kinds* in *schemas*, and the names of each one's indexes a constraint uses."""
     relations = conn.execute(_RELATIONS, (list(kinds), schemas)).fetchall()
     oids = [oid for oid, _schema, _name in relations]
     rows: dict[int, list[tuple[Any, ...]]] = defaultdict(list)
@@ -640,8 +644,12 @@ def _tables(
         if read is not None:
             constraints[relid].append(read)
     indexes: dict[int, list[tuple[Any, bool, bool]]] = defaultdict(list)
-    for relid, definition, backs, valid in conn.execute(_INDEXES, (oids,)).fetchall():
-        indexes[relid].append((pglast.parse_sql(definition)[0].stmt, bool(backs), bool(valid)))
+    used: dict[int, set[str]] = defaultdict(set)
+    for relid, definition, backs, valid, constrained in conn.execute(_INDEXES, (oids,)).fetchall():
+        stmt: Any = pglast.parse_sql(definition)[0].stmt
+        indexes[relid].append((stmt, bool(backs), bool(valid)))
+        if constrained:
+            used[relid].add(stmt.idxname)
 
     tables: dict[ObjectRef, Table] = {}
     for oid, schema, name in relations:
@@ -664,7 +672,32 @@ def _tables(
             constraints=tuple(constraints[oid]),
             indexes=tuple(index_models),
         )
-    return tables
+    constrained = {
+        ref_for("table", schema, name): frozenset(used[oid]) for oid, schema, name in relations
+    }
+    return tables, constrained
+
+
+def _with_indexes(
+    tview: TView,
+    managed: frozenset[str],
+    table: Table | None,
+    constrained: frozenset[str],
+) -> TView:
+    """*tview* holding the indexes on its table, as pg_tviews tells them apart.
+
+    pg_tviews' own are those ``tviews.registry.managed_indexes`` names; the user's
+    are every other one no constraint uses. Its table not read, they are not read.
+    """
+    if table is None:
+        return replace(tview, indexes=None)
+    return replace(
+        tview,
+        indexes=tuple(
+            i for i in table.indexes if i.name not in managed and i.name not in constrained
+        ),
+        managed_indexes=tuple(i for i in table.indexes if i.name in managed),
+    )
 
 
 @reads_under_one_path
@@ -728,7 +761,7 @@ def read(
                 routine = routine_of(row)
                 routine_models[routine_ref(routine)].append(routine)
     registered = _tviews(conn, wanted)
-    parts = {oid for _tview, oid in registered}
+    parts = {oid for _tview, oid, _managed in registered}
     view_models = (
         {
             view_ref(view): view
@@ -737,10 +770,19 @@ def read(
         if views
         else {}
     )
-    tview_models = {tview_ref(tview): tview for tview, _oid in registered}
+    read_tables, constrained = _tables(conn, wanted, kinds)
+    tview_models = {
+        tview_ref(tview): _with_indexes(
+            tview,
+            managed,
+            read_tables.get(ref := ref_for("table", tview.schema, tview.name)),
+            constrained.get(ref, frozenset()),
+        )
+        for tview, _oid, managed in registered
+    }
     tables = {
         ref: table
-        for ref, table in _tables(conn, wanted, kinds).items()
+        for ref, table in read_tables.items()
         if ref_for("tview", ref.schema, ref.name) not in tview_models
     }
     return SchemaModel(
@@ -1105,21 +1147,24 @@ CONTRACT_VERSION = 1
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
 #: The first pg_tviews whose registry holds every column confiture reads.
-MINIMUM_PG_TVIEWS = "0.1.0-beta.26"
+MINIMUM_PG_TVIEWS = "0.1.0-beta.27"
 
 #: The registry columns pg_tviews appended under contract 1 that confiture reads:
 #: ``view``, the backing view in pg_tviews' own schema, and ``uncascaded_policy``,
 #: stored beside ``options`` (0.1.0-beta.25, fraiseql/pg_tviews#181);
 #: ``function_reads`` and ``time_refresh`` (0.1.0-beta.26, fraiseql/pg_tviews#193), and
 #: ``uncascaded_table_policies``, the ``uncascaded_tables`` option (0.1.0-beta.26,
-#: fraiseql/pg_tviews#195). A build without one is refused, not read as a TVIEW that
-#: declares nothing.
+#: fraiseql/pg_tviews#195); ``managed_indexes``, the indexes pg_tviews created on a
+#: TVIEW's table, which tells them from the user's (0.1.0-beta.27,
+#: fraiseql/pg_tviews#219). A build without one is refused, not read as a TVIEW that
+#: declares nothing — whatever version it reports: the column is the gate.
 REGISTRY_COLUMNS = (
     "view",
     "uncascaded_policy",
     "function_reads",
     "time_refresh",
     "uncascaded_table_policies",
+    "managed_indexes",
 )
 
 _REGISTRY_COLUMNS_HELD = """
@@ -1254,7 +1299,7 @@ def _views(
     on: dict[int, list[Index]] = defaultdict(list)
     matviews = {oid: RelationName(schema, name) for oid, schema, name, mat, *_ in rows if mat}
     if indexes and matviews:
-        for relid, definition, _backs, valid in conn.execute(
+        for relid, definition, _backs, valid, _constrained in conn.execute(
             _INDEXES, (list(matviews),)
         ).fetchall():
             stmt = pglast.parse_sql(definition)[0].stmt
@@ -1273,8 +1318,12 @@ def _views(
 
 @reads_under_one_path
 def tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TView]:
-    """Every pg_tviews TVIEW in *schemas*; none where the extension is not installed."""
-    return [tview for tview, _view_oid in _tviews(conn, schemas)]
+    """Every pg_tviews TVIEW in *schemas*; none where the extension is not installed.
+
+    The registry alone is read: a TVIEW's indexes are not (``indexes`` is ``None``),
+    since they are on its table, which :func:`read` reads.
+    """
+    return [replace(tview, indexes=None) for tview, _view_oid, _managed in _tviews(conn, schemas)]
 
 
 def require_supported_pg_tviews(
@@ -1356,7 +1405,9 @@ def _require_readable(conn: psycopg.Connection, installed: str | None) -> None:
     require_supported_pg_tviews(installed, contract, missing)
 
 
-def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int | None]]:
+def _tviews(
+    conn: psycopg.Connection, schemas: Sequence[str]
+) -> list[tuple[TView, int | None, frozenset[str]]]:
     installed = conn.execute(_PG_TVIEWS).fetchone()
     if installed is None:
         return []
@@ -1364,11 +1415,16 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
     # Each registered TVIEW: its relation, the query pg_tviews holds, the storage
     # options it reads from the catalog, what it declares of its reads, and its
     # backing view's oid — in pg_tviews' own schema, so a ``v_<entity>`` view
-    # beside the table is the tree's — ``NULL`` once that view is gone.
+    # beside the table is the tree's — ``NULL`` once that view is gone, and the
+    # names of the indexes pg_tviews created on its table (``NULL`` once it is gone).
     query = t"""
         SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
                r.uncascaded_policy, r.time_refresh, r.function_reads,
-               r.uncascaded_table_policies, r.view::oid::bigint
+               r.uncascaded_table_policies, r.view::oid::bigint,
+               COALESCE(ARRAY(
+                   SELECT c.relname::text FROM unnest(r.managed_indexes) m
+                   JOIN pg_class c ON c.oid = m
+               ), '{{}}')
         FROM {TVIEWS_SCHEMA:i}.registry r
         WHERE r.schema = ANY({list(schemas)})
         ORDER BY r.schema, r.name
@@ -1387,6 +1443,7 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
                 uncascaded_tables=uncascaded_tables(table_policies or {}),
             ),
             view_oid,
+            frozenset(managed),
         )
         for (
             schema,
@@ -1399,6 +1456,7 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
             reads,
             table_policies,
             view_oid,
+            managed,
         ) in conn.execute(query).fetchall()
     ]
 

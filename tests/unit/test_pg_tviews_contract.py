@@ -14,7 +14,7 @@ from confiture.exceptions import ConfigurationError
 
 def test_the_contract_confiture_reads_is_accepted() -> None:
     assert (
-        live_catalog.require_supported_pg_tviews("0.1.0-beta.26", live_catalog.CONTRACT_VERSION)
+        live_catalog.require_supported_pg_tviews("0.1.0-beta.27", live_catalog.CONTRACT_VERSION)
         is None
     )
 
@@ -45,26 +45,34 @@ def test_a_pg_tviews_without_a_contract_is_refused_with_its_migration(
 
 
 @pytest.mark.parametrize(
-    "missing",
+    ("installed", "missing"),
     [
-        ("function_reads", "time_refresh", "uncascaded_table_policies"),
-        ("view", "uncascaded_policy", "function_reads"),
+        ("0.1.0-beta.26", ("managed_indexes",)),
+        ("0.1.0-beta.25", ("function_reads", "time_refresh", "uncascaded_table_policies")),
+        ("0.1.0-beta.24", ("view", "uncascaded_policy", "function_reads")),
     ],
 )
 def test_a_registry_without_the_columns_confiture_reads_is_refused(
-    missing: tuple[str, ...],
+    installed: str, missing: tuple[str, ...]
 ) -> None:
-    """Contract 1 grows by appended columns: 0.1.0-beta.26 is the first with every one read."""
+    """Contract 1 grows by appended columns: 0.1.0-beta.27 is the first with every one read."""
     with pytest.raises(ConfigurationError) as refused:
-        live_catalog.require_supported_pg_tviews(
-            "0.1.0-beta.25", live_catalog.CONTRACT_VERSION, missing
-        )
+        live_catalog.require_supported_pg_tviews(installed, live_catalog.CONTRACT_VERSION, missing)
 
     assert refused.value.error_code == "CONFIG_014"
-    assert "0.1.0-beta.25" in str(refused.value)
+    assert installed in str(refused.value)
     assert ", ".join(missing) in str(refused.value)
-    assert live_catalog.MINIMUM_PG_TVIEWS == "0.1.0-beta.26"
+    assert live_catalog.MINIMUM_PG_TVIEWS == "0.1.0-beta.27"
     assert live_catalog.MINIMUM_PG_TVIEWS in str(refused.value)
+
+
+def test_the_column_is_the_gate_not_the_version() -> None:
+    """A build that reports 0.1.0-beta.27 without ``managed_indexes`` is refused all the same."""
+    assert "managed_indexes" in live_catalog.REGISTRY_COLUMNS
+    with pytest.raises(ConfigurationError):
+        live_catalog.require_supported_pg_tviews(
+            "0.1.0-beta.27", live_catalog.CONTRACT_VERSION, ("managed_indexes",)
+        )
 
 
 def test_the_seam_names_the_minimum_and_the_check() -> None:

@@ -786,7 +786,7 @@ to and closed here; a connection is the caller's.
 ### `MINIMUM_PG_TVIEWS`
 
 ```python
-MINIMUM_PG_TVIEWS = '0.1.0-beta.26'
+MINIMUM_PG_TVIEWS = '0.1.0-beta.27'
 ```
 
 ## What a writer may supply

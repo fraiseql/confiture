@@ -32,14 +32,18 @@ Confiture reads pg_tviews through its **read contract 1**: `tviews.registry` for
 a database registers, `tviews.pg_tviews_create_or_replace()` and
 `tviews.pg_tviews_drop()` for what a migration writes, and `tviews.contract_version()`
 to say which contract they keep. pg_tviews grows contract 1 by appending registry
-columns, and confiture reads five of them (`view`, `uncascaded_policy`,
-`function_reads`, `time_refresh`, `uncascaded_table_policies`), so it needs **pg_tviews 0.1.0-beta.26** or later.
+columns, and confiture reads six of them (`view`, `uncascaded_policy`,
+`function_reads`, `time_refresh`, `uncascaded_table_policies`, `managed_indexes`), so it
+needs **pg_tviews 0.1.0-beta.27** or later. The column is the gate, not the version: a
+build that reports 0.1.0-beta.27 without `managed_indexes` is refused too.
 Where confiture reads TVIEWs from a live database (drift, `schema dump-model`,
 `migrate preflight --against`, the platform's `introspect`), a pg_tviews that answers
 another contract, has none, or whose registry lacks one of those columns is refused
 with `CONFIG_014` (exit 5), naming the release installed and what it lacks. `migrate up` refuses the same way, before applying anything, when a
 pending migration creates or drops a TVIEW. A migration that touches no TVIEW deploys
-as before.
+as before. Upgrade the extension (`ALTER EXTENSION pg_tviews UPDATE`) **out of band,
+before the deploy**: a migration that upgrades it beside a TVIEW migration is refused
+with the rest, since the check runs before anything is applied.
 
 pg_tviews 0.1.0-beta.19 and earlier kept their objects wherever `search_path` put
 them and have no contract. An extension created by one of them is moved with
