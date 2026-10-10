@@ -170,6 +170,11 @@ pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts
 `CREATE INDEX`, `ALTER TABLE … SET LOGGED` and `SET (fillfactor = n)` after the conversion, and `UNLOGGED` and
 `WITH (fillfactor = n)` on the `CREATE`. See the [rule reference](../reference/lint-rules.md).
 
+In a tree that also uses pg_treekey, `treekey_001` and `treekey_002` (on by default) report a
+view walking a tree with `WITH RECURSIVE` over its parent key, or with `unnest` of its path: a
+spelling pg_tviews either reads as `all_keys` or refuses. See
+[the `treekey` family](../reference/lint-rules.md#the-treekey-family--how-a-view-walks-a-pg_treekey-tree).
+
 ## Restore
 
 `confiture restore` brings a TVIEW back registered, and it keeps following its base
