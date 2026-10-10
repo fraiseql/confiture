@@ -16,12 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`treekey_001` and `treekey_002`: how a view walks a pg_treekey tree** (#676). A view,
-  materialized view or TVIEW that reads a tree (a table a `treekey.manage_path()` call in the
-  tree declares) and walks it with `WITH RECURSIVE` over the parent key (`treekey_001`), or takes
-  its path apart with `unnest`/`string_to_array` (`treekey_002`), is a warning: pg_tviews rebuilds
-  the whole TVIEW on every write, or refuses the view as unlinked. Read from the parse tree, with
-  the fixtures of pg_treekey's `treekey.lint_views()`; on by default, family `treekey`.
+- **`treekey_001` and `treekey_002`: a TVIEW's chain walks a pg_treekey tree in a spelling
+  pg_tviews cannot trace** (#676). A tree is a table a `treekey.manage_path()` call in the tree
+  declares. Measured on pg_tviews 0.1.0-beta.26, two spellings are uncascaded reads: a
+  `WITH RECURSIVE` reading the tree (`treekey_001`, `all_keys`) and the path unnested
+  `WITH ORDINALITY` (`treekey_002`). Each is reported, as a warning, on the TVIEWs that reach
+  it through plain views, once per walk, naming every such TVIEW — unless the policy a write to
+  the tree meets is `full_refresh` (its `uncascaded_tables` entry, else `uncascaded_policy`);
+  under `warn` the finding says the rows go stale, under `error` that pg_tviews refuses the
+  TVIEW. Every other unnest of the path is traced and not reported. On by default, family
+  `treekey`.
+- **`ancestry_001` and `ancestry_002`: any view walking a tree, as a style** (#676). The
+  judgement of `treekey.lint_views()` — a `WITH RECURSIVE` over the parent key, `unnest` or
+  `string_to_array` over the path — on every view, materialized view and TVIEW that reads a
+  tree directly. `info`, off unless selected (`--select ancestry`).
+- **One TVIEW read graph** (`core/linting/tview_reads.py`): `session_reads` and the tree walks
+  read every view, matview, TVIEW and routine once and walk a TVIEW's chain the same way;
+  `tests/unit/test_one_tview_read_graph.py` guards it.
 - **A TVIEW's per-table `uncascaded_tables` is in the model** (pg_tviews#195). pg_tviews
   0.1.0-beta.26 lets one table carry its own `uncascaded_policy`, overriding the TVIEW's for a
   write to it. `TView` gains `uncascaded_tables` (a tuple of the new `UncascadedTable(table,

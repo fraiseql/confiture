@@ -179,9 +179,11 @@ pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts
 `WITH (fillfactor = n)` on the `CREATE`. See the [rule reference](../reference/lint-rules.md).
 
 In a tree that also uses pg_treekey, `treekey_001` and `treekey_002` (on by default) report a
-view walking a tree with `WITH RECURSIVE` over its parent key, or with `unnest` of its path: a
-spelling pg_tviews either reads as `all_keys` or refuses. See
-[the `treekey` family](../reference/lint-rules.md#the-treekey-family--how-a-view-walks-a-pg_treekey-tree).
+TVIEW whose chain walks a tree in a spelling pg_tviews cannot trace — a `WITH RECURSIVE`
+reading it, or its path unnested `WITH ORDINALITY` — unless the policy a write to that tree
+meets is `full_refresh` (`uncascaded_tables`, above): under `error` pg_tviews refuses the
+TVIEW, under `warn` its rows go stale. See
+[the `treekey` family](../reference/lint-rules.md#the-treekey-family--how-a-tviews-chain-walks-a-pg_treekey-tree).
 
 ## Restore
 

@@ -271,6 +271,21 @@ FIXTURES: dict[str, Fixture] = {
             "unnest(string_to_array(n.path::text, '.')) WITH ORDINALITY AS x (label, ord);\n"
         }
     ),
+    "ancestry_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
+            "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
+            "CREATE VIEW v_n AS WITH RECURSIVE w AS (SELECT n.pk_n FROM tb_n n "
+            "WHERE n.fk_up IS NULL) SELECT pk_n FROM w;\n"
+        }
+    ),
+    "ancestry_002": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
+            "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
+            "CREATE VIEW v_n AS SELECT unnest(string_to_array(n.path::text, '.')) FROM tb_n n;\n"
+        }
+    ),
     "replica_001": Fixture(
         {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, c INT);\n"},
         escalated_env_extra="infrastructure:\n  replicas:\n    - read-1\n",
