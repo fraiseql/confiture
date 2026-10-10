@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`DIFFER_409` (exit 5): a definition change with no statement is refused.** A side that is
+  compared and never generated from (`stated_side`, `slot_side`) carries objects with an empty
+  statement. Rendered by the migration generator, such a change used to be a `-- WARNING: no
+  definition captured` comment going up, an `IndexError` coming down or on a drop, and, for a
+  materialized view being redefined, a `DROP MATERIALIZED VIEW` with no `CREATE` after it. It is
+  now refused whole, in both directions. No command reaches it; it guards the next caller that
+  would.
+
 ### Fixed
 
 - **⚠️ A generated Python migration runs in the mode its SQL needs** (#698). The positional

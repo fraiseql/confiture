@@ -167,6 +167,12 @@
     "exit_code": 0,
     "resolution_hint": "Move the index after the statement that creates its relation; confiture lint reports it as build_004"
   },
+  "DIFFER_409": {
+    "message_template": "{change} '{identity}' carries no statement: the side it came from is compared, never generated from",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Generate from a side read from a tree (Side.of) or a database (database_side); a stated or slot side is compared, never generated from"
+  },
   "ROLLBACK_600": {
     "message_template": "Cannot rollback: irreversible change",
     "severity": "critical",

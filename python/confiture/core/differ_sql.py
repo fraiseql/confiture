@@ -80,6 +80,7 @@ from confiture.core.schema_model import (
 )
 from confiture.core.sql_utils import comment_text
 from confiture.core.type_lattice import has_assignment_cast
+from confiture.exceptions import DifferError
 
 #: The kinds compared by definition that a migration is derived for, created and
 #: dropped — the ones ``migrate diff --generate`` writes (#288, #335). The rest —
@@ -136,18 +137,42 @@ def _incomplete(change: SchemaChange, what: str) -> str:
     return _comment(f"WARNING: Cannot generate {wire.type} on {wire.table} without {what}")
 
 
-def _statement(sql: str | None, change: SchemaChange) -> str:
-    """A definition the differ captured, terminated; a warning when it has none."""
-    if not sql:
-        wire = change.to_wire()
-        return _comment(f"WARNING: no definition captured for {wire.type} {wire.table}")
+_NO_STATEMENT_HINT = (
+    "Generate from a side read from a tree (Side.of) or a database (database_side); "
+    "a stated or slot side is compared, never generated from"
+)
+
+
+def _stated(obj: DDLObject, change: SchemaChange) -> str:
+    """*obj*'s statement, the one every rendering of a definition change reads.
+
+    A side that is compared and never generated from (``differ.stated_side``,
+    ``differ.slot_side``) gives each object an empty statement. A change carrying
+    one is refused here, whole and in either direction, rather than written as a
+    migration that lacks it, or as a ``DROP`` with no ``CREATE`` after it.
+
+    Raises:
+        DifferError: ``DIFFER_409``, naming the change.
+    """
+    if obj.create_sql:
+        return obj.create_sql
+    raise DifferError(
+        f"{change.to_wire().type} {comment_text(obj.ref.display)} carries no statement: "
+        "the side it came from is compared, never generated from",
+        error_code="DIFFER_409",
+        resolution_hint=_NO_STATEMENT_HINT,
+    )
+
+
+def _statement(sql: str) -> str:
+    """A statement, terminated."""
     return f"{sql.rstrip().rstrip(';')};\n"
 
 
 def _creating(obj: DDLObject, change: SchemaChange) -> str:
     """The statement that creates *obj*, re-appliable: guarded where PostgreSQL has no clause."""
-    statement = _statement(obj.create_sql, change)
-    if obj.ref.kind not in _GUARDED_KINDS or not obj.create_sql:
+    statement = _statement(_stated(obj, change))
+    if obj.ref.kind not in _GUARDED_KINDS:
         return statement
     return (
         f"DO $confiture$\nBEGIN\n    {statement}"
@@ -163,9 +188,10 @@ def _replacing(before: DDLObject, after: DDLObject, change: SchemaChange) -> str
     the old ones is dropped and created instead. When either side's columns
     cannot be named (``*``), ``OR REPLACE`` is kept: PostgreSQL decides.
     """
-    statement = _statement(after.create_sql, change)
+    statement = _statement(_stated(after, change))
     if after.ref.kind != "view":
         return statement
+    _stated(before, change)
     old, new = output_columns(before), output_columns(after)
     if old is None or new is None or new[: len(old)] == old:
         return statement
@@ -180,8 +206,14 @@ def _replacing(before: DDLObject, after: DDLObject, change: SchemaChange) -> str
     )
 
 
-def _dropping(obj: DDLObject) -> str:
-    """``DROP … IF EXISTS`` for *obj*: on its table where it is named per table."""
+def _dropping(obj: DDLObject, change: SchemaChange) -> str:
+    """``DROP … IF EXISTS`` for *obj*: on its table where it is named per table.
+
+    A TVIEW is dropped by name; every other kind reads its statement, which names
+    the table a trigger, a policy or a rule is dropped on.
+    """
+    if obj.ref.kind != "tview":
+        _stated(obj, change)
     if (statement := drop_statement(obj)) is not None:
         return f"{statement};\n"
     return _drop(OBJECT_KEYWORD.get(obj.ref.kind, ""), obj.ref.qualified)
@@ -719,11 +751,11 @@ def _definition_up(change: DefinitionChange) -> str | None:
         case ObjectAdded(_, obj, indexes) if kind in DERIVED_KINDS:
             return _creating(obj, change) + _carried_indexes(indexes)
         case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
-            return _dropping(obj)
+            return _dropping(obj, change)
         case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
             return _replacing(old, new, change)
         case ObjectReplaced(_, _, new, _, indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
-            created = _statement(new.create_sql, change) + _carried_indexes(indexes)
+            created = _statement(_stated(new, change)) + _carried_indexes(indexes)
             return _drop(keyword, name) + created
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return None
@@ -755,13 +787,13 @@ def _definition_down(change: DefinitionChange) -> str | None:
     name = change.ref.qualified
     match change:
         case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
-            return _dropping(obj)
+            return _dropping(obj, change)
         case ObjectDropped(_, obj, indexes) if kind in DERIVED_KINDS:
             return _creating(obj, change) + _carried_indexes(indexes)
         case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
             return _replacing(new, old, change)
         case ObjectReplaced(_, old, _, indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
-            created = _statement(old.create_sql, change) + _carried_indexes(indexes)
+            created = _statement(_stated(old, change)) + _carried_indexes(indexes)
             return _drop(keyword, name) + created
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return None
