@@ -147,7 +147,7 @@ def test_a_hostile_component_is_refused(repo: Path, tmp_path: Path, component: s
 
     assert caught.value.error_code == "GIT_001"
     assert not (tmp_path / "out" / "x.sql").exists()
-    assert not dest.exists() or _everything_under(dest) == []
+    assert not dest.exists()
 
 
 def test_dotdot_component_is_refused(repo: Path, tmp_path: Path) -> None:

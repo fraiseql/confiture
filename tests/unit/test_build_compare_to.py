@@ -120,6 +120,33 @@ def test_an_environment_the_ref_has_not_is_named(repo):
         selection_at_ref(repo / "backend", "local", "HEAD")
 
 
+def test_a_file_marked_export_ignore_is_still_selected_at_the_ref(repo):
+    (repo / ".gitattributes").write_text(f"{SCHEMA}/02_types.sql export-ignore\n")
+    _git(repo, "add", ".gitattributes")
+    _git(repo, "commit", "-q", "-m", "keep a schema file out of archives")
+
+    assert f"{SCHEMA}/02_types.sql" in selection_at_ref(repo / "backend", "local", "HEAD")
+
+
+def test_a_submodule_under_an_include_directory_is_refused(repo):
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "update-index", "--add", "--cacheinfo", f"160000,{head},{SCHEMA}/vendored")
+    _git(repo, "commit", "-q", "-m", "a submodule in the schema")
+
+    with pytest.raises(GitError, match="submodule") as caught:
+        selection_at_ref(repo / "backend", "local", "HEAD")
+
+    assert caught.value.error_code == "GIT_001"
+
+
+def test_a_submodule_outside_the_include_directories_is_not_read(repo):
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "update-index", "--add", "--cacheinfo", f"160000,{head},vendor/lib")
+    _git(repo, "commit", "-q", "-m", "a submodule elsewhere")
+
+    assert selection_at_ref(repo / "backend", "local", "HEAD")
+
+
 def _invoke(repo: Path, *extra: str):
     return CliRunner().invoke(
         app,

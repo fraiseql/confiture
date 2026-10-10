@@ -14,6 +14,7 @@ import pytest
 from confiture.core.builder import SchemaBuilder
 from confiture.core.git import GitRepository
 from confiture.core.git_schema import GitSchemaBuilder
+from confiture.core.linting.inventory import label_for
 
 _URL = 'database_url: "postgresql://localhost/test"\n'
 
@@ -137,38 +138,17 @@ def make_repo(tmp_path: Path, shape: Shape) -> Path:
     return project
 
 
-def _ref_vs_build(project: Path) -> tuple[str, str]:
-    """The ref read at ``HEAD`` and the build's selection, joined the same way."""
-    at_ref = GitSchemaBuilder("local", project).build_schema_at_ref("HEAD")
+def _ref_vs_build(project: Path) -> tuple[list[tuple], list[tuple]]:
+    """The ref read at ``HEAD`` and the build's selection, as ``(file, label, text)`` triples."""
+    at_ref = GitSchemaBuilder("local", project).segments_at_ref("HEAD")
     files = SchemaBuilder("local", project).find_sql_files()
-    built = "\n".join(file.read_text(encoding="utf-8") for file in files)
-    return at_ref, built
+    return (
+        [(segment.file, segment.label, segment.text) for segment in at_ref],
+        [(file, label_for(file, project), file.read_text()) for file in files],
+    )
 
 
-#: The shapes today's ref reader gets wrong: its own listing, order and matcher.
-_DIVERGES = {
-    "exclude_dirs",
-    "exclude_pattern",
-    "hex",
-    "include_pattern",
-    "non_ascii_name",
-    "overlapping_entries",
-    "recursive_false",
-    "shared_order_merge",
-    "sibling_include_dir",
-    "subdirectory_project",
-}
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(name, marks=pytest.mark.xfail(strict=True, reason="#686"))
-        if name in _DIVERGES
-        else name
-        for name in sorted(SHAPES)
-    ],
-)
+@pytest.mark.parametrize("name", sorted(SHAPES))
 def test_ref_read_is_the_build_selection(tmp_path: Path, name: str) -> None:
     at_ref, built = _ref_vs_build(make_repo(tmp_path, SHAPES[name]))
     assert at_ref == built

@@ -440,6 +440,28 @@ class GitRepository:
 
         return result.stdout.strip()
 
+    def tree_oid(self, ref: str) -> str:
+        """The OID of the tree *ref* names: a commit's tree, or a tree OID itself.
+
+        Raises:
+            GitError: *ref* is option-shaped or names no tree.
+        """
+        validate_ref(ref)
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", f"{ref}^{{tree}}"],
+                cwd=self.get_repo_root(),
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise GitError(f"Git command timed out resolving '{ref}'") from e
+        if result.returncode != 0:
+            raise GitError(f"Cannot read '{ref}': {result.stderr.strip() or 'it names no tree'}")
+        return result.stdout.strip()
+
     def materialise(self, ref: str, paths: Sequence[Path] | None, dest: Path) -> str:
         """Copy what *ref*'s tree holds under *paths* into *dest*, which stands for the repository root.
 

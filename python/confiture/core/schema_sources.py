@@ -13,7 +13,7 @@ as written, a database's as PostgreSQL writes them (``live_catalog.catalogued_ob
 Which rules the comparison applies follows from where each side came from.
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -89,13 +89,29 @@ def _segments(
     if env is not None:
         builder = SchemaBuilder(env=env, project_dir=project_dir)
         files, _seeds = builder.categorize_sql_files()
-        root = project_dir or Path.cwd()
-        return [Segment(file, _read(file), label_for(file, root)) for file in files]
+        return selection_segments(files, root=project_dir or Path.cwd())
     if isinstance(source, str):
         return [Segment(None, source)]
     assert source is not None
     paths = [source] if isinstance(source, Path) else [Path(path) for path in source]
     return [Segment(file, _read(file)) for path in paths for file in _files(path)]
+
+
+def selection_segments(
+    files: Iterable[Path], *, root: Path, mapped_from: tuple[Path, Path] | None = None
+) -> list[Segment]:
+    """A build's selection as the segments a read is made of, each file named relative to *root*.
+
+    *mapped_from* is ``(scratch, repository)`` when the files were read from a
+    copy of a git ref (``GitRepository.materialise``): each segment then names the
+    file where it sits in the repository, so a finding points at a path the author
+    edits, the same path the working tree's build names.
+    """
+    segments: list[Segment] = []
+    for file in files:
+        shown = file if mapped_from is None else mapped_from[1] / file.relative_to(mapped_from[0])
+        segments.append(Segment(shown, _read(file), label_for(shown, root)))
+    return segments
 
 
 def env_segments(env: str, project_dir: Path | None = None) -> list[Segment]:
