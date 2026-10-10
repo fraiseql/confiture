@@ -201,7 +201,7 @@ those it would create for the definition (`idx_<tv>_data_gin` among them):
   name is free. Once pg_tviews has created its index under that name, a plain
   `CREATE INDEX` fails with `42P07`, and `CREATE INDEX IF NOT EXISTS` **skips silently**:
   the database never holds the tree's index. Against a database, confiture refuses
-  such a tree with `DIFFER_409` (exit 5, from `migrate diff --from db` and drift alike).
+  such a tree with `DIFFER_410` (exit 5, from `migrate diff --from db` and drift alike).
   Rename the index.
 
 **What confiture cannot see between two trees.** `migrate diff` between two trees

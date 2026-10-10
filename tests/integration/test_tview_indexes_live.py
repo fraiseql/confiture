@@ -237,7 +237,7 @@ def test_drift_takes_an_adopted_copy_as_pg_tviews_own(tview_database: str, tmp_p
 
 
 def test_drift_refuses_an_index_pg_tviews_skipped(tview_database: str, tmp_path: Any) -> None:
-    """pg_tviews skipped it: its name was taken by pg_tviews' own index (DIFFER_409)."""
+    """pg_tviews skipped it: its name was taken by pg_tviews' own index (DIFFER_410)."""
     from confiture.exceptions import DifferError
 
     skipped = "CREATE INDEX IF NOT EXISTS idx_tv_post_id ON tv_post (lower(id::text));\n"
@@ -245,4 +245,4 @@ def test_drift_refuses_an_index_pg_tviews_skipped(tview_database: str, tmp_path:
         conn.execute(skipped)
     with pytest.raises(DifferError) as refused:
         _drift(tview_database, TREE + skipped, tmp_path)
-    assert refused.value.error_code == "DIFFER_409"
+    assert refused.value.error_code == "DIFFER_410"
