@@ -13,7 +13,9 @@ import pytest
 from confiture.core.drift import _in_schema
 from confiture.core.schema_model import (
     EnumType,
+    Index,
     OtherObject,
+    RelationName,
     Routine,
     SchemaModel,
     Sequence,
@@ -45,6 +47,11 @@ FULL = SchemaModel(
     triggers={trigger_ref(TRIGGER): TRIGGER},
     tviews={tview_ref(TVIEW): TVIEW},
     other_objects={other_ref(OTHER): OTHER},
+    unattached_indexes={
+        ref_for("table", "app", "ext"): (
+            Index(name="ix", table=RelationName("app", "ext"), columns=("c",)),
+        )
+    },
     # Not the default, so a rebuild that forgets it is seen to.
     source="catalog",
 )

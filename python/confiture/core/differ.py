@@ -10,6 +10,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import Any, Literal
 
 from confiture.core.ddl_objects import DDLObject, pair_definitions
@@ -79,6 +80,7 @@ from confiture.core.schema_model import (
     parity_routine,
     parity_tview,
     parity_view,
+    ref_for,
 )
 from confiture.core.schema_read import SchemaRead, read_text
 from confiture.core.sql_utils import comment_text
@@ -288,6 +290,22 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
     statements are about one relation.
     """
     return (schema or DEFAULT_SCHEMA).lower(), name
+
+
+def _declares(model: SchemaModel, ref: ObjectRef) -> bool:
+    """Whether *model* declares the relation *ref* keys as a table, or as a materialized view."""
+    return ref in model.tables or ref_for("matview", ref.schema, ref.name) in model.views
+
+
+def _assumed(change: SchemaChange) -> BuildWarning:
+    """``DIFFER_405``: an index the migration carries onto a table neither tree declares."""
+    assert isinstance(change, IndexAdded | IndexDropped)
+    return BuildWarning.of(
+        "DIFFER_405",
+        index=change.index.name or ", ".join(change.index.columns),
+        table=change.table.qualified,
+        action="creates" if isinstance(change, IndexAdded) else "drops",
+    )
 
 
 def _merged_warnings(old_schema: Side, new_schema: Side) -> list[BuildWarning]:
@@ -620,12 +638,17 @@ class SchemaDiffer:
             policy = replace(policy, constants=policy.constants | old.constants | new.constants)
 
         changes = self._compare_tables(old.tables, new.tables, policy)
+        unattached = self._compare_unattached_indexes(old.model, new.model)
+        changes.extend(unattached)
         changes.extend(self._compare_enum_types(old.enum_types, new.enum_types))
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
         # Objects compared by definition: views, routines and the rest (#288).
         objects, unwritable = self._compare_objects(old, new, policy)
         changes.extend(objects)
-        return SchemaDiff(changes=changes, warnings=[*_merged_warnings(old, new), *unwritable])
+        return SchemaDiff(
+            changes=changes,
+            warnings=[*_merged_warnings(old, new), *unwritable, *map(_assumed, unattached)],
+        )
 
     # ------------------------------------------------------------------
     # Table comparison
@@ -917,6 +940,36 @@ class SchemaDiffer:
             identity=("columns", "unique", "method"),
             differs=_rebuilt,
         )
+
+    def _compare_unattached_indexes(self, old: SchemaModel, new: SchemaModel) -> list[SchemaChange]:
+        """Indexes on a table neither tree declares (#679), compared as a table's are.
+
+        Only between two trees: a database holds every index on a table it has.
+        A table one side declares is that side's whole — added or dropped with
+        the indexes it holds — so the other side's unattached indexes on it add
+        nothing.
+        """
+        if not old.source == new.source == "author":
+            return []
+        changes: list[SchemaChange] = []
+        refs = old.unattached_indexes.keys() | new.unattached_indexes.keys()
+        for ref in sorted(refs, key=_object_sort_key):
+            if any(_declares(model, ref) for model in (old, new)):
+                continue
+            before = old.unattached_indexes.get(ref, ())
+            after = new.unattached_indexes.get(ref, ())
+            changes.extend(
+                self._compare_named_objects(
+                    old=[(index, index) for index in before],
+                    new=[(index, index) for index in after],
+                    added=partial(IndexAdded, table_declared=False),
+                    dropped=partial(IndexDropped, table_declared=False),
+                    table=(after or before)[0].table,
+                    identity=("columns", "unique", "method"),
+                    differs=_rebuilt,
+                )
+            )
+        return changes
 
     @staticmethod
     def _constraints(table: Table, kind: str, policy: ComparisonPolicy) -> list[tuple[Any, Any]]:

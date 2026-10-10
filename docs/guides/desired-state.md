@@ -53,6 +53,14 @@ the risk tier the change-set classifier behind `migrate preflight` assigns it (`
 change the generator cannot express is written as a `-- WARNING:` comment rather than silently dropped. The positional form `migrate diff OLD NEW
 --generate` keeps writing a Python migration.
 
+An artifact may declare an index on a table it does not declare — a `tv_<type>` relation the
+project authors, which a localized field needs an expression index on. Between two trees (an empty
+or earlier artifact on `--from`), the migration carries that index as written, `CREATE INDEX
+CONCURRENTLY IF NOT EXISTS` since the table exists and is in use, under a comment naming the
+undeclared table, and the diff reports a `DIFFER_405` warning (also in `--format json`) naming the
+index and the table. The down drops it the same way. A table either side declares is that side's
+whole, so its indexes come and go with it.
+
 The round trip closes with `drift`: `confiture drift --schema <dir>` accepts the same directory of
 `.sql` files and reports nothing once the migration is applied.
 

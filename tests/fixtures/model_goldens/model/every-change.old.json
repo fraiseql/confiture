@@ -644,6 +644,7 @@
   ],
   "triggers": [],
   "tviews": [],
+  "unattached_indexes": [],
   "views": [
     {
       "definition": "SELECT 1 AS one",

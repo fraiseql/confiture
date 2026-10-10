@@ -519,13 +519,18 @@ def _index_detail(index: Index) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class IndexAdded(_OnTable):
-    """An index only the new tree declares on a table both hold."""
+    """An index only the new tree declares on a table both hold, or on one neither declares.
+
+    ``table_declared`` is false for an index on a table neither tree declares
+    (#679): someone else's table, which the migration assumes exists.
+    """
 
     WIRE: ClassVar[str] = "ADD_INDEX"
     TEMPLATE: ClassVar[str] = "ADD INDEX {name} ON {table}"
 
     table: RelationName
     index: Index
+    table_declared: bool = True
 
     def _wire_fields(self) -> dict[str, Any]:
         return {"table": self.table.qualified, "details": _index_detail(self.index)}
@@ -533,13 +538,18 @@ class IndexAdded(_OnTable):
 
 @dataclass(frozen=True)
 class IndexDropped(_OnTable):
-    """An index only the old tree declares on a table both hold."""
+    """An index only the old tree declares on a table both hold, or on one neither declares.
+
+    ``table_declared`` is false for an index on a table neither tree declares
+    (#679): someone else's table, which the migration assumes exists.
+    """
 
     WIRE: ClassVar[str] = "DROP_INDEX"
     TEMPLATE: ClassVar[str] = "DROP INDEX {name}"
 
     table: RelationName
     index: Index
+    table_declared: bool = True
 
     def _wire_fields(self) -> dict[str, Any]:
         return {"table": self.table.qualified, "details": _index_detail(self.index)}
