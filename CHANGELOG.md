@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A TVIEW query or routine body the session-read rules could not read is reported degraded**
+  (#682). `tview_003`–`005` and `session_001`–`003` named what a chain reached and could not
+  read, but the linter dropped it, so an unparseable TVIEW query passed as clean. Each selected
+  code whose family's chains reached something unread now carries a `degraded` status naming
+  it; a routine only the view family reaches does not degrade the TVIEW rules.
+
 ## [1.34.0] - 2026-10-09
 
 **A TVIEW's `time_refresh` and `function_reads` are in the model.** ⚠️ pg_tviews

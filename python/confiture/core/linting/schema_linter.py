@@ -736,13 +736,20 @@ class SchemaLinter:
     def _check_session_reads(self, report: LintReport) -> None:
         """``tview_003``–``005`` and ``session_001``–``003``: session state a projection reads (#656)."""
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.session_reads import RULE_NAMES, session_read_findings
+        from confiture.core.linting.session_reads import RULE_NAMES, session_reads
 
         severities = {rule.code: rule.severity for rule in LINT_RULES}
-
-        for found in session_read_findings(
-            self._files, self._inventory, self.config.check_session_reads
-        ):
+        read = session_reads(self._files, self._inventory, self.config.check_session_reads)
+        for code, unread in read.degraded.items():
+            report.degraded.append(
+                RuleStatus(
+                    code=code,
+                    state="degraded",
+                    reason=f"{len(unread)} reached but not read, so the session state "
+                    f"they read is not checked: {', '.join(unread)}",
+                )
+            )
+        for found in read.findings:
             report.add_violation(
                 LintViolation(
                     rule_id=found.code,
