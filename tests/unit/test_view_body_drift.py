@@ -173,3 +173,15 @@ def test_drift_is_frozen_dataclass():
     )
     assert drift.schema == "public"
     assert drift.relkind == "v"
+
+
+def test_a_one_sided_and_a_body_drifted_matview_still_compare():
+    """The slot sides hold each matview's statement and no model entry for it."""
+    live = [
+        _v("public", "only_live", "m", "SELECT 1;"),
+        _v("public", "drifted", "m", "SELECT a\nFROM t;"),
+    ]
+    src = [_v("public", "drifted", "m", "SELECT b\nFROM t;")]
+    report = ViewBodyDriftDetector().compare(src, live)
+    assert [(d.name, d.relkind) for d in report.body_drifts] == [("drifted", "m")]
+    assert report.views_checked == 1

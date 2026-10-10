@@ -401,8 +401,18 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("old", "tuple[str, ...]"),
         ("new", "tuple[str, ...]"),
     ),
-    "IndexAdded": (("table", "RelationName"), ("index", "Index"), ("table_declared", "bool")),
-    "IndexDropped": (("table", "RelationName"), ("index", "Index"), ("table_declared", "bool")),
+    "IndexAdded": (
+        ("table", "RelationName"),
+        ("index", "Index"),
+        ("table_declared", "bool"),
+        ("relation_kind", "RelationKind"),
+    ),
+    "IndexDropped": (
+        ("table", "RelationName"),
+        ("index", "Index"),
+        ("table_declared", "bool"),
+        ("relation_kind", "RelationKind"),
+    ),
     "ForeignKeyAdded": (("table", "RelationName"), ("constraint", "Constraint")),
     "ForeignKeyDropped": (("table", "RelationName"), ("constraint", "Constraint")),
     "CheckConstraintAdded": (("table", "RelationName"), ("constraint", "Constraint")),
@@ -422,9 +432,23 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "SequenceAdded": (("sequence", "Sequence"),),
     "SequenceDropped": (("sequence", "Sequence"),),
-    "ObjectAdded": (("ref", "ObjectRef"), ("obj", "DDLObject")),
-    "ObjectDropped": (("ref", "ObjectRef"), ("obj", "DDLObject")),
-    "ObjectReplaced": (("ref", "ObjectRef"), ("old", "DDLObject"), ("new", "DDLObject")),
+    "ObjectAdded": (
+        ("ref", "ObjectRef"),
+        ("obj", "DDLObject"),
+        ("indexes", "tuple[Index, ...]"),
+    ),
+    "ObjectDropped": (
+        ("ref", "ObjectRef"),
+        ("obj", "DDLObject"),
+        ("indexes", "tuple[Index, ...]"),
+    ),
+    "ObjectReplaced": (
+        ("ref", "ObjectRef"),
+        ("old", "DDLObject"),
+        ("new", "DDLObject"),
+        ("old_indexes", "tuple[Index, ...]"),
+        ("new_indexes", "tuple[Index, ...]"),
+    ),
 }
 
 #: The fields of the seam's one configuration model (pydantic, not a dataclass):

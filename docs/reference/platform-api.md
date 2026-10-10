@@ -1544,36 +1544,40 @@ migration writes nothing for it. `old` and `new` are each side's order.
 ### `IndexAdded`
 
 ```python
-class IndexAdded(_OnTable)
+class IndexAdded(_OnIndexed)
 ```
 
-An index only the new tree declares on a table both hold, or on one neither declares.
+An index only the new side holds on a relation both hold, or on one neither declares.
 
-`table_declared` is false for an index on a table neither tree declares
-(#679): someone else's table, which the migration assumes exists.
+`relation_kind` is `"matview"` for an index on a materialized view both
+sides hold. `table_declared` is false for an index on a table neither tree
+declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
 |---|---|---|
 | `table` | `RelationName` | required |
 | `index` | `Index` | required |
 | `table_declared` | `bool` | `True` |
+| `relation_kind` | `RelationKind` | `'table'` |
 
 ### `IndexDropped`
 
 ```python
-class IndexDropped(_OnTable)
+class IndexDropped(_OnIndexed)
 ```
 
-An index only the old tree declares on a table both hold, or on one neither declares.
+An index only the old side holds on a relation both hold, or on one neither declares.
 
-`table_declared` is false for an index on a table neither tree declares
-(#679): someone else's table, which the migration assumes exists.
+`relation_kind` is `"matview"` for an index on a materialized view both
+sides hold. `table_declared` is false for an index on a table neither tree
+declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
 |---|---|---|
 | `table` | `RelationName` | required |
 | `index` | `Index` | required |
 | `table_declared` | `bool` | `True` |
+| `relation_kind` | `RelationKind` | `'table'` |
 
 ### `ForeignKeyAdded`
 
@@ -1775,10 +1779,14 @@ class ObjectAdded(_ObjectChange)
 
 An object only the new tree defines.
 
+`indexes` are the ones a materialized view is created with, as a table's
+travel on `TableAdded`; `()` for every other kind.
+
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
 | `obj` | `DDLObject` | required |
+| `indexes` | `tuple[Index, ...]` | `()` |
 
 ### `ObjectDropped`
 
@@ -1788,10 +1796,14 @@ class ObjectDropped(_ObjectChange)
 
 An object only the old tree defines.
 
+`indexes` are the ones a materialized view held, which its down creates
+again with it; `()` for every other kind.
+
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
 | `obj` | `DDLObject` | required |
+| `indexes` | `tuple[Index, ...]` | `()` |
 
 ### `ObjectReplaced`
 
@@ -1803,13 +1815,17 @@ An object both trees define, whose canonical definition differs.
 
 For a view or a routine that is the entire change a migration has to carry,
 and it is invisible to a structural comparison because nothing about the
-object's shape moved.
+object's shape moved. A materialized view is dropped and created again, so
+it carries its indexes: `new_indexes` are created after it, and its down
+creates the old one with `old_indexes`; both `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
 | `old` | `DDLObject` | required |
 | `new` | `DDLObject` | required |
+| `old_indexes` | `tuple[Index, ...]` | `()` |
+| `new_indexes` | `tuple[Index, ...]` | `()` |
 
 ### `DDLObject`
 

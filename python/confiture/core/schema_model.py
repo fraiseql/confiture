@@ -134,6 +134,11 @@ class ObjectRef:
         return self.display
 
 
+#: The kind of relation an index is on, as the model keys it: a table, or a
+#: materialized view (``View.indexes``).
+RelationKind = Literal["table", "matview"]
+
+
 def ref_for(kind: str, schema: str | None, name: str) -> ObjectRef:
     """The bucket of a relation-like object: ``(kind, folded schema, name)``, no signature."""
     return ObjectRef(

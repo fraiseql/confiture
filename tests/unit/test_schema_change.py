@@ -76,3 +76,24 @@ def test_no_variant_shares_a_name_with_a_replica_operation() -> None:
     operations = _classes(PACKAGE / "core" / "replica" / "classifier.py")
     assert {"AddColumn", "DropObject", "ReplaceObject"} <= operations
     assert {kind.__name__ for kind in KINDS} & operations == set()
+
+
+def test_a_matview_index_change_writes_its_relation_kind() -> None:
+    """``details.relation_kind`` names a matview; a table's index keeps the wire it had."""
+    import json
+
+    from jsonschema import Draft202012Validator
+
+    from confiture.models.results import DiffResult
+
+    table = "CREATE TABLE t (id INT);\nCREATE MATERIALIZED VIEW mv AS SELECT id FROM t;\n"
+    indexes = "CREATE INDEX ix_t ON t (id);\nCREATE INDEX ix_mv ON mv (id);\n"
+    diff = SchemaDiffer().compare(table, table + indexes)
+    by_table = {c.to_wire().table: c.to_wire().details for c in diff.changes}
+    assert by_table["mv"]["relation_kind"] == "matview"
+    assert "relation_kind" not in by_table["t"]
+    schema_file = Path(confiture.__file__).parent / "schemas" / "diff.schema.json"
+    schema = json.loads(schema_file.read_text())
+    change_schema = Draft202012Validator(schema["properties"]["changes"]["items"])
+    for change in DiffResult.from_schema_diff(diff).to_dict()["changes"]:
+        change_schema.validate(change)

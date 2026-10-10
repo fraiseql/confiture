@@ -212,3 +212,23 @@ def test_an_invalid_matview_index_is_read_but_not_compared_yet(
     with psycopg.connect(fresh_database) as conn:
         assert live_catalog.invalid_indexes(conn, ["public"]) == {("public", "ix_mv_ratio")}
     assert _drift(fresh_database, _tree(tmp_path, TABLE + view + index)) == []
+
+
+def test_refresh_concurrently_refuses_an_invalid_unique_index(fresh_database: str) -> None:
+    """PostgreSQL does not take an INVALID unique index as the one a concurrent refresh needs.
+
+    With a usable unique index, duplicates fail the refresh on the data ("contains
+    duplicate rows"); with none, it is refused before any is read.
+    """
+    view = "CREATE MATERIALIZED VIEW mv_item AS SELECT name FROM tb_item;\n"
+    _run(fresh_database, TABLE, "INSERT INTO tb_item VALUES (1, 'a', 1), (2, 'a', 2)", view)
+    _left_invalid(fresh_database, "CREATE UNIQUE INDEX CONCURRENTLY ux_mv_name ON mv_item (name)")
+    with psycopg.connect(fresh_database) as conn:
+        assert live_catalog.invalid_indexes(conn, ["public"]) == {("public", "ux_mv_name")}
+    with (
+        psycopg.connect(fresh_database, autocommit=True) as conn,
+        pytest.raises(
+            psycopg.errors.ObjectNotInPrerequisiteState, match="cannot refresh materialized view"
+        ),
+    ):
+        conn.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_item")
