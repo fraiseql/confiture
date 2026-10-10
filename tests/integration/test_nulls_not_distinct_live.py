@@ -88,3 +88,14 @@ def test_the_diff_from_the_database_rebuilds_both_keys(fresh_database: str, tmp_
         t.__name__
         for t in (IndexDropped, IndexAdded, UniqueConstraintDropped, UniqueConstraintAdded)
     )
+
+
+def test_a_rebuilt_unique_index_is_critical(fresh_database: str, tmp_path: Path) -> None:
+    """A unique index rebuilt for any reason is missing until rebuilt: a missing constraint (#689)."""
+    _built(fresh_database, OLD)
+    tree = tmp_path / "schema.sql"
+    tree.write_text(NEW)
+    with psycopg.connect(fresh_database) as conn:
+        report = SchemaDriftDetector(conn).compare_with_schema_file(str(tree))
+    [missing] = [i for i in report.drift_items if i.drift_type is DriftType.MISSING_INDEX]
+    assert missing.severity.value == "critical"

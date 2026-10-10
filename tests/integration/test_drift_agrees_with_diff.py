@@ -20,7 +20,13 @@ import pytest
 from test_live_drift_identity import MUTATIONS, corpus_sql
 
 from confiture import platform
-from confiture.core.drift import DRIFT_OF, DriftItem, DriftType, SchemaDriftDetector
+from confiture.core.drift import (
+    DRIFT_OF,
+    DriftItem,
+    DriftType,
+    SchemaDriftDetector,
+    severity_of,
+)
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -163,6 +169,24 @@ def _disagreement(url: str, schema_file: Path) -> tuple[set[Key], set[Key], set[
     return found - changed, changed - found, {item.drift_type.value for item in report.drift_items}
 
 
+def _index_severities(url: str, schema_file: Path) -> tuple[dict[Key, str], dict[Key, str]]:
+    """Each index item's severity as drift reports it, and as ``DRIFT_OF`` says for its change."""
+    with psycopg.connect(url) as conn:
+        report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema_file))
+    reported = {
+        (_drift_key(item), item.drift_type.value): item.severity.value
+        for item in report.drift_items
+        if _DRIFT_FAMILY[item.drift_type] == "index"
+    }
+    expected = {
+        (key, DRIFT_OF[type(change)][0].value): severity_of(change).value
+        for change in platform.diff(url, schema_file).changes
+        if isinstance(change, IndexAdded | IndexDropped)
+        and (key := _change_key(change)) is not None
+    }
+    return reported, expected
+
+
 #: The shapes beside the mutation table: ``(mutation SQL, drift type)``.
 MORE = [
     pytest.param("ALTER TABLE core.tb_other ADD COLUMN note TEXT", "extra_column", id="add-column"),
@@ -224,3 +248,5 @@ def test_drift_and_diff_are_about_the_same_objects(
     assert (drift_only, diff_only) == (set(), set()), (
         f"{mutation} ({drift_type})\n  drift only: {drift_only}\n  diff only:  {diff_only}"
     )
+    reported, expected = _index_severities(url, schema_file)
+    assert reported == expected, mutation

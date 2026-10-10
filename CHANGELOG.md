@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ledger: {table, exists}` under `pending`. No database is `CONFIG_010` (exit 5), an
   unreachable one `CONFIG_006` (exit 3); a database with no ledger has every migration
   pending; a ledger only in another schema is refused, `CONFIG_015` (exit 5).
+- **`PFLIGHT_INVALID_INDEX`** (warning, `migrate preflight --against`): a pending `CREATE INDEX
+  … IF NOT EXISTS` names an index the database holds INVALID, which the statement would skip.
+  `live_catalog.invalid_indexes()` lists them.
 
 ### Fixed
 
@@ -105,6 +108,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ADD FOREIGN KEY` takes `SHARE ROW EXCLUSIVE`**, on both tables, in the change set's lock
   profile (new lock level `share_row_exclusive`): it blocks writes, not reads. It was reported as
   `ACCESS EXCLUSIVE`, which PostgreSQL takes for every other `ADD CONSTRAINT`.
+- **⚠️ An INVALID index is rebuilt, not taken as present** (#689). A failed `CREATE INDEX
+  CONCURRENTLY` leaves its index INVALID: it enforces nothing (a unique one lets duplicates in),
+  serves no query, and `CREATE … IF NOT EXISTS` skips it. The live reader now reads validity
+  (`Index.valid`, written on the model wire: every model golden gains `"valid": true`), and an
+  index valid on one side only rides the differ's rebuild path — `migrate diff --from db` writes
+  `DROP INDEX CONCURRENTLY IF EXISTS` then `CREATE … CONCURRENTLY`, and drift reports the pair
+  (`missing_index` + `extra_index`, the messages say INVALID). An unnamed tree index rebuilt in a
+  named live one's place takes its name, so it is created again rather than only dropped. A
+  partitioned table's own `ON ONLY` index reads as valid. An INVALID index on a materialized
+  view is read but not compared yet (tracked in #690).
+- **⚠️ A missing unique index is critical drift**, valid or not (#689): it is a missing
+  constraint, and `missing_constraint` already is. Every unique index drift rebuilds — for
+  validity, `NULLS NOT DISTINCT`, its method — reports `missing_index` as `critical`; any other
+  stays `warning`. `DRIFT_OF` carries a per-change severity, which drift's index findings read.
 
 ## [1.34.0] - 2026-10-09
 

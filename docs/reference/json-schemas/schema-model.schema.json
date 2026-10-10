@@ -389,7 +389,8 @@
         "backs_constraint",
         "key_options",
         "expressions",
-        "nulls_not_distinct"
+        "nulls_not_distinct",
+        "valid"
       ],
       "properties": {
         "name": {
@@ -445,6 +446,10 @@
         "nulls_not_distinct": {
           "type": "boolean",
           "description": "The index's `NULLS NOT DISTINCT` (`pg_index.indnullsnotdistinct`), recorded on any index, constraining only a unique one."
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "False for an index a failed `CREATE INDEX CONCURRENTLY` left INVALID: it enforces and serves nothing. True for every index a tree declares."
         }
       }
     },
