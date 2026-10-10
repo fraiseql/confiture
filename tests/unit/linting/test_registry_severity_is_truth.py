@@ -267,7 +267,8 @@ FIXTURES: dict[str, Fixture] = {
         {
             "010.sql": "CREATE TABLE tb_n (pk_n bigint PRIMARY KEY, fk_up bigint, path ltree);\n"
             "SELECT treekey.manage_path('tb_n', 'pk_n', 'fk_up');\n"
-            "CREATE VIEW v_n AS SELECT unnest(string_to_array(n.path::text, '.')) FROM tb_n n;\n"
+            "CREATE TABLE tv_n AS SELECT n.pk_n, x.label FROM tb_n n, LATERAL "
+            "unnest(string_to_array(n.path::text, '.')) WITH ORDINALITY AS x (label, ord);\n"
         }
     ),
     "replica_001": Fixture(

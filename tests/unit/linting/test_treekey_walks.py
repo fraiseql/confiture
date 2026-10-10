@@ -80,42 +80,54 @@ def test_a_recursive_cte_over_something_else_is_fine() -> None:
     )
 
 
-def test_an_unnest_of_the_path_in_a_cte_is_treekey_002() -> None:
-    assert _found(
-        "CREATE VIEW v_industry AS WITH p AS (\n"
-        "  SELECT i.pk_industry, unnest(string_to_array(i.path::text, '.'::text))::bigint AS anc\n"
-        "    FROM catalog.tb_industry i\n"
-        ")\n"
-        "SELECT p.pk_industry, array_agg(p.anc) AS ancestors FROM p GROUP BY p.pk_industry;\n"
-    ) == ["treekey_002"]
+def test_an_unnest_of_the_path_in_a_cte_on_a_plain_view_is_not_treekey_002() -> None:
+    assert (
+        _found(
+            "CREATE VIEW v_industry AS WITH p AS (\n"
+            "  SELECT i.pk_industry, unnest(string_to_array(i.path::text, '.'::text))::bigint AS anc\n"
+            "    FROM catalog.tb_industry i\n"
+            ")\n"
+            "SELECT p.pk_industry, array_agg(p.anc) AS ancestors FROM p GROUP BY p.pk_industry;\n"
+        )
+        == []
+    )
 
 
-def test_an_unnest_of_the_path_in_a_scalar_subquery_is_treekey_002() -> None:
-    assert _found(
-        "CREATE VIEW v_location AS SELECT l.pk_location,\n"
-        "  (SELECT array_agg(a.name) FROM tenant.tb_location a\n"
-        "    WHERE (a.pk_location::text) IN (\n"
-        "      SELECT unnest(string_to_array(l.path::text, '.'::text)) AS unnest)) AS names\n"
-        "  FROM tenant.tb_location l;\n"
-    ) == ["treekey_002"]
+def test_an_unnest_of_the_path_in_a_scalar_subquery_on_a_plain_view_is_not_treekey_002() -> None:
+    assert (
+        _found(
+            "CREATE VIEW v_location AS SELECT l.pk_location,\n"
+            "  (SELECT array_agg(a.name) FROM tenant.tb_location a\n"
+            "    WHERE (a.pk_location::text) IN (\n"
+            "      SELECT unnest(string_to_array(l.path::text, '.'::text)) AS unnest)) AS names\n"
+            "  FROM tenant.tb_location l;\n"
+        )
+        == []
+    )
 
 
-def test_an_unnest_of_the_path_in_lateral_is_treekey_002() -> None:
-    assert _found(
-        "CREATE VIEW v_location AS SELECT l.pk_location, x.label\n"
-        "  FROM tenant.tb_location l,\n"
-        "  LATERAL unnest(string_to_array(l.path::text, '.'::text)) x(label);\n"
-    ) == ["treekey_002"]
+def test_an_unnest_of_the_path_in_lateral_on_a_plain_view_is_not_treekey_002() -> None:
+    assert (
+        _found(
+            "CREATE VIEW v_location AS SELECT l.pk_location, x.label\n"
+            "  FROM tenant.tb_location l,\n"
+            "  LATERAL unnest(string_to_array(l.path::text, '.'::text)) x(label);\n"
+        )
+        == []
+    )
 
 
-def test_any_of_string_to_array_of_the_path_is_treekey_002() -> None:
-    assert _found(
-        "CREATE VIEW v_units AS SELECT o.pk_organizational_unit,\n"
-        "  (SELECT array_agg(a.name) FROM tenant.tb_organizational_unit a\n"
-        "    WHERE a.pk_organizational_unit::text = ANY (string_to_array(o.path::text, '.'::text)))\n"
-        "    AS names\n"
-        "  FROM tenant.tb_organizational_unit o;\n"
-    ) == ["treekey_002"]
+def test_any_of_string_to_array_of_the_path_on_a_plain_view_is_not_treekey_002() -> None:
+    assert (
+        _found(
+            "CREATE VIEW v_units AS SELECT o.pk_organizational_unit,\n"
+            "  (SELECT array_agg(a.name) FROM tenant.tb_organizational_unit a\n"
+            "    WHERE a.pk_organizational_unit::text = ANY (string_to_array(o.path::text, '.'::text)))\n"
+            "    AS names\n"
+            "  FROM tenant.tb_organizational_unit o;\n"
+        )
+        == []
+    )
 
 
 def test_an_unnest_of_another_column_is_fine() -> None:
@@ -163,7 +175,7 @@ def test_quoted_names_are_matched_quoted_and_both_findings_reported() -> None:
         'CREATE VIEW s.v AS WITH RECURSIVE w AS (SELECT t."Fk_Up" FROM s.t t)\n'
         "SELECT unnest(string_to_array(t.\"Tree Path\"::text, '.'::text)) FROM s.t t;\n",
     )
-    assert [f.code for f in found] == ["treekey_002"]
+    assert [f.code for f in found] == []
 
 
 def test_a_bare_name_does_not_match_a_quoted_column() -> None:
@@ -229,11 +241,7 @@ CREATE VIEW lv.v_on_top AS SELECT * FROM lv.v_location;
 
 def test_the_regression_suite_reports_what_lint_views_reports() -> None:
     found = _findings(_REGRESS_TREES, _REGRESS_VIEWS)
-    assert sorted((f.object_name, f.code) for f in found) == [
-        ("lv.mv_industry:lv.tb_industry", "treekey_002"),
-        ("lv.v_location:lv.tb_location", "treekey_002"),
-        ("lv_other.v_location_names:lv.tb_location", "treekey_002"),
-    ]
+    assert found == []
 
 
 # -- what the static rule adds -------------------------------------------------
@@ -247,19 +255,19 @@ def test_no_manage_path_call_means_no_tree_and_no_finding() -> None:
 def test_a_finding_is_placed_where_the_walk_is_written_and_says_what_to_do() -> None:
     (found,) = _findings(
         _REGRESS_TREES,
-        "CREATE VIEW lv.v_location AS\n"
+        "SELECT tviews.pg_tviews_create_or_replace('lv.tv_location', $$\n"
         "SELECT l.pk_location, x.label\n"
-        "FROM lv.tb_location l, LATERAL unnest(string_to_array(l.path::text, '.')) AS x (label);\n",
+        "FROM lv.tb_location l, LATERAL unnest(string_to_array(l.path::text, '.'))\n"
+        "  WITH ORDINALITY AS x (label, ord) $$);\n",
     )
     assert (found.code, found.file, found.line, found.object_type) == (
         "treekey_002",
         "001.sql",
         3,
-        "view",
+        "tview",
     )
-    assert "lv.v_location" in found.message
+    assert "lv.tv_location" in found.message
     assert "lv.tb_location.path" in found.message
-    assert "treekey.register_ancestry" in found.fix
     assert "@>" in found.fix
 
 
@@ -271,7 +279,7 @@ def test_named_arguments_and_an_unqualified_call_declare_a_tree() -> None:
         "CREATE VIEW v_node AS SELECT n.pk_node, unnest(string_to_array(n.lineage::text, '.'))\n"
         "  FROM public.tb_node n;\n",
     )
-    assert [(f.code, f.object_name) for f in found] == [("treekey_002", "v_node:tb_node")]
+    assert found == []
 
 
 def test_a_tview_reading_the_tree_is_judged_too() -> None:
@@ -282,7 +290,7 @@ def test_a_tview_reading_the_tree_is_judged_too() -> None:
         "  FROM lv.tb_location l, LATERAL unnest(string_to_array(l.path::text, '.')) AS x (label)\n"
         "$$);\n",
     )
-    assert [(f.code, f.object_type, f.line) for f in found] == [("treekey_002", "tview", 3)]
+    assert found == []
 
 
 # -- treekey_001: a recursive walk on a TVIEW's chain (pg_tviews 0.1.0-beta.26) ------
@@ -441,3 +449,148 @@ def test_the_walk_in_the_tview_s_own_query_is_placed_in_it() -> None:
     )
     assert (found.object_type, found.line) == ("tview", 2)
     assert found.message.startswith("tv_category reads tb_category in a WITH RECURSIVE: ")
+
+
+# -- treekey_002: the path unnested WITH ORDINALITY on a TVIEW's chain ----------------
+
+#: The spellings measured on pg_tviews 0.1.0-beta.26 (``tviews-probe/defs``), each a
+#: TVIEW's whole query over ``tb_category``.
+_SPELLINGS = {
+    "b": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names',\n"
+        "  (SELECT array_agg(a.name ORDER BY nlevel(a.path)) FROM tb_category a\n"
+        "    WHERE a.pk_category::text IN (SELECT unnest(string_to_array(n.path::text, '.'))))) AS data\n"
+        "FROM tb_category n\n"
+    ),
+    "b2": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names',\n"
+        "  (SELECT array_agg(a.name ORDER BY nlevel(a.path)) FROM tb_category a\n"
+        "    WHERE a.pk_category IN (SELECT unnest(string_to_array(n.path::text, '.'))::bigint))) AS data\n"
+        "FROM tb_category n\n"
+    ),
+    "b3": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names',\n"
+        "  (SELECT array_agg(a.name ORDER BY nlevel(a.path))\n"
+        "     FROM unnest(string_to_array(n.path::text, '.')) AS u(lbl) JOIN tb_category a ON a.pk_category = u.lbl::bigint)) AS data\n"
+        "FROM tb_category n\n"
+    ),
+    "b4": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names',\n"
+        "  (SELECT array_agg(a.name ORDER BY u.ord)\n"
+        "     FROM unnest(string_to_array(n.path::text, '.')) WITH ORDINALITY AS u(lbl, ord) JOIN tb_category a ON a.pk_category = u.lbl::bigint)) AS data\n"
+        "FROM tb_category n\n"
+    ),
+    "c": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names', x.names) AS data\n"
+        "FROM tb_category n\n"
+        "CROSS JOIN LATERAL (SELECT array_agg(a.name ORDER BY u.ord) AS names\n"
+        "   FROM unnest(string_to_array(n.path::text, '.')) WITH ORDINALITY AS u(lbl, ord)\n"
+        "   JOIN tb_category a ON a.pk_category = u.lbl::bigint) x\n"
+    ),
+    "c2": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names', array_agg(a.name ORDER BY u.ord)) AS data\n"
+        "FROM tb_category n\n"
+        "CROSS JOIN LATERAL unnest(string_to_array(n.path::text, '.')) WITH ORDINALITY AS u(lbl, ord)\n"
+        "JOIN tb_category a ON a.pk_category = u.lbl::bigint\n"
+        "GROUP BY n.pk_category, n.id\n"
+    ),
+    "c3": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names', array_agg(a.name ORDER BY nlevel(a.path))) AS data\n"
+        "FROM tb_category n\n"
+        "CROSS JOIN LATERAL unnest(string_to_array(n.path::text, '.')) AS u(lbl)\n"
+        "JOIN tb_category a ON a.pk_category = u.lbl::bigint\n"
+        "GROUP BY n.pk_category, n.id\n"
+    ),
+    "c4": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names', x.names) AS data\n"
+        "FROM tb_category n\n"
+        "CROSS JOIN LATERAL (SELECT array_agg(a.name ORDER BY nlevel(a.path)) AS names\n"
+        "   FROM tb_category a WHERE a.pk_category IN (SELECT unnest(string_to_array(n.path::text, '.'))::bigint)) x\n"
+    ),
+    "d": (
+        "SELECT n.pk_category, n.id, jsonb_build_object('names',\n"
+        "  (SELECT array_agg(a.name ORDER BY nlevel(a.path)) FROM tb_category a\n"
+        "    WHERE a.pk_category::text = ANY (string_to_array(n.path::text, '.')))) AS data\n"
+        "FROM tb_category n\n"
+    ),
+    "e": (
+        "WITH anc AS (SELECT c.pk_category, unnest(string_to_array(c.path::text, '.'))::bigint AS anc FROM tb_category c)\n"
+        "SELECT n.pk_category, n.id, jsonb_build_object('names', array_agg(a.name ORDER BY nlevel(a.path))) AS data\n"
+        "FROM tb_category n JOIN anc ON anc.pk_category = n.pk_category JOIN tb_category a ON a.pk_category = anc.anc\n"
+        "GROUP BY n.pk_category, n.id\n"
+    ),
+}
+
+
+def _spelled(name: str, options: str | None = None) -> str:
+    passed = f", options => '{options}'" if options else ""
+    return (
+        "SELECT tviews.pg_tviews_create_or_replace('tv_category', $$\n"
+        + _SPELLINGS[name]
+        + f"$${passed});\n"
+    )
+
+
+def _ordinal(*texts: str) -> list[TreeWalkFinding]:
+    return [f for f in _findings(*texts) if f.code == "treekey_002"]
+
+
+@pytest.mark.parametrize("name", ["b4", "c", "c2"])
+def test_the_path_unnested_with_ordinality_is_treekey_002(name: str) -> None:
+    (found,) = _ordinal(_CATEGORY, _spelled(name))
+    assert (found.object_type, found.object_name) == ("tview", "tv_category:tb_category")
+    assert found.message.startswith(
+        "tv_category unnests tb_category.path WITH ORDINALITY: pg_tviews refuses"
+    )
+    assert "nlevel" in found.fix
+
+
+@pytest.mark.parametrize("name", ["b", "b2", "b3", "c3", "c4", "d", "e"])
+def test_every_other_unnest_of_the_path_is_traced(name: str) -> None:
+    assert _findings(_CATEGORY, _spelled(name)) == []
+
+
+def test_the_ordinality_is_placed_where_it_is_written() -> None:
+    (found,) = _ordinal(_CATEGORY, _spelled("c2"))
+    assert (found.file, found.line) == ("001.sql", 4)
+
+
+def test_an_ordinality_a_tview_reaches_through_a_view_is_reported_in_the_view() -> None:
+    (found,) = _ordinal(
+        _CATEGORY,
+        "CREATE VIEW v_category_names AS\n" + _SPELLINGS["c2"] + ";\n",
+        "CREATE TABLE tv_category AS SELECT * FROM v_category_names;\n",
+    )
+    assert (found.object_name, found.line) == ("v_category_names:tb_category", 4)
+    assert found.message.startswith("tv_category unnests tb_category.path WITH ORDINALITY through")
+
+
+def test_an_ordinality_no_tview_reads_is_not_treekey_002() -> None:
+    assert _ordinal(_CATEGORY, "CREATE VIEW v_category_names AS\n" + _SPELLINGS["c2"] + ";\n") == []
+
+
+def test_a_full_refresh_policy_for_the_tree_quiets_treekey_002() -> None:
+    """Measured: the ordinality is an uncascaded read, so full_refresh creates the TVIEW."""
+    options = '{"uncascaded_tables": {"tb_category": "full_refresh"}}'
+    assert _ordinal(_CATEGORY, _spelled("c2", options)) == []
+
+
+def test_a_warn_policy_says_the_ordinality_leaves_rows_stale() -> None:
+    (found,) = _ordinal(_CATEGORY, _spelled("b4", '{"uncascaded_policy": "warn"}'))
+    assert "stale" in found.message
+
+
+def test_a_tree_registered_with_another_path_column_is_read() -> None:
+    tree = (
+        "CREATE TABLE tb_node (pk_node bigint PRIMARY KEY, id uuid, fk_up bigint, name text,\n"
+        "    lineage ltree);\n"
+        "SELECT treekey.manage_path('tb_node', 'pk_node', 'fk_up', path_col => 'lineage');\n"
+    )
+    query = (
+        "SELECT tviews.pg_tviews_create_or_replace('tv_node', $$\n"
+        "SELECT n.pk_node, n.id, x.label FROM tb_node n\n"
+        "CROSS JOIN LATERAL unnest(string_to_array(n.lineage::text, '.')) WITH ORDINALITY\n"
+        "  AS x(label, ord) $$);\n"
+    )
+    assert [f.object_name for f in _ordinal(tree, query)] == ["tv_node:tb_node"]
+    assert _ordinal(tree, query.replace("n.lineage", "n.name")) == []

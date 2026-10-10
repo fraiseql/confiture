@@ -15,7 +15,9 @@ Spelling                                                pg_tviews               
 ``a.path @> n.path``                                    mapped                              none
 the path unnested (scalar subquery, ``IN``, ``= ANY``,  mapped (a seq scan without a GIN    none
 CTE, plain ``LATERAL``)                                 index)
-the path unnested ``WITH ORDINALITY``                   **refused** at create               ``treekey_002``
+the path unnested ``WITH ORDINALITY``                   uncascaded: refused (``error``),    ``treekey_002``
+                                                        rebuilt in full (``full_refresh``),
+                                                        **stale** (``warn``)
 ``WITH RECURSIVE`` reading the tree                     ``all_keys``: refused (``error``),  ``treekey_001``
                                                         rebuilt in full (``full_refresh``),
                                                         **stale** (``warn``)
@@ -25,7 +27,10 @@ the path unnested ``WITH ORDINALITY``                   **refused** at create   
 of the same ``WITH RECURSIVE`` it reads, or a plain view — on a TVIEW's chain,
 unless the policy a write to that tree meets is ``full_refresh`` (the TVIEW's
 ``uncascaded_tables`` entry for it, else its ``uncascaded_policy``). One finding per
-walk, where the CTE is written, naming every TVIEW that reaches it.
+walk, where the CTE is written, naming every TVIEW that reaches it. ``treekey_002``
+reports a ``… WITH ORDINALITY`` over a tree's path column on the chain, under the
+same policy: the ordinality is no condition linking a write to the TVIEW key, so the
+tree is uncascaded, and refused under ``error`` (measured; ``full_refresh`` creates it).
 """
 
 from collections.abc import Iterator, Sequence
@@ -33,7 +38,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from confiture.core.ddl_walk import constant_text, uncascaded_policy_for, walk_nodes
-from confiture.core.linting.inventory import Inventory, SchemaObject, split_names
+from confiture.core.linting.inventory import Inventory, split_names
 from confiture.core.linting.tview_reads import (
     Holder,
     Path,
@@ -57,15 +62,22 @@ RULE_NAMES = {
 _PARAMETERS = ("table_ref", "pk_col", "parent_fk_col", "path_col")
 _DEFAULT_PATH = "path"
 _TREEKEY_SCHEMA = "treekey"
-_PATH_FUNCTIONS = frozenset({"unnest", "string_to_array"})
-_BUILTIN_SCHEMAS = (None, "pg_catalog")
 #: The parts of a schema-qualified table name.
 _QUALIFIED = 2
 
-_FIX = (
-    "Walk the ancestors with treekey.register_ancestry('{tree}', …), which generates "
-    "a correlated @> view, or write the subquery yourself: WHERE a.{path} @> n.{path}."
-)
+#: ``code → (what the walk is, the rewrite that pg_tviews traces)``.
+_SPELLING = {
+    "treekey_001": (
+        "reads {tree} in a WITH RECURSIVE",
+        "Walk the ancestors with a correlated a.{path} @> n.{path} "
+        "(treekey.register_ancestry('{tree}', …) generates it)",
+    ),
+    "treekey_002": (
+        "unnests {tree}.{path} WITH ORDINALITY",
+        "Drop WITH ORDINALITY and order the ancestors by nlevel(a.{path}), or walk them "
+        "with a correlated a.{path} @> n.{path}",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -118,12 +130,7 @@ def tree_walks(files: Sequence[ParsedFile], inventory: Inventory) -> TreeWalks:
     graph = ReadGraph.read(files, inventory)
     tviews = [target for target in graph.targets if target.family == "tview"]
     findings = _Walks(graph, trees).findings(tviews)
-    for holder in graph.holders.values():
-        if holder.obj.kind not in ("view", "matview", "tview"):
-            continue
-        for query in holder.queries:
-            findings.extend(_walks(holder.obj, query, trees))
-    unread.extend(graph.unread(graph.targets, routines=False))
+    unread.extend(graph.unread(tviews, routines=False))
     return TreeWalks(
         sorted(findings, key=lambda f: (f.file or "", f.line, f.code, f.object_name)),
         sorted(unread),
@@ -169,48 +176,6 @@ def _tree(arguments: dict[str, str | None]) -> Tree | None:
     return Tree(RelationName(schema, identifier_identity(parts[-1])), parent_fk, path)
 
 
-def _walks(obj: SchemaObject, query: Query, trees: list[Tree]) -> Iterator[TreeWalkFinding]:
-    nodes = list(walk_nodes(query.root))
-    line_at = query.line_at
-    local = {n.ctename for n in nodes if type(n).__name__ == "CommonTableExpr"}
-    read = {
-        RelationName(n.schemaname, n.relname).identity
-        for n in nodes
-        if type(n).__name__ == "RangeVar" and not (n.schemaname is None and n.relname in local)
-    }
-    for tree in trees:
-        if tree.relation.identity not in read:
-            continue
-        unnest = _path_unnest(nodes, tree.path)
-        if unnest is not None:
-            location, function = unnest
-            yield _finding(
-                "treekey_002",
-                query,
-                obj,
-                tree,
-                line_at(location),
-                f"takes {tree.relation.qualified}.{tree.path} apart with {function}(…): "
-                "pg_tviews cannot always link a write to the rows it changes (in a CTE it "
-                "refuses the view as unlinked, fraiseql/pg_tviews#196)",
-            )
-
-
-def _path_unnest(nodes: list[Any], path: str) -> tuple[int | None, str] | None:
-    """Where ``unnest`` or ``string_to_array`` takes *path* as an argument, or ``None``."""
-    for node in nodes:
-        if type(node).__name__ != "FuncCall":
-            continue
-        schema, name = split_names(node.funcname)
-        if (
-            name in _PATH_FUNCTIONS
-            and schema in _BUILTIN_SCHEMAS
-            and any(_names_column(arg, path) is not None for arg in node.args or ())
-        ):
-            return node.location, name
-    return None
-
-
 def _names_column(root: Any, column: str) -> int | None:
     """Where *root* first names *column* (as PostgreSQL holds it), or ``None``."""
     for node in walk_nodes(root):
@@ -220,7 +185,7 @@ def _names_column(root: Any, column: str) -> int | None:
 
 
 class _Walks:
-    """``treekey_001``: each recursive walk of a tree on a TVIEW's chain, once per site."""
+    """Each walk of a tree on a TVIEW's chain pg_tviews cannot trace, once per site."""
 
     def __init__(self, graph: ReadGraph, trees: list[Tree]) -> None:
         self.graph = graph
@@ -228,22 +193,46 @@ class _Walks:
         self._through: dict[tuple[str, Tree], bool] = {}
 
     def findings(self, tviews: list[Target]) -> list[TreeWalkFinding]:
-        sites: dict[tuple[int, int, Tree], list[tuple[Target, Path, str | None]]] = {}
-        placed: dict[tuple[int, int, Tree], tuple[Holder, Query, int]] = {}
+        sites: dict[_Site, list[tuple[Target, Path, str | None]]] = {}
+        placed: dict[_Site, tuple[Holder, Query]] = {}
         for target in tviews:
             declared = target.declared or TView(target.obj.name)
             for holder, path in self.graph.chain(target, routines=False):
                 for query in holder.queries:
-                    for location, tree in self._recursive_reads(query):
+                    for code, location, tree in self._sites(query):
                         policy = uncascaded_policy_for(declared, tree.relation)
                         if policy == "full_refresh":
                             continue
-                        site = (id(holder), location, tree)
+                        site = _Site(code, id(holder), location, tree)
                         sites.setdefault(site, []).append((target, path, policy))
-                        placed[site] = (holder, query, location)
-        return [
-            _recursive_finding(*placed[site], site[2], reached) for site, reached in sites.items()
-        ]
+                        placed[site] = (holder, query)
+        return [_finding(site, *placed[site], reached) for site, reached in sites.items()]
+
+    def _sites(self, query: Query) -> Iterator[tuple[str, int, Tree]]:
+        for location, tree in self._recursive_reads(query):
+            yield "treekey_001", location, tree
+        for location, tree in self._ordinal_reads(query):
+            yield "treekey_002", location, tree
+
+    def _ordinal_reads(self, query: Query) -> Iterator[tuple[int, Tree]]:
+        """``(where, tree)`` for each ``… WITH ORDINALITY`` over a tree's path column.
+
+        Measured on pg_tviews 0.1.0-beta.26: an ordinality has no condition linking
+        it to the TVIEW key, so the tree is uncascaded, wherever the function sits
+        (a scalar subquery's ``FROM``, ``LATERAL``, a ``LATERAL`` subquery).
+        """
+        nodes = list(walk_nodes(query.root))
+        local = {n.ctename for n in nodes if type(n).__name__ == "CommonTableExpr"}
+        read = _relations(query.root)
+        for node in nodes:
+            if type(node).__name__ != "RangeFunction" or not node.ordinality:
+                continue
+            for tree in self.trees:
+                location = _names_column(node.functions, tree.path)
+                if location is not None and any(
+                    self._reads_tree(relation, tree, local) for relation in read
+                ):
+                    yield location, tree
 
     def _recursive_reads(self, query: Query) -> Iterator[tuple[int, Tree]]:
         """``(where, tree)`` for each recursive CTE that reads a tree, itself or by a sibling.
@@ -319,17 +308,26 @@ def _names(relation: tuple[str | None, str], table: RelationName) -> bool:
     return name == table.name and (schema is None or table.schema is None or schema == table.schema)
 
 
-def _recursive_finding(
-    holder: Holder,
-    query: Query,
-    location: int,
-    tree: Tree,
-    reached: list[tuple[Target, Path, str | None]],
+@dataclass(frozen=True)
+class _Site:
+    """One walk, where it is written: which rule, in which holder, at which offset, of what."""
+
+    code: str
+    holder: int
+    location: int
+    tree: Tree
+
+
+def _finding(
+    site: _Site, holder: Holder, query: Query, reached: list[tuple[Target, Path, str | None]]
 ) -> TreeWalkFinding:
+    tree = site.tree
+    tree_name = tree.relation.qualified
     names = list(dict.fromkeys(spelled(target.obj) for target, _, _ in reached))
-    subject = (
-        names[0] + " reads" if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]} read"
-    )
+    verb, rewrite = _SPELLING[site.code]
+    walk = verb.format(tree=tree_name, path=tree.path)
+    if len(names) > 1:
+        walk = walk.replace("reads ", "read ", 1).replace("unnests ", "unnest ", 1)
     _target, first_path, _policy = reached[0]
     through = (
         f" through {' → '.join(spelled(step.obj) for step in first_path)}" if first_path else ""
@@ -339,44 +337,28 @@ def _recursive_finding(
     outcomes = []
     if refused:
         outcomes.append(
-            f"pg_tviews refuses {_listed(refused)} at create, since it cannot trace a write to "
-            "the tree through a recursive walk (all_keys, fraiseql/pg_tviews#183)"
+            f"pg_tviews refuses {_listed(refused)} at create, since no condition links a write "
+            "to the tree to the rows it changes (all_keys)"
         )
     if stale:
         outcomes.append(
             f"under the warn policy a write to the tree leaves {_listed(stale)}'s rows stale"
         )
-    tree_name = tree.relation.qualified
     return TreeWalkFinding(
-        code="treekey_001",
+        code=site.code,
         object_type=holder.obj.kind,
         object_name=f"{holder.obj.qualified}:{tree_name}",
-        message=f"{subject} {tree_name} in a WITH RECURSIVE{through}: {'; '.join(outcomes)}",
+        message=f"{_listed(names)} {walk}{through}: {'; '.join(outcomes)}",
         fix=(
-            f"Walk the ancestors with a correlated a.{tree.path} @> n.{tree.path} "
-            f"(treekey.register_ancestry('{tree_name}', …) generates it); or declare "
+            f"{rewrite.format(tree=tree_name, path=tree.path)}; or declare "
             f'"uncascaded_tables": {{"{tree_name}": "full_refresh"}} in the TVIEW\'s options, '
             'and every write to the tree rebuilds it; or "uncascaded_policy": "full_refresh" '
             "for the whole TVIEW."
         ),
         file=query.file,
-        line=query.line_at(location),
+        line=query.line_at(site.location),
     )
 
 
 def _listed(names: list[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
-
-
-def _finding(
-    code: str, query: Query, obj: SchemaObject, tree: Tree, line: int, says: str
-) -> TreeWalkFinding:
-    return TreeWalkFinding(
-        code=code,
-        object_type=obj.kind,
-        object_name=f"{obj.qualified}:{tree.relation.qualified}",
-        message=f"{obj.qualified} {says}",
-        fix=_FIX.format(tree=tree.relation.qualified, path=tree.path),
-        file=query.file,
-        line=line,
-    )

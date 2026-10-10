@@ -442,7 +442,7 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="treekey_002",
         family="treekey",
-        title="A view takes a pg_treekey tree's path apart with unnest or string_to_array",
+        title="A TVIEW unnests a pg_treekey tree's path WITH ORDINALITY, which pg_tviews cannot trace",
         severity="warning",
         default_on=True,
     ),

@@ -50,7 +50,7 @@ Adopt a rule on a schema that already trips it with a
 | `session_002` | session_reads | warning | off | A view calls a non-immutable function outside pg_catalog |
 | `session_003` | session_reads | warning | off | A view reads the time |
 | `treekey_001` | treekey | warning | on | A TVIEW reads a pg_treekey tree in a WITH RECURSIVE pg_tviews cannot trace |
-| `treekey_002` | treekey | warning | on | A view takes a pg_treekey tree's path apart with unnest or string_to_array |
+| `treekey_002` | treekey | warning | on | A TVIEW unnests a pg_treekey tree's path WITH ORDINALITY, which pg_tviews cannot trace |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
