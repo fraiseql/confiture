@@ -198,6 +198,8 @@ class TestTheBlindedRulesSaySo:
             "build_005",
             "build_006",
             "qual_001",
+            "treekey_001",
+            "treekey_002",
         }
 
     def test_each_reason_names_the_file(self, one_broken_file: Path) -> None:

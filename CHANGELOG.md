@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`treekey_001` and `treekey_002`: how a view walks a pg_treekey tree** (#676). A view,
+  materialized view or TVIEW that reads a tree (a table a `treekey.manage_path()` call in the
+  tree declares) and walks it with `WITH RECURSIVE` over the parent key (`treekey_001`), or takes
+  its path apart with `unnest`/`string_to_array` (`treekey_002`), is a warning: pg_tviews rebuilds
+  the whole TVIEW on every write, or refuses the view as unlinked. Read from the parse tree, with
+  the fixtures of pg_treekey's `treekey.lint_views()`; on by default, family `treekey`.
+
 ### Fixed
 
 - **A TVIEW query or routine body the session-read rules could not read is reported degraded**

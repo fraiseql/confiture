@@ -27,6 +27,7 @@ from confiture.core.linting.rule_registry import (
     DEFAULT_SELECTOR,
     LINT_RULES,
     SESSION_CODES,
+    TREEKEY_CODES,
     resolve_selection,
 )
 from confiture.core.linting.schema_linter import (
@@ -108,6 +109,7 @@ def linter_config(
         check_body_warnings="body_002" in selected,
         check_body_classes=selected & ARTEFACT_CODES,
         check_session_reads=selected & SESSION_CODES,
+        check_tree_walks=selected & TREEKEY_CODES,
         server_url=server_url,
     )
 

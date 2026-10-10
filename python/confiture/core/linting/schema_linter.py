@@ -218,6 +218,7 @@ class LintConfig:
         check_body_warnings: bool = False,
         check_body_classes: frozenset[str] = frozenset(),
         check_session_reads: frozenset[str] = frozenset({"tview_003"}),
+        check_tree_walks: frozenset[str] = frozenset(),
         server_url: str | None = None,
     ):
         """Initialize linting configuration.
@@ -294,6 +295,11 @@ class LintConfig:
             check_session_reads: The session-read codes to report (#656): the
                 ``tview`` family's ``tview_003``–``005`` and ``session_reads``'
                 ``session_001``–``003``. ``tview_003`` by default.
+            check_tree_walks: The ``treekey`` codes to report (#676): a view
+                walking a pg_treekey tree with ``WITH RECURSIVE`` over its parent
+                key (``treekey_001``) or by taking its path apart
+                (``treekey_002``). None by default; ``confiture lint`` selects
+                both.
             server_url: The writable maintenance server the ``body`` family
                 builds its scratch database on (``--server-url``). ``None``
                 falls back to the environment's own URL, whose *database* is
@@ -331,6 +337,7 @@ class LintConfig:
         self.check_body_warnings = check_body_warnings
         self.check_body_classes = check_body_classes
         self.check_session_reads = check_session_reads
+        self.check_tree_walks = check_tree_walks
         self.server_url = server_url
 
 
@@ -517,6 +524,7 @@ class SchemaLinter:
             (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
             (self.config.check_tview_replicas, partial(self._check_tview, "tview_002"), "tview"),
             (bool(self.config.check_session_reads), self._check_session_reads, None),
+            (bool(self.config.check_tree_walks), self._check_tree_walks, "treekey"),
         ):
             if enabled:
                 check(report)
@@ -762,6 +770,39 @@ class SchemaLinter:
                     line_number=found.line,
                     suggested_fix=found.fix,
                 )
+            )
+
+    def _check_tree_walks(self, report: LintReport) -> None:
+        """``treekey_001`` / ``treekey_002``: a view walks a pg_treekey tree (#676)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.tree_walks import RULE_NAMES, tree_walks
+
+        severities = {rule.code: rule.severity for rule in LINT_RULES}
+        walks = tree_walks(self._files, self._inventory)
+        for found in walks.findings:
+            if found.code not in self.config.check_tree_walks:
+                continue
+            report.add_violation(
+                LintViolation(
+                    rule_id=found.code,
+                    rule_name=RULE_NAMES[found.code],
+                    severity=RuleSeverity(severities[found.code]),
+                    object_type=found.object_type,
+                    object_name=found.object_name,
+                    message=found.message,
+                    file_path=found.file,
+                    line_number=found.line,
+                    suggested_fix=found.fix,
+                )
+            )
+        if walks.unread:
+            report.degraded.extend(
+                RuleStatus(
+                    code=code,
+                    state="degraded",
+                    reason=f"could not read, so did not judge: {', '.join(walks.unread)}",
+                )
+                for code in sorted(self.config.check_tree_walks)
             )
 
     def _check_documentation(self, report: LintReport) -> None:
