@@ -91,3 +91,27 @@ def test_is_window_safe_true_when_forward_compatible(tmp_path: Path) -> None:
     (tmp_path / "20260606120000_add.up.sql").write_text("ALTER TABLE t ADD COLUMN c int;")
     (tmp_path / "20260606120000_add.down.sql").write_text("ALTER TABLE t DROP COLUMN c;")
     assert is_window_safe(_all_issues(tmp_path)) is True
+
+
+def test_is_window_safe_true_for_a_generated_foreign_key(tmp_path: Path) -> None:
+    """A named foreign key is generated ``NOT VALID`` then ``VALIDATE CONSTRAINT``;
+    the validation scans without blocking writes, so the window stays safe."""
+    from confiture.core.differ import SchemaDiffer
+    from confiture.core.differ_sql import DifferSQLGenerator
+
+    old = "CREATE TABLE tb_org (id int PRIMARY KEY); CREATE TABLE tb_user (org int);"
+    new = (
+        "CREATE TABLE tb_org (id int PRIMARY KEY); CREATE TABLE tb_user (org int, "
+        "CONSTRAINT fk_user_org FOREIGN KEY (org) REFERENCES tb_org (id));"
+    )
+    (change,) = SchemaDiffer().compare(old, new).changes
+    up = DifferSQLGenerator().generate_up(change)
+    assert up is not None
+    assert "VALIDATE CONSTRAINT" in up
+    (tmp_path / "20260606120000_fk.up.sql").write_text(up)
+    (tmp_path / "20260606120000_fk.down.sql").write_text(
+        "ALTER TABLE tb_user DROP CONSTRAINT fk_user_org;"
+    )
+    issues = _all_issues(tmp_path)
+    assert not [i for i in issues if i.code == "PFLIGHT_REPLICA_UNCLASSIFIED"]
+    assert is_window_safe(issues) is True

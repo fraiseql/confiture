@@ -415,8 +415,10 @@ def _drop_index(change: IndexAdded | IndexDropped) -> str:
 def _add_foreign_key(change: ForeignKeyAdded | ForeignKeyDropped) -> str:
     """``NOT VALID`` then ``VALIDATE``, which needs a name — or one statement.
 
-    The two-step takes a brief ``SHARE ROW EXCLUSIVE`` lock and scans the table
-    outside it, and the second step names the constraint. An unnamed foreign key
+    The second step names the constraint. Run apart, the ``ADD`` takes a brief
+    ``SHARE ROW EXCLUSIVE`` lock and the scan blocks no writer; in one transaction
+    — a migration's default — the scan holds the ``ADD``'s lock, so writes on both
+    tables wait for it, which the tier says (``lock_risky``). An unnamed foreign key
     cannot be validated separately, so it is added in one statement and the
     statement says so rather than carrying a name confiture made up.
     """

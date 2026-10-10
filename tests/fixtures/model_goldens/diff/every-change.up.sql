@@ -81,7 +81,7 @@ ALTER TABLE things ALTER COLUMN status SET DEFAULT 'open';
 -- confiture:tier additive
 CREATE INDEX CONCURRENTLY IF NOT EXISTS things_new_ix ON things (code, qty);
 
--- confiture:tier reversible
+-- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_new_fk FOREIGN KEY (pid) REFERENCES parent (id) ON DELETE CASCADE NOT VALID;
 ALTER TABLE things VALIDATE CONSTRAINT things_new_fk;
 

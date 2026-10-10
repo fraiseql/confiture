@@ -51,7 +51,7 @@ ALTER TABLE things ADD CONSTRAINT things_old_uq UNIQUE (code);
 -- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_old_ck CHECK (qty > 0);
 
--- confiture:tier reversible
+-- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_old_fk FOREIGN KEY (pid) REFERENCES parent (id) NOT VALID;
 ALTER TABLE things VALIDATE CONSTRAINT things_old_fk;
 

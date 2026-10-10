@@ -58,6 +58,7 @@ COVERAGE = {
     ),
     "drop_index": ("DROP INDEX idx_user_email;", "safe"),
     "drop_constraint": ("ALTER TABLE tb_user DROP CONSTRAINT ck_user;", "safe"),
+    "validate_constraint": ("ALTER TABLE tb_user VALIDATE CONSTRAINT fk_user_org;", "safe"),
     "drop_not_null": ("ALTER TABLE tb_user ALTER COLUMN email DROP NOT NULL;", "safe"),
     "set_default": ("ALTER TABLE tb_user ALTER COLUMN active SET DEFAULT true;", "safe"),
     "change_owner": ("ALTER TABLE tb_user OWNER TO app;", "safe"),
