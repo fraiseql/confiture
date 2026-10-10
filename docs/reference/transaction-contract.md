@@ -196,6 +196,14 @@ Non-transactional migrations:
 - Have no automatic rollback on failure under regular `migrate up` —
   manual cleanup may be required.
 
+A migration `migrate diff --generate` writes follows the same test. When the
+up file runs in one transaction, a table or materialized view it creates is
+written plainly, under `-- confiture:creates <relation>`: a failure rolls the
+file back whole. When it does not, a failure leaves what already committed
+and records no ledger row, so the retry runs the file again from the top —
+every create in it therefore keeps `IF NOT EXISTS`, and nothing is declared.
+The down file follows the up file's mode.
+
 **Implication for authors:** if you need `CONCURRENTLY`, `VACUUM`,
 `REINDEX CONCURRENTLY`, or another statement that PostgreSQL forbids
 inside a transaction, set `transactional = False` on the migration

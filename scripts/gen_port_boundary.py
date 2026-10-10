@@ -46,6 +46,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "change_order.py": (CRATE, TRANSFORM),
     "change_set": (CRATE, TRANSFORM),
     "cor_extractor.py": (CRATE, TRANSFORM),
+    "created_relations.py": (CRATE, TRANSFORM),
     "data_assertions.py": (CRATE, TRANSFORM),
     "ddl_clauses.py": (CRATE, TRANSFORM),
     "ddl_objects.py": (CRATE, TRANSFORM),

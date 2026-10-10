@@ -64,11 +64,20 @@ objects a tree defines by statement — views, routines, domains and types, trig
 schemas, policies, and the rest. With `--from`/`--to`, `--generate` writes a SQL pair — `<version>_<name>.up.sql` and `.down.sql` — which
 is the form every reader of a migration understands: `migrate preflight` classifies its statements
 and reports their risk tier (a Python migration is unclassified by contract), `migrate validate
---idempotent` walks them. The up file carries one statement per change — `CREATE TABLE IF NOT
-EXISTS` for a new table (its columns, constraints and indexes from the artifact), `ALTER TABLE` for
-column changes — and the down file the reverse, in reverse order. Each creation re-applies: `IF NOT
-EXISTS` or `OR REPLACE` where PostgreSQL has one, and a `DO … EXCEPTION WHEN duplicate_object` guard
-for a domain, a composite type or a policy, which have none. The changes run in an order PostgreSQL
+--idempotent` walks them. The up file carries one statement per change — `CREATE TABLE` for a
+new table (its columns, constraints and indexes from the artifact), `ALTER TABLE` for column
+changes — and the down file the reverse, in reverse order.
+
+A new table or materialized view is created **plainly**, with no `IF NOT EXISTS`, under one
+`-- confiture:creates <relation>` line, when the file runs in one transaction — the test
+`migrate up` uses to choose autocommit. PostgreSQL then proves the relation new, a failure rolls
+the whole file back, and `migrate validate --idempotent` accepts the create so declared. A file
+with a concurrent index or an enum label runs in autocommit instead: a failure there leaves what
+already committed and records no ledger row, so the retry runs the file from the top, and every
+create keeps `IF NOT EXISTS` and declares nothing — as the FraiseQL desired-state fixture does,
+since it carries a concurrent index. The down file follows the up file's mode. Every other creation
+re-applies: `OR REPLACE` or `IF NOT EXISTS` where PostgreSQL has one, and a `DO … EXCEPTION WHEN
+duplicate_object` guard for a domain, a composite type or a policy, which have none. The changes run in an order PostgreSQL
 accepts: schemas and extensions first, then types and sequences, tables in foreign-key order,
 edits, routines, views, triggers and policies — and drops the other way round, what depends on a
 table before the table. A foreign-key cycle among new tables is created without the keys that close
@@ -136,7 +145,9 @@ come back, nor a sequence's position: the up statement that loses them is preced
 `migrate preflight` repeats the reason under the gate issue's `details.irreversible`. A change the
 generator has no rollback for is written as `-- confiture:irreversible no rollback derived for …` in
 the down file — and its up statement is tiered `irreversible`, whatever its DDL alone would say.
-Nothing is commented out silently.
+Nothing is commented out silently. A dropped table or materialized view the down file creates
+again is created plainly under `-- confiture:creates`, as the up file would create it, when the
+up file runs in one transaction.
 
 ## What the ingest does not read
 

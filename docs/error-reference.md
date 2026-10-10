@@ -465,23 +465,32 @@ CREATE TABLE users (
 
 **Cause**: Migration or schema trying to CREATE TABLE that's already in the database.
 
-**How to fix**:
-1. **Use IF NOT EXISTS**
+**How to fix**: start from the database's state, not the statement's syntax.
+
+1. **Check whether the migration is already applied, partially applied, or the database drifted**
+   ```bash
+   confiture migrate status
+   ```
+
+2. **A database built from DDL or restored already holds the table** — mark the
+   migrations it holds applied instead of applying them again
+   ([Legacy bootstrap](guides/legacy-bootstrap.md)):
+   ```bash
+   confiture migrate baseline --through 20260101000000
+   ```
+   A migration `migrate diff --generate` wrote creates each new table plainly when
+   it runs in one transaction (`-- confiture:creates <table>`), so this is the error
+   it raises when applied over a database that already holds the table — with
+   `migrate up --force`, `psql -f`, or a baseline set too low.
+
+3. **Two migrations create the same table** — remove the second create.
+
+4. **Only in a hand-written migration that must re-run, use IF NOT EXISTS**
    ```sql
    CREATE TABLE IF NOT EXISTS users (
      id INT PRIMARY KEY,
      name VARCHAR(100)
    );
-   ```
-
-2. **Check if migration already applied**
-   ```bash
-   confiture migrate status
-   ```
-
-3. **Verify database state**
-   ```sql
-   \dt  -- List all tables in psql
    ```
 
 **Examples**:

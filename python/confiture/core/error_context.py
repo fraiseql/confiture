@@ -166,15 +166,18 @@ ERROR_CONTEXTS = {
         message="Table already exists in database",
         cause="Migration or schema tries to create a table that already exists",
         solutions=[
-            "Use CREATE TABLE IF NOT EXISTS instead of CREATE TABLE",
-            "Check if migration has already been applied: confiture migrate status",
-            "If migration was partial, use confiture migrate rollback",
-            "Review migration order to avoid duplicate creates",
+            "Check whether the migration is already applied, partially applied or the "
+            "database drifted: confiture migrate status",
+            "A database built from DDL or restored already holds the table: mark the "
+            "migrations it holds applied (confiture migrate baseline, see "
+            "docs/guides/legacy-bootstrap.md) instead of applying them again",
+            "Review migration order: two migrations must not create the same table",
+            "In a hand-written migration that must re-run, use CREATE TABLE IF NOT EXISTS",
         ],
         examples=[
             "confiture migrate status",
+            "confiture migrate baseline --through 20260101000000",
             "CREATE TABLE IF NOT EXISTS users (...)",
-            "confiture migrate rollback --version 001",
         ],
         docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#table_already_exists",
     ),

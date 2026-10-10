@@ -49,6 +49,15 @@ class TestIdempotencyValidator:
         assert report.files_scanned == 3
         assert report.violation_count == 2  # From files 001 and 002
 
+    def test_validate_directory_accepts_a_declared_create_in_a_down_file(self, tmp_path: Path):
+        """A down that recreates what its up dropped declares it, as the up does."""
+        (tmp_path / "001_drop.down.sql").write_text(
+            "-- confiture:creates users\nCREATE TABLE users (id INT);\n"
+        )
+        report = IdempotencyValidator().validate_directory(tmp_path)
+        assert report.files_scanned == 1
+        assert report.violations == []
+
     def test_validate_directory_filters_by_pattern(self, tmp_path: Path):
         """Validator can filter files by glob pattern."""
         (tmp_path / "001_init.up.sql").write_text("CREATE TABLE users (id INT);")

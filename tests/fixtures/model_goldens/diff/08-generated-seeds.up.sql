@@ -10,8 +10,9 @@ CREATE SCHEMA IF NOT EXISTS prep_seed;
 -- confiture:tier additive
 CREATE TYPE catalog.product_status AS ENUM ('draft', 'active', 'retired');
 
+-- confiture:creates catalog.tb_vendor
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS catalog.tb_vendor (
+CREATE TABLE catalog.tb_vendor (
     id UUID NOT NULL,
     pk_vendor BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     name TEXT NOT NULL,
@@ -20,8 +21,9 @@ CREATE TABLE IF NOT EXISTS catalog.tb_vendor (
     UNIQUE (id)
 );
 
+-- confiture:creates catalog.tb_product
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS catalog.tb_product (
+CREATE TABLE catalog.tb_product (
     id UUID NOT NULL,
     pk_product BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     fk_vendor BIGINT NOT NULL,
@@ -34,16 +36,18 @@ CREATE TABLE IF NOT EXISTS catalog.tb_product (
     CHECK (price > 0)
 );
 
+-- confiture:creates prep_seed.tb_vendor
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS prep_seed.tb_vendor (
+CREATE TABLE prep_seed.tb_vendor (
     id UUID NOT NULL,
     name TEXT NOT NULL,
     country_code VARCHAR(2) NOT NULL,
     PRIMARY KEY (id)
 );
 
+-- confiture:creates prep_seed.tb_product
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS prep_seed.tb_product (
+CREATE TABLE prep_seed.tb_product (
     id UUID NOT NULL,
     fk_vendor_id UUID NOT NULL,
     name TEXT NOT NULL,

@@ -1,5 +1,6 @@
 """Unit tests for DifferSQLGenerator."""
 
+import pglast
 import pytest
 
 from confiture.core.differ import SchemaDiffer
@@ -34,6 +35,15 @@ def test_add_table_generates_create_if_not_exists():
     assert "CREATE TABLE IF NOT EXISTS" in sql
     assert "bookings" in sql
     assert "id uuid NOT NULL DEFAULT gen_random_uuid()" in sql
+
+
+def test_add_table_generates_a_plain_create_table_when_asked():
+    change = TableAdded(table("bookings", spelled("id", "uuid", nullable=False)))
+    sql = DifferSQLGenerator().generate_up(change, plain_creates=True)
+    [stmt] = [raw.stmt for raw in pglast.parse_sql(sql)]
+    assert type(stmt).__name__ == "CreateStmt"
+    assert stmt.relation.relname == "bookings"
+    assert not stmt.if_not_exists
 
 
 def test_schema_change_details_accepts_nested_column_list():

@@ -1,8 +1,9 @@
 -- Migration: golden
 -- Version: <version>
 
+-- confiture:creates audit_logs
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS audit_logs (
+CREATE TABLE audit_logs (
     id BIGINT NOT NULL,
     actor_email TEXT NOT NULL,
     action TEXT NOT NULL,
@@ -11,8 +12,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     PRIMARY KEY (id)
 );
 
+-- confiture:creates employees
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS employees (
+CREATE TABLE employees (
     id BIGINT NOT NULL,
     email TEXT NOT NULL,
     full_name TEXT NOT NULL,
@@ -24,8 +26,9 @@ CREATE TABLE IF NOT EXISTS employees (
     PRIMARY KEY (id)
 );
 
+-- confiture:creates products
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS products (
+CREATE TABLE products (
     id BIGINT NOT NULL,
     sku TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -35,8 +38,9 @@ CREATE TABLE IF NOT EXISTS products (
     CHECK (price_cents >= 0)
 );
 
+-- confiture:creates users
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id BIGINT NOT NULL,
     email TEXT NOT NULL,
     full_name TEXT NOT NULL,
@@ -48,8 +52,9 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (id)
 );
 
+-- confiture:creates orders
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS orders (
+CREATE TABLE orders (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     billing_email TEXT,
@@ -63,8 +68,9 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders (user_id);
 
+-- confiture:creates order_items
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS order_items (
+CREATE TABLE order_items (
     id BIGINT NOT NULL,
     order_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
@@ -76,8 +82,9 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items (order_id);
 
+-- confiture:creates payments
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS payments (
+CREATE TABLE payments (
     id BIGINT NOT NULL,
     order_id BIGINT NOT NULL,
     cardholder_name TEXT NOT NULL,
@@ -91,8 +98,9 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments (order_id);
 
+-- confiture:creates support_tickets
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS support_tickets (
+CREATE TABLE support_tickets (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     customer_email TEXT NOT NULL,
@@ -104,8 +112,9 @@ CREATE TABLE IF NOT EXISTS support_tickets (
 );
 CREATE INDEX IF NOT EXISTS idx_tickets_user ON support_tickets (user_id);
 
+-- confiture:creates user_sessions
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS user_sessions (
+CREATE TABLE user_sessions (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     ip_address TEXT,

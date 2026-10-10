@@ -10,8 +10,9 @@ CREATE SCHEMA IF NOT EXISTS catalog;
 -- confiture:tier additive
 CREATE SCHEMA IF NOT EXISTS management;
 
+-- confiture:creates catalog.tb_company
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS catalog.tb_company (
+CREATE TABLE catalog.tb_company (
     id UUID NOT NULL,
     legal_name TEXT NOT NULL,
     vat_id TEXT,
@@ -19,8 +20,9 @@ CREATE TABLE IF NOT EXISTS catalog.tb_company (
     UNIQUE (vat_id)
 );
 
+-- confiture:creates catalog.tb_product
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS catalog.tb_product (
+CREATE TABLE catalog.tb_product (
     id UUID NOT NULL,
     sku TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -28,8 +30,9 @@ CREATE TABLE IF NOT EXISTS catalog.tb_product (
     UNIQUE (sku)
 );
 
+-- confiture:creates catalog.tb_unit
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS catalog.tb_unit (
+CREATE TABLE catalog.tb_unit (
     id UUID NOT NULL,
     code TEXT NOT NULL,
     label TEXT NOT NULL,
@@ -37,15 +40,17 @@ CREATE TABLE IF NOT EXISTS catalog.tb_unit (
     UNIQUE (code)
 );
 
+-- confiture:creates management.tb_organization
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS management.tb_organization (
+CREATE TABLE management.tb_organization (
     id UUID NOT NULL,
     name TEXT NOT NULL,
     PRIMARY KEY (id)
 );
 
+-- confiture:creates app.tb_custom_unit
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS app.tb_custom_unit (
+CREATE TABLE app.tb_custom_unit (
     tenant_id UUID NOT NULL,
     id UUID NOT NULL,
     code TEXT NOT NULL,
@@ -55,8 +60,9 @@ CREATE TABLE IF NOT EXISTS app.tb_custom_unit (
     UNIQUE (tenant_id, code)
 );
 
+-- confiture:creates app.tb_provider
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS app.tb_provider (
+CREATE TABLE app.tb_provider (
     tenant_id UUID NOT NULL,
     id UUID NOT NULL,
     fk_company UUID NOT NULL,
@@ -67,8 +73,9 @@ CREATE TABLE IF NOT EXISTS app.tb_provider (
     UNIQUE (tenant_id, fk_company)
 );
 
+-- confiture:creates app.tb_order
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS app.tb_order (
+CREATE TABLE app.tb_order (
     tenant_id UUID NOT NULL,
     id UUID NOT NULL,
     fk_provider UUID NOT NULL,
@@ -81,8 +88,9 @@ CREATE TABLE IF NOT EXISTS app.tb_order (
 );
 CREATE INDEX IF NOT EXISTS ix_order_created_at ON app.tb_order (created_at);
 
+-- confiture:creates app.tb_order_line
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS app.tb_order_line (
+CREATE TABLE app.tb_order_line (
     tenant_id UUID NOT NULL,
     id UUID NOT NULL,
     fk_order UUID NOT NULL,

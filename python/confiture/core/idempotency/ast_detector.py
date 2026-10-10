@@ -12,17 +12,21 @@ Visitor layout
 
 Detection runs in two passes:
 
-1. **Pair collection**: walk every statement once to record names
-   dropped with ``IF EXISTS`` — views, functions, procedures, and table
-   constraints. Names come straight from AST nodes, so a quoted or long
-   identifier is recorded whole, never truncated (#122).
+1. **File facts**: walk every statement once to record names dropped
+   with ``IF EXISTS`` — views, functions, procedures, and table
+   constraints — and read the relations the file declares with
+   ``-- confiture:creates`` (:func:`confiture.core.created_relations.declared`).
+   Names come straight from AST nodes, so a quoted or long identifier is
+   recorded whole, never truncated (#122).
 
 2. **Match emission**: walk the statements again, dispatching by class
    name (``CreateStmt``, ``AlterTableStmt``, ``DropStmt``, …) to a
    ``_visit_<name>`` callable. Visitors that produce *pair-suppressible*
    matches (``CREATE VIEW``, ``ADD CONSTRAINT``, ``CREATE OR REPLACE``
    shape-risk notes) consult the recorded drops and skip emission when
-   a matching drop precedes the create.
+   a matching drop precedes the create. A plain ``CREATE TABLE`` the file
+   declares, under the schema and name it is written with, is meant: the
+   relation is new, so it is not reported.
 
 Unknown nodes are skipped, and DO-block bodies are opaque to pglast, so
 non-idempotent statements wrapped in a protective
@@ -35,6 +39,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.created_relations import Declared, declared
 from confiture.core.idempotency._ast_visitor import (
     _extract_snippet_from_stmt,
     _iter_statements,
@@ -189,22 +194,24 @@ def _funcname_dotted(funcname: object) -> str | None:
 
 
 @dataclass
-class _PairDrops:
-    """Names dropped with ``IF EXISTS`` earlier in the SQL.
+class _FileFacts:
+    """What the whole file says, read before any statement is judged.
 
-    Populated by :func:`_collect_pair_drops` in pass 1, consulted by the
-    visitors in pass 2 to suppress matches whose corresponding object
-    was already dropped (the idempotent DROP+CREATE pattern).
+    The names dropped with ``IF EXISTS`` (the idempotent DROP+CREATE
+    pattern) and the relations declared with ``-- confiture:creates``.
+    Populated by :func:`_collect_file_facts` in pass 1, consulted by the
+    visitors in pass 2 to suppress the matches those facts answer for.
     """
 
     views: set[str] = field(default_factory=set)
     functions: set[str] = field(default_factory=set)
     procedures: set[str] = field(default_factory=set)
     constraints: set[str] = field(default_factory=set)
+    declared: frozenset[Declared] = frozenset()
 
 
-def _collect_pair_drops(statements: list[_StatementContext]) -> _PairDrops:
-    drops = _PairDrops()
+def _collect_file_facts(statements: list[_StatementContext], sql: str) -> _FileFacts:
+    facts = _FileFacts(declared=declared(sql))
     for ctx in statements:
         stmt = ctx.stmt
         name = type(stmt).__name__
@@ -214,16 +221,16 @@ def _collect_pair_drops(statements: list[_StatementContext]) -> _PairDrops:
             kind = _enum_value(stmt.removeType)
             for obj_name in _drop_object_names(stmt):
                 if kind == _OBJECT_VIEW:
-                    drops.views.add(obj_name)
+                    facts.views.add(obj_name)
                 elif kind == _OBJECT_FUNCTION:
-                    drops.functions.add(obj_name)
+                    facts.functions.add(obj_name)
                 elif kind == _OBJECT_PROCEDURE:
-                    drops.procedures.add(obj_name)
+                    facts.procedures.add(obj_name)
         elif name == "AlterTableStmt":
             for cmd in stmt.cmds or ():
                 if _enum_value(cmd.subtype) == _AT_DROP_CONSTRAINT and cmd.missing_ok and cmd.name:
-                    drops.constraints.add(str(cmd.name).lower())
-    return drops
+                    facts.constraints.add(str(cmd.name).lower())
+    return facts
 
 
 # ---------------------------------------------------------------------------
@@ -258,15 +265,16 @@ def _make_match(
 
 
 def _visit_create_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], facts: _FileFacts
 ) -> None:
-    if ctx.stmt.if_not_exists:
+    relation = ctx.stmt.relation
+    if ctx.stmt.if_not_exists or (relation.schemaname, relation.relname) in facts.declared:
         return
     matches.append(_make_match(IdempotencyPattern.CREATE_TABLE, ctx, sql))
 
 
 def _visit_index_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     stmt = ctx.stmt
     if stmt.if_not_exists:
@@ -278,7 +286,7 @@ def _visit_index_stmt(
 
 
 def _visit_create_schema_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     if ctx.stmt.if_not_exists:
         return
@@ -286,14 +294,14 @@ def _visit_create_schema_stmt(
 
 
 def _visit_create_enum_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     """``CREATE TYPE … AS ENUM (…)`` — no ``IF NOT EXISTS`` form exists."""
     matches.append(_make_match(IdempotencyPattern.CREATE_TYPE, ctx, sql))
 
 
 def _visit_create_extension_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     if ctx.stmt.if_not_exists:
         return
@@ -301,7 +309,7 @@ def _visit_create_extension_stmt(
 
 
 def _visit_create_seq_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     if ctx.stmt.if_not_exists:
         return
@@ -309,7 +317,7 @@ def _visit_create_seq_stmt(
 
 
 def _visit_create_function_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], drops: _FileFacts
 ) -> None:
     """``CREATE [OR REPLACE] FUNCTION|PROCEDURE …``.
 
@@ -340,7 +348,7 @@ def _visit_create_function_stmt(
 
 
 def _visit_view_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], drops: _FileFacts
 ) -> None:
     """``CREATE [OR REPLACE] VIEW …`` — both shapes pair-suppressible."""
     name = _qualified_name(ctx.stmt.view)
@@ -367,7 +375,7 @@ def _visit_view_stmt(
 
 
 def _visit_alter_table_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], drops: _FileFacts
 ) -> None:
     """``ALTER {TABLE | VIEW | MATERIALIZED VIEW} …`` — dispatch each cmd.
 
@@ -408,7 +416,7 @@ def _visit_alter_table_stmt(
 
 
 def _visit_rename_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     """``ALTER TABLE … RENAME [COLUMN] … TO …`` — column-rename only."""
     stmt = ctx.stmt
@@ -425,7 +433,7 @@ def _visit_rename_stmt(
 
 
 def _visit_drop_stmt(
-    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _PairDrops
+    ctx: _StatementContext, sql: str, matches: list[PatternMatch], _drops: _FileFacts
 ) -> None:
     """``DROP <object> [IF EXISTS] [CONCURRENTLY] …``.
 
@@ -446,7 +454,7 @@ def _visit_drop_stmt(
 # ---------------------------------------------------------------------------
 
 
-_Visitor = Callable[[_StatementContext, str, list["PatternMatch"], _PairDrops], None]
+_Visitor = Callable[[_StatementContext, str, list["PatternMatch"], _FileFacts], None]
 
 
 _VISITORS: dict[str, _Visitor] = {
@@ -473,12 +481,12 @@ def _detect_via_ast(sql: str) -> list[PatternMatch]:
     """
 
     statements = _iter_statements(sql)
-    drops = _collect_pair_drops(statements)
+    facts = _collect_file_facts(statements, sql)
     matches: list[PatternMatch] = []
     for ctx in statements:
         visitor = _VISITORS.get(type(ctx.stmt).__name__)
         if visitor is not None:
-            visitor(ctx, sql, matches, drops)
+            visitor(ctx, sql, matches, facts)
     return matches
 
 

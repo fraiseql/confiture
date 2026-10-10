@@ -87,6 +87,7 @@ module moves, not when one grows.
 | `change_order.py` | DDL transform |
 | `change_set/` | DDL transform |
 | `cor_extractor.py` | DDL transform |
+| `created_relations.py` | DDL transform |
 | `data_assertions.py` | DDL transform |
 | `ddl_clauses.py` | DDL transform |
 | `ddl_objects.py` | DDL transform |
