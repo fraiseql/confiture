@@ -49,6 +49,12 @@
     "change_set": {
       "$ref": "_preflight_defs.schema.json#/$defs/ChangeSet"
     },
+    "scope": {
+      "$ref": "_preflight_defs.schema.json#/$defs/Scope"
+    },
+    "ledger": {
+      "$ref": "_preflight_defs.schema.json#/$defs/Ledger"
+    },
     "large_tables": {
       "$ref": "_preflight_defs.schema.json#/$defs/LargeTables"
     },

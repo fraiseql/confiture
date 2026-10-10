@@ -4,6 +4,21 @@
   "title": "Confiture preflight $defs",
   "description": "Sub-schemas shared by migrate-preflight.schema.json and migrate-preflight-against.schema.json.",
   "$defs": {
+    "Scope": {
+      "type": "string",
+      "enum": ["all", "pending"],
+      "description": "Which migrations the checks judged (#687): `all`, every file in the directory (the default); `pending`, the ones the tracking database's ledger has not applied (`--scope pending`). confiture never narrows unasked, and writes it on every payload since 1.36.0; it is declared but not required, so an older payload (no `scope`) stays valid and reads as `all`. Under `--against` without `--scope pending`, the replay set keeps its own resolution (#152) and `summary.migrations_checked` counts it."
+    },
+    "Ledger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["table", "exists"],
+      "description": "The ledger `--scope pending` read (#687). `exists: false` is a database with no ledger anywhere, so every migration was judged pending.",
+      "properties": {
+        "table": {"type": "string"},
+        "exists": {"type": "boolean"}
+      }
+    },
     "ChangeSet": {
       "type": "object",
       "description": "Per-change risk classification for the pending migration set (#197, contract version 1). The OBJECT WRAPPER IS LOAD-BEARING: `{\"changes\": []}` means \"confiture classified the set and there is nothing to change\" (safe), while an ABSENT `change_set` key means \"confiture did not classify\" — unknown, and unknown is not safe. A bare array cannot express that difference and the conflation resolves the dangerous way. The key is declared but NOT required, so payloads from confiture < 0.43.0 stay valid and correctly read as \"did not classify\".",

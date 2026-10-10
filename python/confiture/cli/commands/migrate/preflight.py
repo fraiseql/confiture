@@ -1,9 +1,10 @@
 """`confiture migrate preflight`."""
 
 import contextlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 
@@ -42,13 +43,21 @@ from confiture.core.connection import DatabaseError, connect_url, load_config
 from confiture.core.cor_extractor import find_cor_targets_in_file
 from confiture.core.dependent_objects import DependentObjectsChecker
 from confiture.core.large_tables import large_tables
-from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
+from confiture.core.migrator import (
+    Migrator,
+    MigratorSession,
+    discover_migration_files,
+    parse_migration_filename,
+)
 from confiture.core.schema_facts import SchemaFacts, collect_schema_facts
 from confiture.core.tview_preflight import live_issues
 from confiture.error_codes import FINDINGS, USAGE
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.preflight import DependentAnalysisReport
 from confiture.url_redaction import redact_url
+
+if TYPE_CHECKING:
+    from confiture.core.preflight import PendingScope
 
 _CHANGE_SET_TIER_COLOR = {
     "additive": "green",
@@ -180,9 +189,10 @@ def _resolve_preflight_pending(
     """Return migration files to test in a preflight --against run.
 
     Priority order:
-    1. --database-url override (explicit flag only): connect to that DB, return
-       pending files. Ambient env vars do not reach here — the caller passes a
-       value only for an explicit flag (issue #140 precedence).
+    1. A DSN override: connect to that DB, return pending files. The caller
+       passes one only for an intentional source — the ``--database-url`` flag,
+       ``--no-config``, an explicit ``--config``/``--env`` or the canonical
+       ``CONFITURE_DATABASE_URL``; a merely-ambient ``DATABASE_URL`` never (#152).
     2. --config / --env: connect to configured DB, return pending files.
     3. --since: all local files with version >= since (no DB required).
     4. Neither: all local migration files.
@@ -200,11 +210,7 @@ def _resolve_preflight_pending(
             )
             return migrator.find_pending(migrations_dir=migrations_dir)
 
-    all_files: list[Path] = sorted(
-        list(migrations_dir.glob("*.up.sql"))
-        + [f for f in migrations_dir.glob("*.py") if not f.name.startswith("_")],
-        key=lambda f: _preflight_version_from_filename(f.name),
-    )
+    all_files = discover_migration_files(migrations_dir)
 
     if since is not None:
         return [f for f in all_files if _preflight_version_from_filename(f.name) >= since]
@@ -454,6 +460,16 @@ CheckDependentsOpt = Annotated[
         "'warn' (render dependents as informational, exit code unchanged). ",
     ),
 ]
+ScopeOpt = Annotated[
+    str,
+    typer.Option(
+        "--scope",
+        help="Which migrations the checks judge: 'all' (default), every file in the "
+        "directory; or 'pending', the ones the tracking database's ledger has not "
+        "applied (needs --database-url, --config/--env or CONFITURE_DATABASE_URL). "
+        "The JSON names it in `scope`.",
+    ),
+]
 StrictOpt = Annotated[
     bool,
     typer.Option(
@@ -486,6 +502,7 @@ def migrate_preflight(
     since: SinceOpt = None,
     allow_non_transactional: AllowNonTransactionalOpt = False,
     check_dependents: CheckDependentsOpt = "off",
+    scope: ScopeOpt = "all",
     strict: StrictOpt = False,
 ) -> None:
     """Check if pending migrations are safe to deploy.
@@ -573,8 +590,14 @@ def migrate_preflight(
             t"Must be one of 'off', 'fail', 'warn'.[/red]"
         )
         raise typer.Exit(USAGE)
+    _check_scope(scope, since=since)
+    tracking = _TrackingDb(
+        ctx, migrations_dir, config, env, database_url, no_config, format_type, output_file
+    )
+    pending = _pending_scope(tracking) if scope == "pending" else None
+    versions = pending.versions if pending is not None else None
 
-    result = run_preflight(migrations_dir)
+    result = run_preflight(migrations_dir, versions=versions)
 
     if against is None:
         _static_preflight(
@@ -586,20 +609,13 @@ def migrate_preflight(
             strict=strict,
             format_type=format_type,
             output_file=output_file,
+            pending=pending,
         )
         return
 
     # --against path: static analysis + exhaustive execution against preflight DB.
-    pending_files = _against_pending_files(
-        ctx,
-        migrations_dir=migrations_dir,
-        config=config,
-        env=env,
-        since=since,
-        database_url=database_url,
-        no_config=no_config,
-        format_type=format_type,
-        output_file=output_file,
+    pending_files = (
+        pending.files if pending is not None else _against_pending_files(tracking, since)
     )
     # Resolved once and threaded through the override, the probe and the hint
     # (#190), so the three read one name rather than each spelling the default.
@@ -638,7 +654,7 @@ def migrate_preflight(
     # run-level metadata (db_consumed) rides in `summary`.
     _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
     replica_issues = replica_preflight_issues(
-        migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
+        migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass, versions=versions
     )
     all_issues = (
         result.issues
@@ -654,16 +670,17 @@ def migrate_preflight(
     exit_code = preflight_exit_code(summary, strict=strict)
     # #199: the same change set as the no-`--against` path, plus the refinements
     # the target database made possible (current column types, server version).
-    change_set = build_change_set(migrations_dir, facts=run.facts)
+    change_set = build_change_set(migrations_dir, versions=versions, facts=run.facts)
     large = _large_tables(change_set, run.facts)
     if format_type == "json":
-        payload = _preflight_payload(all_issues, summary, change_set, exit_code)
+        payload = _preflight_payload(all_issues, summary, change_set, exit_code, pending)
         if large is not None:
             payload["large_tables"] = [table.to_dict() for table in large]
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
         emit(payload, output_file, console)
     else:
+        _display_scope(pending)
         _display_against_result(run.result, format_type, console)
         _display_change_set(change_set, console)
         _display_large_tables(large or [], console)
@@ -685,7 +702,11 @@ def _preflight_summary(all_issues: list[Any], **counts: Any) -> dict[str, Any]:
 
 
 def _preflight_payload(
-    all_issues: list[Any], summary: dict[str, Any], change_set: Any, exit_code: int
+    all_issues: list[Any],
+    summary: dict[str, Any],
+    change_set: Any,
+    exit_code: int,
+    pending: PendingScope | None,
 ) -> dict[str, Any]:
     # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import is_window_safe
@@ -702,6 +723,9 @@ def _preflight_payload(
         # an empty `changes` means "classified, nothing to change", while an
         # absent `change_set` means "did not classify" and denies.
         "change_set": change_set.to_dict(),
+        # #687: which migrations the checks judged — never narrowed unasked.
+        "scope": "all" if pending is None else "pending",
+        **({} if pending is None else {"ledger": pending.ledger()}),
     }
 
 
@@ -715,6 +739,7 @@ def _static_preflight(
     strict: bool,
     format_type: str,
     output_file: Path | None,
+    pending: PendingScope | None,
 ) -> None:
     """No ``--against``: static findings only, flat output."""
     # Reason: CLI start-up: importing confiture.core.change_set costs ~9 ms at start (importtime, 2026-09-07); deferred until the command runs
@@ -729,15 +754,16 @@ def _static_preflight(
     # #148 structured report + #139 replica-safety: merge the base preflight
     # issues with the replica-forward-compat findings (PFLIGHT_REPLICA_*).
     has_replicas, replica_bypass = _preflight_replica_policy(config, env)
+    versions = pending.versions if pending is not None else None
     replica_issues = replica_preflight_issues(
-        migrations_dir, has_replicas=has_replicas, bypass=replica_bypass
+        migrations_dir, has_replicas=has_replicas, bypass=replica_bypass, versions=versions
     )
     all_issues = result.issues + replica_issues
     summary = _preflight_summary(all_issues, migrations_checked=len(result.migrations))
     exit_code = preflight_exit_code(summary, strict=strict)
-    change_set = build_change_set(migrations_dir)
+    change_set = build_change_set(migrations_dir, versions=versions)
     if format_type == "json":
-        payload = _preflight_payload(all_issues, summary, change_set, exit_code)
+        payload = _preflight_payload(all_issues, summary, change_set, exit_code, pending)
         if check_dependents != "off":
             payload["dependent_analysis"] = {
                 "status": "skipped",
@@ -747,6 +773,7 @@ def _static_preflight(
             }
         emit(payload, output_file, console)
     else:
+        _display_scope(pending)
         _render_static_preflight(result, summary, change_set, all_issues, check_dependents)
     if exit_code:
         raise typer.Exit(exit_code)
@@ -790,61 +817,127 @@ def _render_static_preflight(
         )
 
 
-def _against_pending_files(
-    ctx: typer.Context,
-    *,
-    migrations_dir: Path,
-    config: Path | None,
-    env: str | None,
-    since: str | None,
-    database_url: str | None,
-    no_config: bool,
-    format_type: str,
-    output_file: Path | None,
-) -> list[Path]:
-    """The pending set to replay, under the #152 DSN-precedence contract.
+def _check_scope(scope: str, *, since: str | None) -> None:
+    """``--scope`` is ``all`` or ``pending``, and ``pending`` is not also ``--since``."""
+    if scope not in {"all", "pending"}:
+        error_console.print(
+            t"[red]❌ Invalid --scope value: {repr(scope)}. Must be 'all' or 'pending'.[/red]"
+        )
+        raise typer.Exit(USAGE)
+    if scope == "pending" and since is not None:
+        error_console.print(
+            "[red]❌ --scope pending and --since both say which migrations to judge; "
+            "pass one.[/red]"
+        )
+        raise typer.Exit(USAGE)
+
+
+def _display_scope(pending: PendingScope | None) -> None:
+    if pending is None:
+        console.print("Scope: all migrations in the directory")
+    elif pending.ledger_exists:
+        console.print(
+            t"Scope: pending — {len(pending.files)} migration(s) {pending.tracking_table} "
+            t"has not applied"
+        )
+    else:
+        console.print(
+            t"Scope: pending — no ledger {pending.tracking_table}, so every migration "
+            t"({len(pending.files)})"
+        )
+
+
+@dataclass(frozen=True)
+class _TrackingDb:
+    """The tracking database as the operator named it (#152), and one boundary for reaching it.
 
     A ``--database-url`` flag, ``--no-config``, an explicit ``--config``/``--env``,
     or the canonical ``CONFITURE_DATABASE_URL`` drive a tracking-DB connect; a
-    merely-ambient ``DATABASE_URL`` must NOT silently flip "``--against`` alone →
-    all local files" into a tracking-DB connect. Two explicit sources fail loud
+    merely-ambient ``DATABASE_URL`` must NOT. Two explicit sources fail loud
     (CONFIG_007).
     """
-    try:
-        return _resolve_preflight_pending(
-            migrations_dir=migrations_dir,
-            config_path=config,
-            env_name=env,
+
+    ctx: typer.Context
+    migrations_dir: Path
+    config: Path | None
+    env: str | None
+    database_url: str | None
+    no_config: bool
+    format_type: str
+    output_file: Path | None
+
+    def override(self) -> str | None:
+        """The DSN an intentional source gives, or ``None``."""
+        if not has_intentional_dsn_source(self.ctx, self.database_url, self.no_config):
+            return None
+        return resolve_database_url(
+            self.database_url,
+            self.config,
+            config_explicit=config_is_explicit(self.ctx),
+            no_config=self.no_config,
+        )
+
+    def read[T](self, read: Callable[[], T]) -> T:
+        """*read*'s answer; any failure is the error envelope with its own exit code.
+
+        A ``ConfiturError`` (CONFIG_007, CONFIG_010, CONFIG_015, …) keeps its code;
+        anything else reaching the database is a connection failure, CONFIG_006
+        (exit 3, #151).
+        """
+        try:
+            return read()
+        except ConfiturError as e:
+            fail(e, json_mode=is_json(self.format_type), output_file=self.output_file)
+        # Reason: #151: any other failure resolving the pending set is a connection failure, exit 3
+        except Exception as e:
+            fail(
+                ConfigurationError(
+                    f"Failed to resolve pending migrations: {e}", error_code="CONFIG_006"
+                ),
+                json_mode=is_json(self.format_type),
+                output_file=self.output_file,
+            )
+
+
+def _pending_scope(tracking: _TrackingDb) -> PendingScope:
+    """``--scope pending``: read the ledger, or fail — never a fallback to every file.
+
+    No database is ``CONFIG_010`` (exit 5), an unreachable one ``CONFIG_006`` (exit 3).
+    """
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.preflight import pending_scope
+
+    def read() -> PendingScope:
+        override = tracking.override()
+        if override is not None:
+            config_data: Any = {"database_url": override}
+        elif tracking.config is not None or tracking.env is not None:
+            resolved = _resolve_config(tracking.config or Path("confiture.yaml"), tracking.env)
+            config_data = load_config(resolved)
+        else:
+            raise ConfigurationError(
+                "--scope pending reads the tracking database's ledger, and no database was given",
+                error_code="CONFIG_010",
+                resolution_hint="Pass --database-url, --config/--env, or set CONFITURE_DATABASE_URL",
+            )
+        with open_connection(config_data) as conn:
+            migrator = Migrator(connection=conn, migration_table=_get_tracking_table(config_data))
+            return pending_scope(migrator, tracking.migrations_dir)
+
+    return tracking.read(read)
+
+
+def _against_pending_files(tracking: _TrackingDb, since: str | None) -> list[Path]:
+    """The pending set to replay, under the #152 DSN-precedence contract."""
+    return tracking.read(
+        lambda: _resolve_preflight_pending(
+            migrations_dir=tracking.migrations_dir,
+            config_path=tracking.config,
+            env_name=tracking.env,
             since=since,
-            database_url_override=(
-                resolve_database_url(
-                    database_url,
-                    config,
-                    config_explicit=config_is_explicit(ctx),
-                    no_config=no_config,
-                )
-                if has_intentional_dsn_source(ctx, database_url, no_config)
-                else None
-            ),
+            database_url_override=tracking.override(),
         )
-    # Reason: #152: every DSN-resolution failure is classified into CONFIG_007/CONFIG_010/CONFIG_006 here
-    except Exception as e:
-        # #152: a precedence conflict (CONFIG_007) or missing source (CONFIG_010)
-        # — and any other ConfiturError — surfaces with its own exit code +
-        # remediation via the shared error boundary.
-        if isinstance(e, ConfiturError):
-            fail(e, json_mode=is_json(format_type), output_file=output_file)
-        # #151: any other failure resolving the pending set is a harness /
-        # connection failure — align to the canonical connection-failure exit 3
-        # (CONFIG_006).
-        fail(
-            ConfigurationError(
-                f"Failed to resolve pending migrations: {e}",
-                error_code="CONFIG_006",
-            ),
-            json_mode=is_json(format_type),
-            output_file=output_file,
-        )
+    )
 
 
 @dataclass(frozen=True)

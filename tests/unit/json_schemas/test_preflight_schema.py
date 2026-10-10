@@ -300,3 +300,30 @@ def test_large_tables_validates_and_constrains(schemas_dir):
     payload["large_tables"][1]["estimated_rows"] = "196960"
     with pytest.raises(ValidationError):
         validator.validate(payload)
+
+
+@pytest.mark.parametrize("schema", [PREFLIGHT_SCHEMA, AGAINST_SCHEMA])
+def test_scope_and_ledger_validate_and_constrain(schemas_dir, schema):
+    """``--scope pending`` (#687): which set was judged, and the ledger it read."""
+    validator = Draft202012Validator(
+        _load(schemas_dir, schema), registry=_build_registry(schemas_dir)
+    )
+    payload = {
+        "ok": True,
+        "window_safe": True,
+        "summary": {
+            "errors": 0,
+            "warnings": 0,
+            "info": 0,
+            "migrations_checked": 1,
+            **({"db_consumed": False} if schema == AGAINST_SCHEMA else {}),
+        },
+        "issues": [],
+        "scope": "pending",
+        "ledger": {"table": "tb_confiture", "exists": False},
+    }
+    validator.validate(payload)
+
+    for bad in ({"scope": "some"}, {"ledger": {"table": "tb_confiture"}}):
+        with pytest.raises(ValidationError):
+            validator.validate({**payload, **bad})

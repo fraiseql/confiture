@@ -206,6 +206,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_012": 5,  # lint baseline file missing or malformed (#219)
     "CONFIG_013": 5,  # a caller's connection in the wrong mode for the call (#374)
     "CONFIG_014": 5,  # pg_tviews without the read contract confiture reads
+    "CONFIG_015": 5,  # the ledger is only in another schema (preflight --scope pending)
     # MIGR family → 3, with one success-with-signal carve-out at 0.
     "MIGR_001": 3,
     "MIGR_004": 3,
