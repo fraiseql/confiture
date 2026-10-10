@@ -36,8 +36,8 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
-from confiture.core.migration_analyzer import runs_in_one_transaction
-from confiture.core.sql_lexer import parse_file
+from confiture.core.migration_scope import walk
+from confiture.core.sql_lexer import ParsedStatement
 
 # Resolved BY NAME, never by literal ordinal (#192).
 _AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
@@ -90,16 +90,15 @@ _AST_SKIP: Final = frozenset(
 
 
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
-    """Each statement's entries, in order, read in the transaction the file runs as."""
-    ctx = replace(ctx, transactional=runs_in_one_transaction(sql), added={})
+    """Each statement's entries, in order, read in the scope the statements before it leave."""
     entries: list[ChangeEntry] = []
-    for raw in parse_file(sql).statements:
-        entries.extend(_ast_statement(raw, sql, ctx))
+    for step in walk(sql, default_schema=ctx.default_schema):
+        entries.extend(_ast_statement(step.statement, sql, replace(ctx, scope=step.before)))
     return entries
 
 
-def _ast_statement(raw: object, sql: str, ctx: _Context) -> list[ChangeEntry]:
-    node = getattr(raw, "stmt", None)
+def _ast_statement(statement: ParsedStatement, sql: str, ctx: _Context) -> list[ChangeEntry]:
+    node = statement.stmt
     name = type(node).__name__
     if name in _AST_SKIP:
         return []
@@ -109,17 +108,16 @@ def _ast_statement(raw: object, sql: str, ctx: _Context) -> list[ChangeEntry]:
             ctx.unclassified(
                 "unclassified",
                 None,
-                f"{_command_prefix(_ast_source(raw, sql))} — confiture does not "
+                f"{_command_prefix(_ast_source(statement, sql))} — confiture does not "
                 "classify this statement",
             )
         ]
     return handler(node, ctx)
 
 
-def _ast_source(raw: object, sql: str) -> str:
+def _ast_source(statement: ParsedStatement, sql: str) -> str:
     """The original text of one statement, for a keyword-only detail line."""
-    start = getattr(raw, "stmt_location", 0) or 0
-    length = getattr(raw, "stmt_len", 0) or 0
+    start, length = statement.location, statement.length
     return sql[start : start + length] if length else sql[start:]
 
 

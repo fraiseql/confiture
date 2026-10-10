@@ -11,6 +11,7 @@ from confiture.core.lock_profile import (
     profile_for_kind,
     validated_under,
 )
+from confiture.core.migration_scope import Scope
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_facts import SchemaFacts
 from confiture.core.type_lattice import (
@@ -41,14 +42,8 @@ class _Context:
     facts: SchemaFacts | None = None
     """What a live database told us, when one was reachable (#199). Absent on the
     filesystem-only path, where every refinement falls back to its static answer."""
-    transactional: bool = True
-    """Whether the file runs as one transaction (``migration_analyzer.runs_in_one_transaction``)."""
-    added: dict[tuple[str, str | None, str], tuple[LockProfile, str | None]] = field(
-        default_factory=dict
-    )
-    """The constraints the file has added so far, in its transaction: each one's lock and,
-    for a foreign key, the table it references. Keyed by ``(schema, table, name)``,
-    the schema defaulted, never joined into one string."""
+    scope: Scope = field(default_factory=Scope)
+    """What the statements before this one did in its file (``migration_scope``)."""
 
     @property
     def server_version(self) -> int | None:
@@ -81,18 +76,12 @@ class _Context:
         )
 
     def add_constraint(self, schema: str | None, table: str | None, node: Any) -> ChangeEntry:
-        """``ADD CONSTRAINT``, remembered when the file runs as one transaction."""
+        """``ADD CONSTRAINT``, its lock as PostgreSQL takes it for the constraint's kind."""
         not_valid = bool(getattr(node, "skip_validation", False))
         name = getattr(node, "conname", None)
         read = read_constraint(node)
         kind = getattr(read, "kind", None)
         lock = constraint_profile(not_valid=not_valid, foreign_key=kind == "foreign_key")
-        if name and self.transactional:
-            referenced = getattr(read, "ref_table", None) if kind == "foreign_key" else None
-            self.added[self._constraint_key(schema, table, name)] = (
-                lock,
-                referenced.qualified if referenced is not None else None,
-            )
         return self.entry(
             "add_constraint",
             self.qualified(schema, table, name),
@@ -107,16 +96,18 @@ class _Context:
         """``VALIDATE CONSTRAINT``: alone it blocks nothing; after its ADD in one transaction,
         the scan holds the ADD's lock (Q4: ``lock_risky``)."""
         target = self.qualified(schema, table, name)
-        added = self.added.get(self._constraint_key(schema, table, name)) if name else None
-        if added is None:
+        added = self.scope.added_constraint(schema, table, name)
+        if added is None or not self.scope.transactional:
             return self.entry(
                 "validate_constraint",
                 target,
                 detail=f"VALIDATE CONSTRAINT {_ident(name)} — scans the table; "
                 "reads and writes continue",
             )
-        held, referenced = added
-        tables = self.qualified(schema, table) + (f" and {referenced}" if referenced else "")
+        held = constraint_profile(not_valid=added.not_valid, foreign_key=added.foreign_key)
+        tables = self.qualified(schema, table) + (
+            f" and {added.referenced}" if added.referenced else ""
+        )
         waits = "reads and writes wait" if held.blocks_reads else "writes wait"
         return self.entry(
             "validate_constraint",
@@ -126,11 +117,6 @@ class _Context:
             f"that added it, under its {held.lock.value} lock: {waits} on {tables}",
             lock=validated_under(held),
         )
-
-    def _constraint_key(
-        self, schema: str | None, table: str | None, name: str
-    ) -> tuple[str, str | None, str]:
-        return (_ident(schema) or self.default_schema, _ident(table), name)
 
     def unclassified(self, kind: str, obj: str | None, detail: str) -> ChangeEntry:
         """An entry confiture will not tier. Explicitly tier-less, never dropped."""

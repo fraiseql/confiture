@@ -437,7 +437,7 @@ touches it. This ops-path-only coupling is the intended end state.
 ### Decision 9: Risk classification lives on the preflight seam, not in a scoring engine
 
 **Choice**: `core/risk_tier.py` (a pure five-value taxonomy) and
-`core/change_set.py` (a statement-level classifier) emit a per-change risk tier
+`core/change_set/` (a statement-level classifier) emit a per-change risk tier
 in `migrate preflight --format json`, wired into the adapter seam from the first
 commit.
 
@@ -461,9 +461,19 @@ different:
 verdict (#154) and reports only the operations in its safety matrix — anything
 outside it degrades to `depends`, which flips `window_safe` to false. Widening it
 to the change-set vocabulary would move a cross-repo contract as a side effect,
-so `change_set.py` walks the statements itself and the two verdicts stay
+so `change_set/` classifies the statements itself and the two verdicts stay
 independent. The cost is one extra parse per migration file, filesystem-bound and
 measured in milliseconds; the alternative was a false verdict on a safety gate.
+
+**Independent classifiers, one scope** (amended 2026-10-10): the two verdicts
+keep separate vocabularies, but not separate readings of the file. What an
+earlier statement did — the transaction the file runs in, a constraint it added,
+a TVIEW it dropped — is folded once, by `core/migration_scope.walk`, and the
+replica classifier, the change-set walker and the TVIEW preflight all read that
+fold (`tests/unit/test_one_migration_walk.py`). A fold kept by one classifier
+and not another let two verdicts on one file read it two ways. Each fact states
+its matching direction: one that tightens a verdict matches by identity, one
+that loosens it only as written.
 
 ---
 
