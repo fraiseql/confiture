@@ -48,6 +48,7 @@ _AT_CHANGE_OWNER = _pg_member("AlterTableType", "AT_ChangeOwner")
 _AT_COLUMN_DEFAULT = _pg_member("AlterTableType", "AT_ColumnDefault")
 _AT_SET_NOT_NULL = _pg_member("AlterTableType", "AT_SetNotNull")
 _AT_DROP_NOT_NULL = _pg_member("AlterTableType", "AT_DropNotNull")
+_AT_VALIDATE_CONSTRAINT = _pg_member("AlterTableType", "AT_ValidateConstraint")
 _OBJECT_COLUMN = _pg_member("ObjectType", "OBJECT_COLUMN")
 _OBJECT_MATVIEW = _pg_member("ObjectType", "OBJECT_MATVIEW")
 # DropStmt.removeType → kind. Names resolved by member, never by ordinal.
@@ -208,6 +209,15 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
                     "drop_not_null",
                     ctx.qualified(schema, table, name),
                     detail=f"ALTER COLUMN {_ident(name)} DROP NOT NULL",
+                )
+            )
+        elif subtype == _AT_VALIDATE_CONSTRAINT:
+            entries.append(
+                ctx.entry(
+                    "validate_constraint",
+                    ctx.qualified(schema, table, name),
+                    detail=f"VALIDATE CONSTRAINT {_ident(name)} — scans the table; "
+                    "reads and writes continue",
                 )
             )
         elif subtype == _AT_CHANGE_OWNER:

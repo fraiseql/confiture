@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`VALIDATE CONSTRAINT` is classified by preflight** (#684). The replica classifier read it as
+  an unknown `ALTER TABLE` subcommand (`PFLIGHT_REPLICA_UNCLASSIFIED`) and the change set as an
+  untiered entry, so every migration `migrate diff --generate` writes for a named foreign key
+  (`NOT VALID`, then `VALIDATE CONSTRAINT`) read `window_safe: false`. It is now replica-safe and
+  the change-set kind `validate_constraint`, tier `reversible` — a validation scans under `SHARE
+  UPDATE EXCLUSIVE`, changes no row and breaks no reader. ⚠️ More permissive: a deploy gate on
+  `window_safe` passes such a migration where it refused it.
+
 ## [1.34.0] - 2026-10-09
 
 **A TVIEW's `time_refresh` and `function_reads` are in the model.** ⚠️ pg_tviews

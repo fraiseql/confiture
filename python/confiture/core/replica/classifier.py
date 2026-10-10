@@ -51,6 +51,7 @@ _AT_CHANGE_OWNER = _pg_member("AlterTableType", "AT_ChangeOwner")
 _AT_COLUMN_DEFAULT = _pg_member("AlterTableType", "AT_ColumnDefault")
 _AT_SET_NOT_NULL = _pg_member("AlterTableType", "AT_SetNotNull")
 _AT_DROP_NOT_NULL = _pg_member("AlterTableType", "AT_DropNotNull")
+_AT_VALIDATE_CONSTRAINT = _pg_member("AlterTableType", "AT_ValidateConstraint")
 
 # ALTER TABLE subcommands that change nothing an N-1 reader can observe.
 _AT_BENIGN = {
@@ -58,6 +59,9 @@ _AT_BENIGN = {
     _AT_CHANGE_OWNER: "change_owner",
     _AT_COLUMN_DEFAULT: "column_default",
     _AT_DROP_NOT_NULL: "drop_not_null",
+    # Scans under SHARE UPDATE EXCLUSIVE: reads and writes continue, and the
+    # constraint already held for every row written since its NOT VALID add.
+    _AT_VALIDATE_CONSTRAINT: "validate_constraint",
 }
 
 # DropStmt.removeType → the object noun, for objects whose removal breaks a
