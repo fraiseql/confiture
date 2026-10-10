@@ -4,9 +4,13 @@ Filesystem-only checks that require no database connection:
 - Reversibility: does every .up.sql have a matching .down.sql?
 - Duplicate versions: are there multiple files with the same version prefix?
 - Non-transactional statements: does any migration contain DDL that cannot run in a transaction?
+
+and the one question that needs one: which migrations a ledger has not applied
+(:func:`pending_scope`, ``migrate preflight --scope pending``).
 """
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,17 +18,68 @@ import pglast.parser
 
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
+    discover_migration_files,
     find_duplicate_migration_versions,
     parse_migration_filename,
 )
 from confiture.core.destructive import irreversible_reasons, is_gated
 from confiture.core.expand_contract import StagedPlan, plannable
+from confiture.core.ledger import find_ledger_relations
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
+from confiture.exceptions import ConfigurationError
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
 
 if TYPE_CHECKING:
     from confiture.models.results import PreflightIssue
+
+
+@dataclass(frozen=True)
+class PendingScope:
+    """The migrations a ledger has not applied, and whether there was a ledger to ask."""
+
+    files: list[Path]
+    tracking_table: str
+    ledger_exists: bool
+
+    @property
+    def versions(self) -> list[str]:
+        """Each file's version, as every preflight check filters by."""
+        return [_version_from_migration_filename(f.name) for f in self.files]
+
+    def ledger(self) -> dict[str, Any]:
+        """The ``ledger`` fact a ``--scope pending`` payload carries."""
+        return {"table": self.tracking_table, "exists": self.ledger_exists}
+
+
+def pending_scope(migrator: Any, migrations_dir: Path) -> PendingScope:
+    """What ``--scope pending`` judges: the migrations *migrator*'s ledger has not applied.
+
+    A database with no ledger anywhere has applied nothing, so every migration is
+    pending, and the scope says the ledger was absent. One whose ledger name
+    resolves nowhere for this session but names a relation in another schema is
+    refused: reading it as absent would judge every migration under a ``pending``
+    label (#188's trap).
+
+    Raises:
+        ConfigurationError: ``CONFIG_015`` when the ledger is only in another schema.
+    """
+    table = migrator.migration_table
+    if migrator.tracking_table_exists():
+        return PendingScope(migrator.find_pending(migrations_dir=migrations_dir), table, True)
+    elsewhere = find_ledger_relations(migrator.connection, table)
+    if elsewhere:
+        raise ConfigurationError(
+            f"--scope pending: the ledger {table!r} does not resolve for this session, but a "
+            f"relation of that name exists in {', '.join(elsewhere)}",
+            error_code="CONFIG_015",
+            resolution_hint=(
+                f"Point at the existing ledger — set `migration.tracking_table` to "
+                f"{elsewhere[0]!r} in the config preflight reads, or put its schema on the "
+                "connection's search_path"
+            ),
+        )
+    return PendingScope(discover_migration_files(migrations_dir), table, False)
 
 
 def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:

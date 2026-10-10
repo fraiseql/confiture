@@ -1988,6 +1988,7 @@ confiture migrate preflight [OPTIONS]
 | `--since` | - | str | - | Test migrations with version >= SINCE (e.g. --since 20260428000000). Inclusive. Alternative to --config when no second DB connection is available. |
 | `--allow-non-transactional` | - | Flag | off | Run non-transactional migrations (CREATE INDEX CONCURRENTLY, etc.) outside the rollback SAVEPOINT in autocommit mode. The preflight DB will be permanently modified (db_consumed=True). By default such migrations are skipped. |
 | `--check-dependents` | - | str | `off` | Enumerate live dependents of CREATE OR REPLACE targets via pg_depend on the --against preflight DB. 'off' (default), 'fail' (exit 1 on dependents found), or 'warn' (render dependents as informational, exit code unchanged). |
+| `--scope` | - | str | `all` | Which migrations the checks judge: 'all' (default), every file in the directory; or 'pending', the ones the tracking database's ledger has not applied (needs --database-url, --config/--env or CONFITURE_DATABASE_URL). The JSON names it in `scope`. |
 | `--strict` | - | Flag | off | Treat warnings as errors for exit purposes (warnings → exit 7). |
 
 <!-- END GENERATED: cli confiture migrate preflight -->

@@ -336,6 +336,19 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "scripts/migrate-from-0.1.0.sql"
         ),
     },
+    {
+        "code": "CONFIG_015",
+        "message_template": (
+            "The ledger {table!r} does not resolve for this session, but a relation of that "
+            "name exists in {elsewhere}"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Point at the existing ledger — set migration.tracking_table to it, or put its "
+            "schema on the connection's search_path"
+        ),
+    },
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.

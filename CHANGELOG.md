@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`migrate preflight --scope pending`** (#687): every check — base, replica, `change_set`,
+  and with `--against` the replay — judges only the migrations the tracking database's ledger
+  has not applied, so one replica-unsafe migration already applied no longer keeps
+  `window_safe` false for every later deploy. The default stays `--scope all`: confiture never
+  narrows on its own. The JSON carries `scope` (`all` | `pending`) on every payload, and
+  `ledger: {table, exists}` under `pending`. No database is `CONFIG_010` (exit 5), an
+  unreachable one `CONFIG_006` (exit 3); a database with no ledger has every migration
+  pending; a ledger only in another schema is refused, `CONFIG_015` (exit 5).
+
 ## [1.34.0] - 2026-10-09
 
 **A TVIEW's `time_refresh` and `function_reads` are in the model.** ⚠️ pg_tviews

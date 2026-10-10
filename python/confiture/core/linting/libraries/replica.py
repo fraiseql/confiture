@@ -10,12 +10,16 @@ One engine (`_iter_findings`) feeds two surfaces: the `confiture lint` rule
 (`replica_preflight_issues`, the #148 PreflightIssue / PFLIGHT_REPLICA_* shape).
 """
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import pglast.parser
 
+from confiture.core._migrator.discovery import (
+    _version_from_migration_filename,
+    discover_migration_files,
+)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 from confiture.core.replica.classifier import DdlOperation, OperationClassifier
@@ -96,14 +100,27 @@ class UnparseableMigration:
     error: Exception
 
 
+def _migrations(migrations_dir: Path, versions: Collection[str] | None) -> list[Path]:
+    """The migrations to judge: the directory's, through the one discovery, or *versions* of it."""
+    return [
+        f
+        for f in discover_migration_files(migrations_dir)
+        if versions is None or _version_from_migration_filename(f.name) in versions
+    ]
+
+
 def _iter_findings(
-    migrations_dir: Path, *, has_replicas: bool, bypass: bool
+    migrations_dir: Path,
+    *,
+    has_replicas: bool,
+    bypass: bool,
+    versions: Collection[str] | None = None,
 ) -> Iterator[ReplicaFinding | UnparseableMigration]:
     """Yield one finding per replica-unsafe / unclassifiable operation."""
-    if not migrations_dir.exists():
-        return
     classifier = OperationClassifier()
-    for migration in sorted(migrations_dir.glob("*.up.sql")):
+    for migration in _migrations(migrations_dir, versions):
+        if not migration.name.endswith(".up.sql"):
+            continue
         text = migration.read_text()
         try:
             ops = classifier.classify(text)
@@ -152,27 +169,23 @@ class Replica001ForwardCompat:
         return violations
 
 
-def _unreadable_migrations(migrations_dir: Path) -> Iterator[Path]:
+def _unreadable_migrations(
+    migrations_dir: Path, versions: Collection[str] | None = None
+) -> Iterator[Path]:
     """Yield migration files the SQL replica classifier cannot read.
 
-    Mirrors ``run_preflight``'s Python-migration discovery filter (skip
-    ``__init__.py`` and ``_``-prefixed helpers). A ``.py`` migration is opaque to
-    the SQL classifier, so its forward-compatibility cannot be certified.
+    A ``.py`` migration is opaque to the SQL classifier, so its
+    forward-compatibility cannot be certified.
     """
-    if not migrations_dir.exists():
-        return
-    yield from sorted(
-        (
-            f
-            for f in migrations_dir.glob("*.py")
-            if f.name != "__init__.py" and not f.name.startswith("_")
-        ),
-        key=lambda f: f.name,
-    )
+    yield from (f for f in _migrations(migrations_dir, versions) if f.suffix == ".py")
 
 
 def replica_preflight_issues(
-    migrations_dir: Path, *, has_replicas: bool, bypass: bool
+    migrations_dir: Path,
+    *,
+    has_replicas: bool,
+    bypass: bool,
+    versions: Collection[str] | None = None,
 ) -> list[PreflightIssue]:
     """Return replica findings as PreflightIssues (#148 shape) for preflight.
 
@@ -180,11 +193,14 @@ def replica_preflight_issues(
     issue #154, the migrations it *cannot* read (``*.py``) — the latter surface as
     ``PFLIGHT_REPLICA_UNCLASSIFIED`` warnings so "no replica issue" can never
     silently mean "never inspected". UNCLASSIFIED is always a warning (opacity
-    never hard-blocks).
+    never hard-blocks). *versions* narrows it to those migrations, as
+    ``run_preflight`` and ``build_change_set`` narrow theirs.
     """
 
     issues: list[PreflightIssue] = []
-    for f in _iter_findings(migrations_dir, has_replicas=has_replicas, bypass=bypass):
+    for f in _iter_findings(
+        migrations_dir, has_replicas=has_replicas, bypass=bypass, versions=versions
+    ):
         if isinstance(f, UnparseableMigration):
             issues.append(
                 PreflightIssue(
@@ -230,6 +246,6 @@ def replica_preflight_issues(
             ),
             details={"operation": "NonSqlMigration"},
         )
-        for py in _unreadable_migrations(migrations_dir)
+        for py in _unreadable_migrations(migrations_dir, versions)
     )
     return issues
