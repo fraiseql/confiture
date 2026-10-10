@@ -135,14 +135,19 @@ The adapter-consumed fields per command:
   `summary`, each `issues[].{severity, code, message, migration}`, and — since
   0.43.0 — the `change_set` object carrying per-change risk tiers (see
   [below](#per-change-risk-tier-change_set)).
+  Since 1.36.0, `scope` says which migrations every check judged (see
+  [below](#which-migrations-are-judged-scope)).
 
 ## Replica forward-compatibility namespace (window-safety seam)
 
 fraisier's **blue-green window-safety gate** consumes `migrate preflight` to
-decide whether a pending migration is forward-compatible for a two-version
+decide whether the migrations it judged are forward-compatible for a two-version
 shared-DB cutover window (both N-1 and N served against one Postgres during the
-swap). It **blocks the deploy on the presence of any `PFLIGHT_REPLICA_*` issue**
-(warning *or* error) in `preflight`'s `issues[]`.
+swap). Since 0.44.0 it reads the typed verdict, the top-level `window_safe`
+([below](#typed-verdict-top-level-window_safe)), which is `false` whenever any
+`PFLIGHT_REPLICA_*` issue (warning *or* error) is in `preflight`'s `issues[]`;
+before it, the gate matched that code prefix itself, which is why the namespace
+below is a wire contract.
 
 `preflight`'s `ok` flag alone **cannot** certify window safety: the replica lint
 is warn-by-default unless `infrastructure.replicas` is declared, so an unsafe
@@ -192,6 +197,28 @@ warning for every `.py` migration — "no replica issue" therefore always means
 migrations automatically; a downstream gate does not need a separate "refuse any
 `.py` in the set" rule.
 
+### Which migrations are judged: `scope`
+
+`migrate preflight` judges **every migration in the directory** by default
+(`scope: "all"`), applied or not: one replica-unsafe migration already applied
+keeps `window_safe` false for every later deploy. `--scope pending` judges only
+what the tracking database's ledger has not applied — base checks, replica
+findings, `change_set` and, with `--against`, the replay all read that one set —
+and the payload says so:
+
+```json
+{ "window_safe": true, "scope": "pending", "ledger": { "table": "tb_confiture", "exists": true }, ... }
+```
+
+- The ledger is read under the DSN precedence of every command (#152): `--database-url`,
+  `--config`/`--env`, or `CONFITURE_DATABASE_URL` — with `--no-config`, the ledger is
+  `tb_confiture`. No database → `CONFIG_010` (exit 5); unreachable → `CONFIG_006` (exit 3).
+- No ledger anywhere (`ledger.exists: false`) is a database that has applied nothing:
+  every migration is judged. A ledger that resolves nowhere for the session but exists
+  in another schema is refused (`CONFIG_015`, exit 5) rather than read as absent.
+- confiture never narrows on its own: `scope` is `all` unless asked, and a payload
+  from before 1.36.0 has no `scope` and judged everything.
+
 ### Typed verdict: top-level `window_safe`
 
 The preferred surface is the single **top-level** boolean `window_safe` (#154),
@@ -201,7 +228,7 @@ which a consumer reads instead of prefix-matching codes:
 { "ok": true, "window_safe": true, "summary": { ... }, "issues": [ ... ] }
 ```
 
-`window_safe == true` iff confiture certifies **every checked migration** is
+`window_safe == true` iff confiture certifies **every migration it judged** (`scope`) is
 forward-compatible for a two-version shared-DB window. It is `false` when any
 `PFLIGHT_REPLICA_*` finding is present:
 

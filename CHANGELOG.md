@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artifact composed into the tree through `include_dirs` is diffed as the deploy builds it. The
   JSON `source` is `{"kind": "env", "path": <env>}` (`migrate-diff.schema.json`'s `kind` gains
   `env`). The desired-state guide documents composition as the pipeline.
+- **`migrate preflight --scope pending`** (#687): every check — base, replica, `change_set`,
+  and with `--against` the replay — judges only the migrations the tracking database's ledger
+  has not applied, so one replica-unsafe migration already applied no longer keeps
+  `window_safe` false for every later deploy. The default stays `--scope all`: confiture never
+  narrows on its own. The JSON carries `scope` (`all` | `pending`) on every payload, and
+  `ledger: {table, exists}` under `pending`. No database is `CONFIG_010` (exit 5), an
+  unreachable one `CONFIG_006` (exit 3); a database with no ledger has every migration
+  pending; a ledger only in another schema is refused, `CONFIG_015` (exit 5).
 
 ### Fixed
 

@@ -115,3 +115,16 @@ def test_is_window_safe_true_for_a_generated_foreign_key(tmp_path: Path) -> None
     issues = _all_issues(tmp_path)
     assert not [i for i in issues if i.code == "PFLIGHT_REPLICA_UNCLASSIFIED"]
     assert is_window_safe(issues) is True
+
+
+def test_versions_scope_the_replica_findings(tmp_path: Path) -> None:
+    """``--scope pending`` hands the replica check the versions every other check reads."""
+    (tmp_path / "001_drop.up.sql").write_text("ALTER TABLE t DROP COLUMN c;")
+    (tmp_path / "002_add.up.sql").write_text("ALTER TABLE t ADD COLUMN d int;")
+    (tmp_path / "003_data.py").write_text("x = 1\n")
+
+    every = replica_preflight_issues(tmp_path, has_replicas=False, bypass=False)
+    pending = replica_preflight_issues(tmp_path, has_replicas=False, bypass=False, versions=["002"])
+
+    assert {i.file for i in every} == {"001_drop.up.sql", "003_data.py"}
+    assert pending == []
