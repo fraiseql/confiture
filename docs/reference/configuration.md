@@ -661,7 +661,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `live_snapshot` | bool | `false` | Snapshot the build read back from a temporary database by default (default: False) |
 | `tracking_table` | str | `tb_confiture` | Name of the confiture tracking table, optionally schema-qualified (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``. |
 | `rebuild_threshold` | int | `5` | Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50). |
-| `grant_dir` | str | `db/7_grant` | Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``). |
+| `grant_dir` | str | `db/7_grant` | Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read, relative to the directory the command runs in (default: ``db/7_grant``). |
 | `allow_unsafe_under_replication` | bool | `false` | Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared. |
 
 #### `BackfillConfig`

@@ -35,10 +35,6 @@ _MIGRATIONS = (
     "a migrations directory is a flat listing the migrator reads by version and "
     "suffix; it never descends into a subdirectory, so neither does this"
 )
-_MIGRATIONS_RECURSIVE = (
-    "a lint over migration files, recursive since it was written; the migrator lists "
-    "the directory flat — a migrations listing, not an SQL tree"
-)
 
 # ``module:receiver`` → why that walk is not a walk of an SQL tree.
 ALLOWED: dict[str, str] = {
@@ -57,9 +53,6 @@ ALLOWED: dict[str, str] = {
     "core/squash.py:migrations_dir": _MIGRATIONS,
     "core/validation/config_validator.py:migrations_dir": _MIGRATIONS,
     "core/validation/data_assertions.py:migrations_dir": _MIGRATIONS,
-    "core/linting/libraries/acl.py:migrations_dir": _MIGRATIONS_RECURSIVE,
-    "core/linting/libraries/ownership.py:migrations_dir": _MIGRATIONS_RECURSIVE,
-    "core/ownership_fixer.py:migrations_dir": _MIGRATIONS_RECURSIVE,
     "core/idempotency/validator.py:directory": (
         "`migrate validate --idempotent` over a migrations directory, with the caller's "
         "own pattern (`*.up.sql`) and its own choice of depth"

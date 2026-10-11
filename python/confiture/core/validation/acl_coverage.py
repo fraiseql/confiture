@@ -5,16 +5,16 @@ migrations directory for tables missing matching grants — either inline or in
 the configured global grant-sweep directory.
 """
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from confiture.config.environment import DEFAULT_GRANT_DIR
 from confiture.core import connection as _core_connection
 from confiture.core.linting.schema_linter import SchemaLinter
 from confiture.core.validation.config_loaders import load_acl_expectations
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from confiture.core.validation.context import ValidationContext
 
 
@@ -46,13 +46,19 @@ def check_acl_coverage(
     # No-op when the project hasn't adopted the `acls:` block yet.
     expectations = load_acl_expectations(config_data, config_path, require=False)
 
-    grant_dir_raw = (
+    # The sweep is the project's, read from where the command runs as
+    # ``--migrations-dir`` and the git checks' grant directory are (#715); the
+    # config sits in ``db/environments/``, which holds no sweep. A project with no
+    # sweep at the default path has none; one it names and lacks is said.
+    configured = (
         config_data.get("migration", {}).get("grant_dir") if isinstance(config_data, dict) else None
-    ) or "db/7_grant"
-    grant_dir = (config_path.parent / grant_dir_raw).resolve()
+    )
+    grant_dir = Path(configured or DEFAULT_GRANT_DIR)
+    if not configured and not grant_dir.is_dir():
+        grant_dir = None
 
-    return SchemaLinter().lint_migrations(
+    return SchemaLinter.lint_migrations(
         migrations_dir=migrations_dir,
         expectations=expectations,
-        grant_dir=grant_dir if grant_dir.exists() else None,
+        grant_dir=grant_dir,
     )

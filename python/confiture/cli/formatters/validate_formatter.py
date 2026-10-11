@@ -53,8 +53,11 @@ def render_acl_coverage(report: Any, *, json_mode: bool) -> dict[str, Any] | Non
             "violations": [
                 _violation_dict(v) for v in (report.errors + report.warnings + report.info)
             ],
+            "degraded": [status.to_dict() for status in report.degraded],
             "hints": [],
         }
+    for status in report.degraded:
+        console.print(t"[yellow]⚠ {status.code} degraded: {status.reason}[/yellow]")
     if report.has_errors:
         console.print(t"[red]❌ ACL coverage check failed: {len(report.errors)} violation(s)[/red]")
         for v in report.errors:

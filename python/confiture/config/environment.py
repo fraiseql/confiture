@@ -283,12 +283,16 @@ class BackfillConfig(BaseModel):
     max_lock_ms: int | None = None
 
 
+#: Where the grant sweep is when ``migration.grant_dir`` does not say.
+DEFAULT_GRANT_DIR = "db/7_grant"
+
+
 class MigrationConfig(BaseModel):
     """Migration configuration options.
 
     Attributes:
         rebuild_threshold: Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50).
-        grant_dir: Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``).
+        grant_dir: Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read, relative to the directory the command runs in (default: ``db/7_grant``).
         allow_unsafe_under_replication: Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared.
         strict_mode: Whether to fail on warnings/notices (default: False)
         destructive: What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run.
@@ -314,7 +318,7 @@ class MigrationConfig(BaseModel):
     live_snapshot: bool = False
     tracking_table: str = "tb_confiture"
     rebuild_threshold: int = 5
-    grant_dir: str = "db/7_grant"
+    grant_dir: str = DEFAULT_GRANT_DIR
     # Issue #139 — replica-aware forward-compatibility lint. When True, unsafe
     # operations are downgraded from errors to warnings even if replicas are
     # declared. RISK: you accept that a single-step DDL change may surface

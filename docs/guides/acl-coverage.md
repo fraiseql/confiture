@@ -71,7 +71,7 @@ Validation:
 
 ## Static check — `confiture lint` / `migrate validate --check-acls`
 
-The static rule parses every `*.up.sql` in `db/migrations/`, finds `CREATE TABLE` statements, and flags any that aren't matched by a `GRANT` covering all expected `(role, privilege)` pairs — either in the same migration file or in the configured global grant sweep directory (`db/7_grant/` by default).
+The static rule parses every migration `migrate up` runs — each `*.up.sql` and `*.py` directly in `--migrations-dir`, never a file nested below it — finds `CREATE TABLE` statements, and flags any that aren't matched by a `GRANT` covering all expected `(role, privilege)` pairs — either in the same migration file or in the global grant sweep directory (`migration.grant_dir`, `db/7_grant/` by default). The sweep is read relative to the directory you run in, as `--migrations-dir` is, not beside the config file. A sweep directory the config names but that does not exist is reported as `acl_001` degraded (in JSON, `degraded[]`), since every table granted only there would be reported as missing its grant.
 
 Two ways to run it:
 

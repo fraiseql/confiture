@@ -535,27 +535,37 @@ class SchemaLinter:
         ran |= {rule.family for rule in LINT_RULES if rule.code in self.config.check_tree_walks}
         self._report_blinded_rules(report, ran, rejected)
 
-        # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
-        # the environment YAML.  An ``acls:`` block alone does not fire it:
-        # a project may set ``acls:`` only for ``confiture drift --check-acls``,
-        # and explicit opt-in keeps the two surfaces independently controllable.
-        if (
+        self._lint_acl_coverage(report)
+        return report
+
+    def _lint_acl_coverage(self, report: LintReport) -> None:
+        """ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in the environment YAML.
+
+        An ``acls:`` block alone does not fire it: a project may set ``acls:`` only for
+        ``confiture drift --check-acls``, and explicit opt-in keeps the two surfaces
+        independently controllable.
+        """
+        if not (
             self.config.check_acl_coverage
             and self.environment.acls_lint_enabled
             and self.environment.acls
         ):
-            migrations_dir = self.project_dir / "db" / "migrations"
-            if migrations_dir.exists():
-                grant_dir_str = self.environment.migration.grant_dir
-                grant_dir = (self.project_dir / grant_dir_str).resolve()
-                for violation in self.lint_migrations(
-                    migrations_dir=migrations_dir,
-                    expectations=self.environment.acls,
-                    grant_dir=grant_dir if grant_dir.exists() else None,
-                ).errors:
-                    report.add_violation(violation)
-
-        return report
+            return
+        migrations_dir = self.project_dir / "db" / "migrations"
+        if not migrations_dir.exists():
+            return
+        migration = self.environment.migration
+        grant_dir: Path | None = self.project_dir / migration.grant_dir
+        if "grant_dir" not in migration.model_fields_set and not grant_dir.is_dir():
+            grant_dir = None  # no sweep at the default path: the project has none
+        acl = self.lint_migrations(
+            migrations_dir=migrations_dir,
+            expectations=self.environment.acls,
+            grant_dir=grant_dir,
+        )
+        for violation in acl.errors:
+            report.add_violation(violation)
+        report.degraded.extend(acl.degraded)
 
     def _parsed_files(self) -> tuple[list[ParsedFile], list[Rejected]]:
         """Each schema file parsed once, and the files PostgreSQL's parser rejected.
@@ -1363,15 +1373,16 @@ class SchemaLinter:
             report.add_violation(violation)
         return report
 
+    @staticmethod
     def lint_migrations(
-        self,
         migrations_dir: Path,
         expectations: list[Any],
         grant_dir: Path | None = None,
     ) -> LintReport:
         """Lint a migrations directory for ACL coverage (ACL001).
 
-        No-op when ``expectations`` is empty — projects without an
+        Reads no environment: ``migrate validate --check-acls`` hands it the
+        expectations of the config it was given (#715). No-op when ``expectations`` is empty — projects without an
         ``acls:`` block see zero violations regardless of what their
         migrations contain.
 
@@ -1380,7 +1391,9 @@ class SchemaLinter:
             expectations: Parsed ``acls:`` block (list of
                 :class:`~confiture.config.environment.AclExpectation`).
             grant_dir: Optional global grant sweep directory (typically
-                ``db/7_grant``).
+                ``db/7_grant``). One that does not exist is reported as
+                ``acl_001`` degraded: a table granted only there would be
+                reported as missing its grant.
 
         Returns:
             :class:`LintReport` with any ACL001 violations.
@@ -1389,6 +1402,18 @@ class SchemaLinter:
         from confiture.core.linting.libraries.acl import Acl001GrantCoverage
 
         report = LintReport()
+        if grant_dir is not None and not grant_dir.is_dir():
+            report.degraded.append(
+                RuleStatus(
+                    code="acl_001",
+                    state="degraded",
+                    reason=(
+                        f"the grant sweep directory {grant_dir} does not exist, so a table "
+                        "granted only there is reported as missing its grant"
+                    ),
+                )
+            )
+            grant_dir = None
         for violation in Acl001GrantCoverage(expectations=expectations, grant_dir=grant_dir).check(
             migrations_dir
         ):

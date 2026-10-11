@@ -2,12 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-validate-check-acl-coverage.schema.json",
   "title": "confiture migrate validate --check-acls --format json",
-  "description": "Static ACL coverage report: every `CREATE TABLE` in db/migrations/ must have a matching `GRANT` in the same migration or in the configured grant-sweep directory.",
+  "description": "Static ACL coverage report: every `CREATE TABLE` in `--migrations-dir` must have a matching `GRANT` in the same migration or in the configured grant-sweep directory.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "check",
     "violations",
+    "degraded",
     "hints"
   ],
   "properties": {
@@ -53,6 +54,33 @@
           }
         }
       }
+    },
+    "degraded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "state",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The rule code this is about."
+          },
+          "state": {
+            "type": "string",
+            "const": "degraded"
+          },
+          "reason": {
+            "type": "string",
+            "description": "What was unavailable, and what that over-reports."
+          }
+        }
+      },
+      "description": "Rules that ran without one of the things they resolve against, so they can over-report (1.36.0). `acl_001` when the configured grant sweep directory (`migration.grant_dir`) does not exist: a table granted only there is reported as missing its grant. Always present, empty when none."
     },
     "hints": {
       "$ref": "_common.schema.json#/$defs/HintsArray"
