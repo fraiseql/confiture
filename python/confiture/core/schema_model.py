@@ -1265,9 +1265,13 @@ def parity_routine(routine: Routine, rules: frozenset[str] = ALL_PARITY_RULES) -
 
 
 def parity_view(view: View, rules: frozenset[str] = ALL_PARITY_RULES) -> View:
-    """*view* as *rules* compare it: that its query exists, and its own indexes."""
+    """*view* as *rules* compare it: that its query exists, and its own indexes.
+
+    Under ``view_definitions`` a view always has a query, so one a reader did not
+    fetch (``definition=None``) compares as present too, never as another query.
+    """
     definition = view.definition
-    if definition is not None and "view_definitions" in rules:
+    if "view_definitions" in rules:
         definition = _EXPRESSION
     return replace(
         view,

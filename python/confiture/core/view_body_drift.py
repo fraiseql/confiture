@@ -122,7 +122,7 @@ def _normalize_viewdef(definition: str) -> str:
     return "\n".join(line.rstrip() for line in definition.strip().splitlines())
 
 
-def _hash_viewdef(definition: str) -> str:
+def viewdef_hash(definition: str) -> str:
     """Return a 12-char hex digest of the normalised *definition*."""
     return hashlib.sha256(_normalize_viewdef(definition).encode()).hexdigest()[:12]
 
@@ -157,8 +157,8 @@ def _drift(src: View, live_view: View) -> ViewBodyDrift:
         schema=live_view.schema or DEFAULT_SCHEMA,
         name=live_view.name,
         relkind="m" if live_view.materialized else "v",
-        source_hash=_hash_viewdef(src_def),
-        db_hash=_hash_viewdef(live_def),
+        source_hash=viewdef_hash(src_def),
+        db_hash=viewdef_hash(live_def),
         expected_def=src_def,
         live_def=live_def,
         unified_diff=unified,

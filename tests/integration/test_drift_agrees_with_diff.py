@@ -89,6 +89,7 @@ _DRIFT_FAMILY: dict[DriftType, str] = {
     DriftType.MISSING_TVIEW: "object",
     DriftType.EXTRA_TVIEW: "object",
     DriftType.TVIEW_OPTION_MISMATCH: "object",
+    DriftType.VIEW_DEFINITION_MISMATCH: "object",
 }
 
 _CONSTRAINT_CHANGES = (
@@ -268,19 +269,21 @@ def test_drift_and_diff_are_about_the_same_objects(
     assert reported == expected, mutation
 
 
-# The materialised tier (a scratch server reads the tree back) compares a
-# matview's query, so a matview whose query drifted is one redefinition; the index
-# changes it carries are drift's findings, and the redefinition itself is no
-# finding (``UNRENDERED_REDEFINITIONS``). ``platform.diff`` has no scratch tier, so
-# the diff is asked as ``migrate diff --from db --scratch-url`` asks it.
+# The materialised tier (a scratch server reads the tree back) compares a view's
+# and a matview's query, so one whose query drifted is one redefinition: drift's
+# ``view_definition_mismatch`` (#719), and the index changes a matview's carries are
+# drift's findings beside it. ``platform.diff`` has no scratch tier, so the diff is
+# asked as ``migrate diff --from db --scratch-url`` asks it.
 
 
 def _change_keys(change: SchemaChange) -> set[Key]:
-    """The objects *change* is about, a redefinition drift does not render by what it carries."""
-    if isinstance(change, ObjectReplaced) and change.ref.kind in UNRENDERED_REDEFINITIONS:
-        return {key for carried in change.index_changes if (key := _change_key(carried))}
-    key = _change_key(change)
-    return set() if key is None else {key}
+    """The objects *change* is about: a redefinition's own, unless unrendered, and what it carries."""
+    own = _change_key(change)
+    keys = set() if own is None else {own}
+    if not isinstance(change, ObjectReplaced):
+        return keys
+    carried = {key for found in change.index_changes if (key := _change_key(found))}
+    return carried if change.ref.kind in UNRENDERED_REDEFINITIONS else carried | keys
 
 
 def _flattened(changes: list[SchemaChange]) -> list[SchemaChange]:
@@ -321,34 +324,51 @@ _REDEFINED_MATVIEW = (
     "CREATE MATERIALIZED VIEW core.mv_widget AS SELECT count(*) + 0 AS n FROM core.tb_widget; "
 )
 
-#: ``(mutation SQL, drift type or None)``: a matview redefined, with what drift reports.
+_QUERY = "view_definition_mismatch"
+
+#: ``(mutation SQL, redefined kind, drift types)``: a view or matview redefined, with
+#: what drift reports.
 MATERIALISED_MORE = [
-    pytest.param(_REDEFINED_MATVIEW, "missing_index", id="redefine-matview-drop-unique-index"),
+    pytest.param(
+        _REDEFINED_MATVIEW,
+        "matview",
+        {_QUERY, "missing_index"},
+        id="redefine-matview-drop-unique-index",
+    ),
     pytest.param(
         _REDEFINED_MATVIEW
         + "CREATE UNIQUE INDEX ux_mv_widget_n ON core.mv_widget (n); "
         + "CREATE INDEX ix_mv_widget_extra ON core.mv_widget (n)",
-        "extra_index",
+        "matview",
+        {_QUERY, "extra_index"},
         id="redefine-matview-add-index",
     ),
     pytest.param(
         _REDEFINED_MATVIEW + "CREATE UNIQUE INDEX ux_mv_widget_n ON core.mv_widget (n)",
-        None,
+        "matview",
+        {_QUERY},
         id="redefine-matview-only",
+    ),
+    pytest.param(
+        "CREATE OR REPLACE VIEW core.v_widget AS "
+        "SELECT id, serial FROM core.tb_widget WHERE id > 0",
+        "view",
+        {_QUERY},
+        id="redefine-view",
     ),
 ]
 
 
-@pytest.mark.parametrize(("mutation", "drift_type"), MATERIALISED_MORE)
+@pytest.mark.parametrize(("mutation", "kind", "drift_types"), MATERIALISED_MORE)
 def test_drift_and_diff_agree_at_the_materialised_tier(
-    built: tuple[str, Path], test_db_url: str, mutation: str, drift_type: str | None
+    built: tuple[str, Path], test_db_url: str, mutation: str, kind: str, drift_types: set[str]
 ) -> None:
     url, schema_file = built
     apply_sql_via_psql(url, sql=mutation)
     items, changes = _materialised(url, schema_file, test_db_url)
 
-    assert [c.ref.kind for c in changes if isinstance(c, ObjectReplaced)] == ["matview"]
-    assert {item.drift_type.value for item in items} == ({drift_type} if drift_type else set())
+    assert [c.ref.kind for c in changes if isinstance(c, ObjectReplaced)] == [kind]
+    assert {item.drift_type.value for item in items} == drift_types
     found = {_drift_key(item) for item in items}
     changed = set().union(*map(_change_keys, changes))
     assert (found - changed, changed - found) == (set(), set()), mutation

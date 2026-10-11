@@ -192,7 +192,8 @@ CheckLiveDriftOpt = Annotated[
         "extra_routine, missing_tview / extra_tview / tview_option_mismatch (pg_tviews), "
         "missing_object / extra_object (an extension, schema, domain, policy, … — "
         "subject.kind says which), object_definition_mismatch (a domain, type, policy "
-        "or rule defined otherwise). "
+        "or rule defined otherwise), view_definition_mismatch (a view's or matview's "
+        "query, with a scratch server). "
         "Sequences are not compared; grants and ownership are "
         "separate checks (--check-acls, --check-ownership-coverage). "
         "Requires --config and a database connection.",
