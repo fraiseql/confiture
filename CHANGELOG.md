@@ -31,6 +31,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **⚠️ The git checks find migrations where `migrate up` runs them** (#709).
+  `--require-migration`, `--require-migration-bodies`, `--list-unmigrated-bodies` and
+  `--require-grant-migration` matched changed files against `db/migrations/` (and
+  `db/7_grant/`) relative to the repository root, and the first three ignored
+  `--migrations-dir`. A project below its repository's root had every schema change reported
+  as unaccompanied, its function checks never saw the branch's `DROP FUNCTION`, and its grant
+  changes went unchecked (passed with no migration). A changed file now counts when
+  `migrate up` would run it: directly in `--migrations-dir` (relative to the directory you run
+  in), named `*.up.sql` or `*.py`; the grant directory is read the same way. ⚠️ Stricter in two
+  cases that passed before: a migration the branch **deleted** no longer accompanies a change,
+  and neither does a file nested below the migrations directory, which `migrate up` never
+  runs.
 - **⚠️ A generated Python migration runs in the mode its SQL needs** (#698). The positional
   `migrate diff OLD NEW --generate` writes a Python class that never declared `transactional`,
   so a diff adding or dropping an index ran `CREATE`/`DROP INDEX CONCURRENTLY` inside a

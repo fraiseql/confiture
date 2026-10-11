@@ -457,24 +457,26 @@ confiture migrate diff --from db/schema --to db/generated/schema_local.sql --for
   | jq -r '.warnings[] | "\(.code) \(.message)"'
 ```
 
-### Scenario 6: "I'm getting false positives for migration files"
+### Scenario 6: "My migration is not counted" (or one is counted that should not be)
 
-**Problem**: Migration files in non-standard locations are being detected.
+**Why**: a changed file accompanies a schema change when `migrate up` would run it:
+directly in `--migrations-dir` (default `db/migrations`, relative to the directory you
+run from, as `migrate up` reads it), named `*.up.sql` or `*.py` (not `__init__.py`, not
+`_`-prefixed), and present at the target — a migration the branch deleted carries
+nothing. A project below its repository's root (`services/api/db/migrations/…`) is
+found the same way: run from `services/api`.
 
-**Why**: Validation looks for `db/migrations/*.up.sql` files specifically.
-
-**Valid migration locations**:
 ```
 ✅ db/migrations/20260403120000_create_users.up.sql
-✅ db/migrations/20260403120000_create_users.down.sql
-✅ db/migrations/v1.5/20260403120115_alter_posts.up.sql  (nested in db/migrations)
+✅ db/migrations/20260403120000_create_users.py
 
-❌ src/migrations/20260403120000_create_users.up.sql (wrong parent directory)
-❌ migrations/20260403120000_create_users.up.sql (missing db/)
-❌ db/migrations/20260403120000_create_users.sql (missing .up suffix)
+❌ db/migrations/20260403120000_create_users.down.sql  (a down migration carries nothing)
+❌ db/migrations/v1.5/20260403120115_alter_posts.up.sql (nested: migrate up never runs it)
+❌ db/migrations/20260403120000_create_users.sql       (missing .up suffix)
+❌ a migration the branch deleted
 ```
 
-If your migrations are in a different location, adjust your setup or use `--require-migration=false` to skip this check.
+If your migrations live elsewhere, pass the same `--migrations-dir` you give `migrate up`.
 
 ## Performance Tips
 
@@ -539,8 +541,8 @@ Pre-commit hooks should be fast (<1 second):
 # Initialize git if needed
 git init
 
-# Or cd into git repository root
-cd /path/to/git/root
+# Or run from your project's directory inside the repository
+cd /path/to/repo/services/api
 confiture migrate validate --check-drift
 ```
 
@@ -585,20 +587,12 @@ git fetch origin
 **Problem**: You added a migration file but validation says "no migrations"
 
 **Check**:
-1. File is in `db/migrations/` directory
-2. File ends with `.up.sql`
-3. File follows pattern: `{YYYYMMDDHHMMSS}_{name}.up.sql`
+1. The file is directly in `--migrations-dir` (default `db/migrations`, from the
+   directory you run in), not in a subdirectory of it
+2. It ends with `.up.sql`, or is a `.py` migration
+3. It is committed (or staged, with `--staged`) — not only on disk
 
-**Valid examples**:
-```
-db/migrations/20260403120000_create_users.up.sql     ✅
-db/migrations/20260403120115_add_email.up.sql        ✅
-db/migrations/20260403120230_initial.up.sql          ✅
-
-migrations/20260403120000_create_users.up.sql        ❌ Wrong location
-db/migrations/20260403120000_create_users.sql        ❌ Missing .up
-db/migrations/create_users.up.sql                     ❌ Missing timestamp prefix
-```
+See [Scenario 6](#scenario-6-my-migration-is-not-counted-or-one-is-counted-that-should-not-be).
 
 ## Integration Examples
 

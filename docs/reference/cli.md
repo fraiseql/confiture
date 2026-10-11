@@ -2249,6 +2249,14 @@ Since 0.41.0 `--idempotent` composes with `--check-drift`,
 `--require-grant-migration`. Earlier versions rejected those combinations with
 exit 5, because only one of the two checks would have run.
 
+`--require-migration`, `--require-migration-bodies`, `--list-unmigrated-bodies` and
+`--require-grant-migration` count a changed file as a migration when `migrate up`
+would run it: directly in `--migrations-dir` (relative to the directory you run in,
+as `migrate up` reads it), named `*.up.sql` or `*.py`, and — for the first three —
+present at the target, so a deleted migration accompanies nothing. The grant
+directory is read from the directory you run in too, so a project below its
+repository's root is checked from its own directory.
+
 #### Examples
 
 **Check for schema drift against main branch:**
