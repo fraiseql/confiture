@@ -4,54 +4,43 @@ Requires a live PostgreSQL connection.  Tests are skipped automatically
 when no DATABASE_URL is available.
 """
 
+from collections.abc import Iterator
 from pathlib import Path
 
+import psycopg
 import pytest
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def db_url(test_db_url: str) -> str:
-    """The shared test database (routing rule in tests/conftest.py)."""
-    return test_db_url
+def own_db(fresh_database: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[psycopg.Connection]:
+    """A connection to a database this test created, with no DSN in the environment.
 
-
-@pytest.fixture
-def db_conn(db_url: str):
-    import psycopg
-
-    conn = psycopg.connect(db_url)
-    yield conn
-    conn.close()
-
-
-@pytest.fixture
-def clean_db(db_conn):
-    """Ensure tb_confiture is absent before test and cleaned up after."""
-    with db_conn.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS tb_confiture CASCADE")
-        cur.execute('DROP EXTENSION IF EXISTS "uuid-ossp" CASCADE')
-    db_conn.commit()
-    yield db_conn
-    with db_conn.cursor() as cur:
-        cur.execute("DROP TABLE IF EXISTS tb_confiture CASCADE")
-    db_conn.commit()
+    `--auto-detect-baseline` reads the whole database: a ledger anywhere in it, a
+    ledger in another schema, every object it compares with a snapshot. On the
+    worker's shared database another module, or another run on the same server,
+    can leave any of these behind (#710); a database of its own cannot.
+    """
+    monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with psycopg.connect(fresh_database) as conn:
+        yield conn
 
 
 class TestTrackingTableExists:
     """Tests for Migrator.tracking_table_exists."""
 
-    def test_returns_false_when_table_absent(self, clean_db) -> None:
+    def test_returns_false_when_table_absent(self, own_db) -> None:
         from confiture.core.migrator import Migrator
 
-        migrator = Migrator(connection=clean_db)
+        migrator = Migrator(connection=own_db)
         assert migrator.tracking_table_exists() is False
 
-    def test_returns_true_after_initialize(self, clean_db) -> None:
+    def test_returns_true_after_initialize(self, own_db) -> None:
         from confiture.core.migrator import Migrator
 
-        migrator = Migrator(connection=clean_db)
+        migrator = Migrator(connection=own_db)
         migrator.initialize()
         assert migrator.tracking_table_exists() is True
 
@@ -59,7 +48,7 @@ class TestTrackingTableExists:
 class TestBaselineThrough:
     """Tests for Migrator.baseline_through."""
 
-    def test_marks_migrations_through_version(self, clean_db, tmp_path: Path) -> None:
+    def test_marks_migrations_through_version(self, own_db, tmp_path: Path) -> None:
         from confiture.core.migrator import Migrator
 
         # Create fake migration files
@@ -77,7 +66,7 @@ class TestBaselineThrough:
                 f"    def down(self): pass\n"
             )
 
-        migrator = Migrator(connection=clean_db)
+        migrator = Migrator(connection=own_db)
         migrator.initialize()
         newly_marked = migrator.baseline_through("002", mig_dir)
 
@@ -86,7 +75,7 @@ class TestBaselineThrough:
         assert "003" not in newly_marked
         assert "004" not in newly_marked
 
-    def test_does_not_clear_existing_entries(self, clean_db, tmp_path: Path) -> None:
+    def test_does_not_clear_existing_entries(self, own_db, tmp_path: Path) -> None:
         from confiture.core.migrator import Migrator
 
         mig_dir = tmp_path / "migrations"
@@ -103,7 +92,7 @@ class TestBaselineThrough:
                 f"    def down(self): pass\n"
             )
 
-        migrator = Migrator(connection=clean_db)
+        migrator = Migrator(connection=own_db)
         migrator.initialize()
 
         # Mark 001 first
@@ -118,7 +107,7 @@ class TestBaselineThrough:
         assert "002" in applied_after
         assert "003" in applied_after
 
-    def test_raises_if_version_not_found(self, clean_db, tmp_path: Path) -> None:
+    def test_raises_if_version_not_found(self, own_db, tmp_path: Path) -> None:
         from confiture.core.migrator import Migrator
         from confiture.exceptions import MigrationError
 
@@ -133,7 +122,7 @@ class TestBaselineThrough:
             "    def down(self): pass\n"
         )
 
-        migrator = Migrator(connection=clean_db)
+        migrator = Migrator(connection=own_db)
         migrator.initialize()
 
         with pytest.raises(MigrationError, match="not found on disk"):
@@ -144,7 +133,7 @@ class TestAutoDetectBaselineCLI:
     """Integration test for migrate up --auto-detect-baseline CLI flag."""
 
     def test_auto_detect_proceeds_when_no_snapshot_matches(
-        self, clean_db, tmp_path: Path, test_db_url: str
+        self, own_db, fresh_database: str, tmp_path: Path
     ) -> None:
         """No snapshot describes the database: says so and proceeds without baselining.
 
@@ -165,14 +154,19 @@ class TestAutoDetectBaselineCLI:
         # Write a minimal config
         env_dir = tmp_path / "db" / "environments"
         env_dir.mkdir(parents=True)
-        db_url = test_db_url
         (env_dir / "local.yaml").write_text(
-            f"database_url: {db_url}\ninclude_dirs:\n  - {tmp_path / 'db' / 'schema'}\n"
+            f"database_url: {fresh_database}\ninclude_dirs:\n  - {tmp_path / 'db' / 'schema'}\n"
         )
         schema_dir = tmp_path / "db" / "schema"
         schema_dir.mkdir()
         mig_dir = tmp_path / "db" / "migrations"
         mig_dir.mkdir()
+
+        # What the detector will read: no ledger anywhere, else the policy refuses or skips.
+        from confiture.core.ledger import find_ledger_relations
+
+        stray = find_ledger_relations(own_db, "tb_confiture")
+        assert not stray, f"a database created for this test holds {stray}: is template1 clean?"
 
         runner = CliRunner()
         result = runner.invoke(
