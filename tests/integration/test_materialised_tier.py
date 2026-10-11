@@ -147,6 +147,28 @@ def test_the_environment_names_the_scratch_server(
     assert _diff_from_db(tree, config)["fidelity"] == "materialised"
 
 
+@pytest.mark.parametrize("scratch", [True, False], ids=["flag", "no-flag"])
+def test_check_live_drift_reads_the_scratch_url_flag(
+    scratch: bool,
+    tree: Path,
+    test_db_url: str,
+    fresh_database_factory: Callable[[str], str],
+    tmp_path: Path,
+) -> None:
+    """``migrate validate --scratch-url`` reaches ``--check-live-drift`` as ``drift``'s does (#723)."""
+    config = _config(tmp_path, _built(fresh_database_factory, CHANGED["check"][0]))
+    extra = ("--scratch-url", test_db_url) if scratch else ()
+    result = runner.invoke(
+        app,
+        ["migrate", "validate", "--check-live-drift", "--config", str(config),
+         "--schema", str(tree), "--format", "json", *extra],
+    )  # fmt: skip
+
+    # The changed CHECK is critical drift, so the gate fails only when it sees it.
+    assert (result.exit_code != 0) is scratch, result.output
+    assert ("constraint_mismatch" in result.stdout) is scratch, result.stdout
+
+
 def test_without_a_scratch_server_drift_says_nothing_new(
     tree: Path, fresh_database_factory: Callable[[str], str], tmp_path: Path
 ) -> None:

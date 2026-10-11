@@ -28,6 +28,7 @@ def check_live_drift(
     *,
     ignore_column_order: bool = False,
     extra_objects: str | None = None,
+    scratch_url: str | None = None,
 ):
     """Compare the live schema against *schema_file*.
 
@@ -38,6 +39,8 @@ def check_live_drift(
             there — which is also how this check finally honours ``--ssh``, a
             tunnel its help text has always advertised but ``create_connection``
             never opened.
+        scratch_url: ``--scratch-url``: the server the tree is built on and read
+            back from; it wins over the environment's ``scratch_url``.
 
     Returns:
         The :class:`~confiture.core.drift.DriftReport`.
@@ -61,7 +64,7 @@ def check_live_drift(
                 f"Database connection failed: {exc}", error_code="CONFIG_006"
             ) from exc
         return _detector(
-            shared, config_path, ignore_column_order, extra_objects
+            shared, config_path, ignore_column_order, extra_objects, scratch_url
         ).compare_with_schema_file(str(schema_file))
 
     config_data = load_config(config_path)
@@ -74,14 +77,18 @@ def check_live_drift(
 
     try:
         return _detector(
-            conn, config_path, ignore_column_order, extra_objects
+            conn, config_path, ignore_column_order, extra_objects, scratch_url
         ).compare_with_schema_file(str(schema_file))
     finally:
         conn.close()
 
 
 def _detector(
-    conn, config_path: Path, ignore_column_order: bool, extra_objects: str | None = None
+    conn,
+    config_path: Path,
+    ignore_column_order: bool,
+    extra_objects: str | None = None,
+    scratch_url: str | None = None,
 ) -> SchemaDriftDetector:
     """A detector honouring the config's ``drift:`` block, its ``scratch_url`` and the CLI flags (#226)."""
 
@@ -91,6 +98,6 @@ def _detector(
         conn,
         ignore_column_order=ignore_column_order or cfg.ignore_column_order,
         column_order_severity=cfg.column_order_severity,
-        scratch_url=scratch_url_from_config(config_data),
+        scratch_url=scratch_url_from_config(config_data, scratch_url),
         extra_objects=extra_objects_of(extra_objects, cfg.extra_objects),
     )
