@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **⚠️ `--check-acls` and `--check-ownership-coverage` read the project `migrate up` runs**
+  (#715). `acl_001` resolved `migration.grant_dir` (default `db/7_grant`) beside the config
+  file, so from the layout `confiture init` writes (`db/environments/local.yaml`) it looked in
+  `db/environments/db/7_grant`, dropped the sweep without a word, and reported every table
+  granted only there as missing its grant. The sweep is now read relative to the directory you
+  run in, as `--migrations-dir` and `--require-grant-migration`'s grant directory are; one the
+  config names that does not exist is reported as `acl_001` degraded (text, and `degraded[]`
+  in the JSON). `acl_001`, `own_001`, `own_002` and `migrate fix --ownership` walked the
+  migrations directory recursively; they now read the files `migrate up` runs, directly in
+  the directory, so a file nested below it (`db/migrations/archive/`), which is never
+  applied, is neither linted nor fixed. `--check-acls` also loaded
+  `db/environments/local.yaml` whatever `--config` named, and failed with `CONFIG_001` in a
+  project that has none; it reads only the config it is given. ⚠️ Run from somewhere other
+  than the project, a sweep that was found beside the config is now found relative to the
+  working directory instead.
 - **⚠️ A redefined domain, composite or range type, policy or rule is seen against a
   database** (#708). The live reader held these kinds by existence alone, so changing one in
   the tree was no change to `migrate diff --from db` and no drift, with or without
