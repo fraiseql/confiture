@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--scratch-url` builds a TVIEW tree with pg_tviews** (#730). The materialised tier builds
+  the tree into an empty scratch database, and a `CREATE TABLE tv_x AS` built without the
+  extension is a plain table. A tree that declared TVIEWs without running `CREATE EXTENSION
+  pg_tviews` itself was therefore compared as tables: `confiture drift --scratch-url` reported a
+  critical `missing_table` for each TVIEW of a database built from that very tree, and
+  `migrate diff --scratch-url` read them the same way. The scratch database now gets pg_tviews
+  first. A scratch server that doesn't offer pg_tviews refuses such a tree with `CONFIG_014`
+  (exit 5) rather than comparing it wrong.
+
 ## [1.36.0] - 2026-10-11
 
 **A TVIEW's indexes are compared like a table's, and a redefinition is seen against a

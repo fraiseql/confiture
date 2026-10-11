@@ -35,7 +35,10 @@ happens.
 
 The scratch server must be able to build the tree: the extensions it creates must be
 installed there, and a tree with pg_tviews TVIEWs needs a pg_tviews confiture reads
-(`CONFIG_014` otherwise). A tree the scratch server cannot build is an error, never a quiet
+(`CONFIG_014` otherwise). A tree that declares TVIEWs without running `CREATE EXTENSION
+pg_tviews` itself gets the extension created in the scratch database first, since a
+`CREATE TABLE tv_x AS` built without it is a plain table; a scratch server that does not
+offer pg_tviews refuses such a tree with `CONFIG_014`. A tree the scratch server cannot build is an error, never a quiet
 fall back to the structural tier.
 
 Use a scratch server of the database's PostgreSQL major version. Both sides are compared as

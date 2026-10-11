@@ -23,7 +23,7 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.core.drift import DriftType, SchemaDriftDetector
-from confiture.exceptions import DifferError
+from confiture.exceptions import ConfigurationError, DifferError
 
 runner = CliRunner()
 
@@ -97,6 +97,25 @@ def test_a_changed_expression_is_drift(
     # The control: what the structural tier cannot see is why the other exists.
     assert structural.drift_items == []
     assert structural.fidelity == "structural"
+
+
+def test_a_tview_tree_is_refused_by_a_scratch_server_without_pg_tviews(
+    tmp_path: Path, test_db_url: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """Built without the extension, each TVIEW would be a plain table: refused, never compared (#730)."""
+    with psycopg.connect(test_db_url) as conn:
+        if conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("this server offers pg_tviews (test_tview_live covers that side)")
+    tables = "CREATE TABLE tb_post (pk_post bigint PRIMARY KEY, id uuid NOT NULL);"
+    tree = tmp_path / "schema.sql"
+    tree.write_text(f"{tables}\nCREATE TABLE tv_post AS SELECT pk_post, id FROM tb_post;\n")
+
+    with pytest.raises(ConfigurationError) as refused:
+        _drift(_built(fresh_database_factory, tables), tree, test_db_url)
+
+    assert refused.value.error_code == "CONFIG_014"
 
 
 def _config(tmp_path: Path, url: str, scratch_url: str | None = None) -> Path:
