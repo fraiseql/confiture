@@ -10,9 +10,10 @@ from confiture.cli.formatters.migrate_formatter import format_rebuild_result
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import migrator as _core_migrator
+from confiture.core.connection import ConnectionLost
 from confiture.core.ledger import write_backup
 from confiture.core.migrator import find_duplicate_migration_versions
-from confiture.exceptions import ConfigurationError, MigrationError
+from confiture.exceptions import ConfigurationError, ConfiturError, MigrationError
 
 DropSchemasOpt = Annotated[
     bool, typer.Option("--drop-schemas", help="Drop all user schemas before rebuild")
@@ -173,10 +174,15 @@ def migrate_rebuild(
 
     except typer.Exit:
         raise
-    # Reason: documented: rebuild failures of any kind stay in the migrate family at exit 3
+    except ConfiturError as e:
+        fail(e, json_mode=json_mode)
+    except ConnectionLost as e:
+        fail(
+            ConfigurationError(f"Rebuild failed: {e}", error_code="CONFIG_006"),
+            json_mode=json_mode,
+        )
+    # Reason: a rebuild failure no one foresaw is the migrate family's MIGR_001 (exit 1), never exit 3's unreachable database (#727)
     except Exception as e:
-        # Rebuild fatal errors (connection, build, DDL) stay in the migrate
-        # family at exit 3; in --format json the unified envelope is emitted.
         fail(
             MigrationError(f"Rebuild failed: {e}", error_code="MIGR_001"),
             json_mode=json_mode,

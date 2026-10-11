@@ -37,11 +37,11 @@ reference from the CLI with `confiture --exit-codes`.
 - **0** — Success (including success-with-signal: already applied, nothing pending, advisories)
   - DIFFER_402, DIFFER_404, DIFFER_405, DIFFER_408, MIGR_101, SCHEMA_206, SEED_002, SEED_003
 - **1** — Generic failure (SQL/hook execution, status: pending)
-  - SQL_001
+  - GEN_001, MIGR_001, MIGR_004, MIGR_100, MIGR_102, MIGR_106, MIGR_107, MIGR_108, SQL_001
 - **2** — Tracking table absent — confiture not initialized on this database yet
   - PRECON_1001
 - **3** — Database connection failed — host/auth/network unreachable
-  - CONFIG_006, GEN_001, MIGR_001, MIGR_004, MIGR_100, MIGR_102, MIGR_106, MIGR_107, MIGR_108
+  - CONFIG_006
 - **4** — Schema / DDL / build error
   - DDL_001, REBUILD_001, SCHEMA_001, SCHEMA_201, SCHEMA_202, SCHEMA_205
 - **5** — Configuration invalid, or validation / sync / lint / precondition failure
@@ -88,7 +88,7 @@ number:
 
 | Code | Exit | Family default | Why it differs |
 |------|------|----------------|----------------|
-| `MIGR_101` (already applied) | 0 | 3 | success-with-signal, not an error |
+| `MIGR_101` (already applied) | 0 | 1 | success-with-signal, not an error |
 | `PRECON_1001` (tracking table absent) | 2 | 5 | the fresh-DB "not initialized yet" signal |
 | `CONFIG_006` (connection failed) | 3 | 5 | host/auth/network, distinct from config-invalid |
 
@@ -206,6 +206,28 @@ Migration guidance for wrapper authors:
 Codes that already matched the convention and did **not** change: `MIGR_106`
 (duplicate version) = 3, `ROLLBACK_600` (irreversible) = 8, the lock family = 6.
 
+### 1.36.0 — exit 3 is a connection failure only (#727)
+
+#146 left the migrate family at exit 3 when it moved `CONFIG_006` there, so a failed
+migration, a duplicate version or an embedded `COMMIT` exited with the class
+`db_unreachable`. 1.36.0 moves the family to exit 1 (`internal_error`, "SQL/hook
+execution"); exit 3 holds `CONFIG_006` alone.
+
+| Symbolic code | Meaning | Old exit (≤1.35.0) | New exit |
+|---------------|---------|:------------------:|:--------:|
+| `MIGR_001` | Migration error | 3 | **1** |
+| `MIGR_004` | Migration file already exists | 3 | **1** |
+| `MIGR_100` | Migration failed | 3 | **1** |
+| `MIGR_102` | Migration file corrupted | 3 | **1** |
+| `MIGR_106` | Duplicate migration version | 3 | **1** |
+| `MIGR_107` | Explicit `COMMIT`/`ROLLBACK` in a migration body | 3 | **1** |
+| `MIGR_108` | Non-transactional migration under `commit=False` | 3 | **1** |
+| `GEN_001` | Migration generator failed | 3 | **1** |
+
+No integer gained or lost a meaning, and no class was renamed. `migrate rebuild`, which
+reported every failure as `MIGR_001`, now lets a confiture error keep its own code and
+reports a refused connection as `CONFIG_006` (exit 3).
+
 ## Stability contract
 
 Going forward, the exit-code convention is **frozen**:
@@ -218,7 +240,8 @@ Going forward, the exit-code convention is **frozen**:
   (see [What 1.x promises](../operations/release-trains.md#what-1x-promises)).
 
 The one sanctioned break before this contract took effect was the #146
-renumbering documented in the reconciliation appendix above. 0.51.0 removed 36
+renumbering documented in the reconciliation appendix above; 1.36.0 moved the
+migrate family off exit 3 (#727), flagged ⚠️ in the CHANGELOG. 0.51.0 removed 36
 symbolic codes that no command had ever emitted (listed in the CHANGELOG); no
 integer changed, and every code left in the canonical table is one the package
 can produce.

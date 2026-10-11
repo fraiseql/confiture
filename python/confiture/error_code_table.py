@@ -80,12 +80,12 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "strategy"
         ),
     },
-    # ========== MIGR (100-199): Migration execution errors → exit code 3 ==========
+    # ========== MIGR (100-199): Migration execution errors → exit code 1 ==========
     {
         "code": "MIGR_100",
         "message_template": "Migration {version} not found",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Check the migration version and ensure the file exists",
     },
     {
@@ -99,14 +99,14 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "code": "MIGR_102",
         "message_template": "Migration file corrupted: {file}",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Regenerate or restore the migration file",
     },
     {
         "code": "MIGR_106",
         "message_template": "Duplicate migration version: {version}",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": (
             "Multiple migration files share the same version number. Rename files "
             "to use unique version prefixes. Run 'confiture migrate validate' to "
@@ -120,7 +120,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "in its body, breaking confiture's transaction envelope"
         ),
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": (
             "Remove any explicit COMMIT or ROLLBACK from the migration body. "
             "Confiture manages the outer transaction; embedded transaction "
@@ -136,7 +136,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "commit=False (inside a SAVEPOINT)"
         ),
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": (
             "A non-transactional migration commits the current transaction and "
             "runs in autocommit, so it cannot be tested inside a SAVEPOINT. "
@@ -420,14 +420,14 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "code": "MIGR_001",
         "message_template": "Migration error",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Check migration files and database state",
     },
     {
         "code": "MIGR_004",
         "message_template": "Migration file already exists",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Use --force flag to overwrite existing file",
     },
     {
@@ -584,7 +584,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "code": "GEN_001",
         "message_template": "External generator error",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Check the external generator command and its output",
     },
     {

@@ -206,8 +206,8 @@ def migrate_down_to(
 
     EDGE CASES:
       <revision> == current      → no-op, exit 0 ("already at <revision>")
-      <revision> newer than current → exit 3 ("use 'migrate up --target'")
-      <revision> unknown         → exit 3 ("unknown revision")
+      <revision> newer than current → exit 1 ("use 'migrate up --target'")
+      <revision> unknown         → exit 1 ("unknown revision")
       any required .down.sql missing → exit 8, nothing applied (ROLLBACK_600)
 
     OUTPUT (--format json): {from, to, rolled_back, skipped, errors}

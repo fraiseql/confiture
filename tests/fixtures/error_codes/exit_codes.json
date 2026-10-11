@@ -29,6 +29,14 @@
       "class": "internal_error",
       "meaning": "Generic failure (SQL/hook execution, status: pending)",
       "symbolic_codes": [
+        "GEN_001",
+        "MIGR_001",
+        "MIGR_004",
+        "MIGR_100",
+        "MIGR_102",
+        "MIGR_106",
+        "MIGR_107",
+        "MIGR_108",
         "SQL_001"
       ]
     },
@@ -43,15 +51,7 @@
       "class": "db_unreachable",
       "meaning": "Database connection failed \u2014 host/auth/network unreachable",
       "symbolic_codes": [
-        "CONFIG_006",
-        "GEN_001",
-        "MIGR_001",
-        "MIGR_004",
-        "MIGR_100",
-        "MIGR_102",
-        "MIGR_106",
-        "MIGR_107",
-        "MIGR_108"
+        "CONFIG_006"
       ]
     },
     "4": {

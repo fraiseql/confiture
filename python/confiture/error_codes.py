@@ -11,7 +11,7 @@ Categories and their exit codes (the #146 convention; see
 docs/reference/exit-codes.md and CANONICAL_EXIT_CODES below for the contract):
 - CONFIG (001-099): Configuration errors → exit code 5
     (carve-out: CONFIG_006 "connection failed" → 3)
-- MIGR (100-199): Migration execution errors → exit code 3
+- MIGR (100-199): Migration execution errors → exit code 1
     (carve-out: MIGR_101 "already applied" success-with-signal → 0)
 - SCHEMA (200-299): Schema DDL and build errors → exit code 4
 - SYNC (300-399): Production data sync errors → exit code 5
@@ -207,15 +207,16 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_013": 5,  # a caller's connection in the wrong mode for the call (#374)
     "CONFIG_014": 5,  # pg_tviews without the read contract confiture reads
     "CONFIG_015": 5,  # the ledger is only in another schema (preflight --scope pending)
-    # MIGR family → 3, with one success-with-signal carve-out at 0.
-    "MIGR_001": 3,
-    "MIGR_004": 3,
-    "MIGR_100": 3,
+    # MIGR family → 1 (an execution failure, never exit 3's unreachable database),
+    # with one success-with-signal carve-out at 0.
+    "MIGR_001": 1,
+    "MIGR_004": 1,
+    "MIGR_100": 1,
     "MIGR_101": 0,  # carve-out: already applied — success-with-signal
-    "MIGR_102": 3,
-    "MIGR_106": 3,
-    "MIGR_107": 3,
-    "MIGR_108": 3,
+    "MIGR_102": 1,
+    "MIGR_106": 1,
+    "MIGR_107": 1,
+    "MIGR_108": 1,
     # SCHEMA family → 4.
     "DDL_001": 4,  # destructive DDL refused without --force (schema family)
     "SCHEMA_001": 4,
@@ -259,8 +260,8 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "GIT_003": 7,
     "GRANT_001": 7,
     "PGGIT_900": 7,
-    # GEN → 3 (migration generation belongs with the MIGR family number).
-    "GEN_001": 3,
+    # GEN → 1 (migration generation belongs with the MIGR family number).
+    "GEN_001": 1,
     # PRECON family → 5, with PRECON_1001 carved out to 2 (no tracking table).
     "PRECON_1000": 5,
     "PRECON_1001": 2,  # carve-out: tracking table absent (family is otherwise 5)

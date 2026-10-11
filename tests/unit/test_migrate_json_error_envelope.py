@@ -45,7 +45,7 @@ def test_up_duplicate_version_json_envelope(tmp_path: Path) -> None:
             "json",
         ],
     )
-    assert result.exit_code == 3, result.output
+    assert result.exit_code == 1, result.output
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "MIGR_106"

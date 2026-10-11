@@ -50,7 +50,7 @@
   "MIGR_100": {
     "message_template": "Migration {version} not found",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Check the migration version and ensure the file exists"
   },
   "MIGR_101": {
@@ -62,25 +62,25 @@
   "MIGR_102": {
     "message_template": "Migration file corrupted: {file}",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Regenerate or restore the migration file"
   },
   "MIGR_106": {
     "message_template": "Duplicate migration version: {version}",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Multiple migration files share the same version number. Rename files to use unique version prefixes. Run 'confiture migrate validate' to see all duplicates."
   },
   "MIGR_107": {
     "message_template": "Migration {version} ({name}) issued an explicit COMMIT or ROLLBACK in its body, breaking confiture's transaction envelope",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Remove any explicit COMMIT or ROLLBACK from the migration body. Confiture manages the outer transaction; embedded transaction control leaves the database in an unrecoverable state if a subsequent statement fails. If you need autocommit semantics, set transactional = False on the migration."
   },
   "MIGR_108": {
     "message_template": "Migration {version} is non-transactional and cannot run with commit=False (inside a SAVEPOINT)",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "A non-transactional migration commits the current transaction and runs in autocommit, so it cannot be tested inside a SAVEPOINT. `session.up(dry_run_execute=True)` skips such migrations; apply them for real with `migrate up`."
   },
   "DDL_001": {
@@ -230,13 +230,13 @@
   "MIGR_001": {
     "message_template": "Migration error",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Check migration files and database state"
   },
   "MIGR_004": {
     "message_template": "Migration file already exists",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Use --force flag to overwrite existing file"
   },
   "SCHEMA_001": {
@@ -314,7 +314,7 @@
   "GEN_001": {
     "message_template": "External generator error",
     "severity": "error",
-    "exit_code": 3,
+    "exit_code": 1,
     "resolution_hint": "Check the external generator command and its output"
   },
   "REBUILD_001": {

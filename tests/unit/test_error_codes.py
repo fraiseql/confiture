@@ -237,7 +237,7 @@ class TestGlobalErrorCodeRegistry:
         # MIGR_100 should be defined
         definition = ERROR_CODE_REGISTRY.get("MIGR_100")
         assert definition.code == "MIGR_100"
-        assert definition.exit_code == 3  # Migration error exit code
+        assert definition.exit_code == 1  # Migration error exit code
 
     def test_global_registry_has_schema_codes(self) -> None:
         """Test that SCHEMA category codes are registered."""

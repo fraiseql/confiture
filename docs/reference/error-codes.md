@@ -69,20 +69,20 @@ resolution hint surfaced in the envelope.
 | `DIFFER_408` | 0 | warning | Index '{index}' is written before {table}, the relation it is on: the current schema's build fails at it, so it is not compared | Move the index after the statement that creates its relation; confiture lint reports it as build_004 |
 | `DIFFER_409` | 5 | error | {change} '{identity}' carries no statement: the side it came from is compared, never generated from | Generate from a side read from a tree (Side.of) or a database (database_side); a stated or slot side is compared, never generated from |
 | `DIFFER_410` | 5 | error | Index '{index}' on TVIEW {tview} has the name of an index pg_tviews created on it, and is another index: pg_tviews skipped its CREATE INDEX, so the database does not hold it | Rename the index in the schema: pg_tviews reserves the names of its own indexes on a TVIEW (tviews.registry.managed_indexes) |
-| `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
+| `GEN_001` | 1 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
 | `GIT_003` | 7 | error | Base ref unreachable in this checkout | In CI, set fetch-depth: 0 (actions/checkout) or run 'git fetch --unshallow origin <branch>' |
 | `GRANT_001` | 7 | error | Grant accompaniment error | Stage a migration file alongside grant changes |
 | `LOCK_1300` | 6 | error | Cannot acquire database lock | Wait for other operations to complete |
-| `MIGR_001` | 3 | error | Migration error | Check migration files and database state |
-| `MIGR_004` | 3 | error | Migration file already exists | Use --force flag to overwrite existing file |
-| `MIGR_100` | 3 | error | Migration {version} not found | Check the migration version and ensure the file exists |
+| `MIGR_001` | 1 | error | Migration error | Check migration files and database state |
+| `MIGR_004` | 1 | error | Migration file already exists | Use --force flag to overwrite existing file |
+| `MIGR_100` | 1 | error | Migration {version} not found | Check the migration version and ensure the file exists |
 | `MIGR_101` | 0 | warning | Migration {version} already applied | This migration has already been applied to the database |
-| `MIGR_102` | 3 | error | Migration file corrupted: {file} | Regenerate or restore the migration file |
-| `MIGR_106` | 3 | error | Duplicate migration version: {version} | Multiple migration files share the same version number. Rename files to use unique version prefixes. Run 'confiture migrate validate' to see all duplicates. |
-| `MIGR_107` | 3 | error | Migration {version} ({name}) issued an explicit COMMIT or ROLLBACK in its body, breaking confiture's transaction envelope | Remove any explicit COMMIT or ROLLBACK from the migration body. Confiture manages the outer transaction; embedded transaction control leaves the database in an unrecoverable state if a subsequent statement fails. If you need autocommit semantics, set transactional = False on the migration. |
-| `MIGR_108` | 3 | error | Migration {version} is non-transactional and cannot run with commit=False (inside a SAVEPOINT) | A non-transactional migration commits the current transaction and runs in autocommit, so it cannot be tested inside a SAVEPOINT. `session.up(dry_run_execute=True)` skips such migrations; apply them for real with `migrate up`. |
+| `MIGR_102` | 1 | error | Migration file corrupted: {file} | Regenerate or restore the migration file |
+| `MIGR_106` | 1 | error | Duplicate migration version: {version} | Multiple migration files share the same version number. Rename files to use unique version prefixes. Run 'confiture migrate validate' to see all duplicates. |
+| `MIGR_107` | 1 | error | Migration {version} ({name}) issued an explicit COMMIT or ROLLBACK in its body, breaking confiture's transaction envelope | Remove any explicit COMMIT or ROLLBACK from the migration body. Confiture manages the outer transaction; embedded transaction control leaves the database in an unrecoverable state if a subsequent statement fails. If you need autocommit semantics, set transactional = False on the migration. |
+| `MIGR_108` | 1 | error | Migration {version} is non-transactional and cannot run with commit=False (inside a SAVEPOINT) | A non-transactional migration commits the current transaction and runs in autocommit, so it cannot be tested inside a SAVEPOINT. `session.up(dry_run_execute=True)` skips such migrations; apply them for real with `migrate up`. |
 | `PGGIT_900` | 7 | error | pgGit command failed | Check pgGit is installed and configured |
 | `PRECON_1000` | 5 | error | Precondition not met: {condition} | Ensure the precondition is satisfied before retrying |
 | `PRECON_1001` | 2 | error | Database not initialized | Run 'confiture init' to initialize the database |

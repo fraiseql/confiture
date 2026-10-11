@@ -69,7 +69,7 @@ exclude_dirs: []
         )
 
         # Verify CLI behavior
-        assert result.exit_code == 3, "Should return exit code 3 (migration execution error)"
+        assert result.exit_code == 1, "Should return exit code 1 (migration execution error)"
 
         # Verify error message contains:
         output = result.stdout
@@ -181,7 +181,7 @@ class Failure(Migration):
 
         # Should show error for third
         assert "❌" in output or "Error" in output
-        assert result.exit_code == 3, "Should return exit code 3 (migration execution error)"
+        assert result.exit_code == 1, "Should return exit code 1 (migration execution error)"
 
 
 def test_error_message_includes_troubleshooting_hints(clean_test_db, test_db_url):

@@ -80,8 +80,8 @@ class TestMigrateReinitValidation:
         assert result.exit_code == 5
         assert "Migrations directory not found" in result.output
 
-    def test_reinit_duplicate_versions_exits_3(self, tmp_path):
-        """Should exit 3 when duplicate migration versions exist."""
+    def test_reinit_duplicate_versions_exits_1(self, tmp_path):
+        """Should exit 1 when duplicate migration versions exist."""
         config_file = _make_config_file(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -101,7 +101,7 @@ class TestMigrateReinitValidation:
                 "--yes",
             ],
         )
-        assert result.exit_code == 3
+        assert result.exit_code == 1
         assert "Duplicate migration versions" in result.output
 
 
