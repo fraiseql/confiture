@@ -65,20 +65,29 @@ writes them right after the `CREATE MATERIALIZED VIEW`, plain and `IF NOT EXISTS
 
 No tier compares a generated column's expression: no change says how one changed.
 
-A domain, a composite or range type, an aggregate, a policy, a rule and every other kind no
-typed section holds are read from a database **by existence alone**: the catalog says one
-exists, not how it is made. At every tier such an object is compared by existence, and one
-the tree adds is created, in a migration `migrate diff --generate` writes, with the tree's own
-statement. At the materialised tier the scratch database says it exists, and the tree's
-statement still creates it. One redefined between the database and the tree is not seen at
-any tier yet. One the database holds and the tree does not declare is a `DIFFER_404` warning:
-the diff has no statement to drop it with.
+A domain, a composite or range type, a policy and a rule are read from a database **whole**:
+the catalog's statement for each, read as a tree's is (#708). At the structural tier such an
+object is compared by what it is — a domain's base type, collation, NOT NULL and set of CHECKs,
+a composite type's attributes, a range's subtype and options, a policy's command, roles and
+mode, a rule's event — and an expression in it (a CHECK, a DEFAULT, a policy's USING or WITH
+CHECK, a rule's condition and action) only for presence, as a table's CHECK is. At the
+materialised tier everything PostgreSQL stores is compared. `migrate diff --generate` writes no
+SQL for a redefinition of one: a domain's constraints are altered one at a time, and the
+migration says so for you to write.
+
+An aggregate and every other kind no typed section holds are read from a database **by
+existence alone**: the catalog says one exists, not how it is made. At every tier such an
+object is compared by existence, and one the tree adds is created, in a migration
+`migrate diff --generate` writes, with the tree's own statement. One the database holds and
+the tree does not declare is a `DIFFER_404` warning: the diff has no statement to drop it with.
 
 ## What drift reports at each tier
 
 The drift kinds and severities are the same at every tier; the materialised tier reports
 more of them.
 
+- A redefined domain, composite or range type, policy or rule is `object_definition_mismatch`
+  (warning). At the structural tier, the text of an expression in it is not compared.
 - A changed CHECK is `constraint_mismatch` (critical) when PostgreSQL gave it one name on
   both sides, as it does for an unnamed CHECK built from one statement, and
   `missing_constraint` plus `extra_constraint` otherwise. At the structural tier, the
