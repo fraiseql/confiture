@@ -189,7 +189,7 @@ def test_down_to_json_plan_and_result(conn, project) -> None:
     assert p["errors"] == []
 
 
-def test_down_to_unknown_revision_exits_3(conn, project) -> None:
+def test_down_to_unknown_revision_exits_1(conn, project) -> None:
     cfg, md = project
     _write_migrations(md)
     _apply_all(cfg, md)
@@ -197,7 +197,7 @@ def test_down_to_unknown_revision_exits_3(conn, project) -> None:
         app,
         ["migrate", "down-to", "nope", "-c", str(cfg), "--migrations-dir", str(md)],
     )
-    assert r.exit_code == 3, r.output
+    assert r.exit_code == 1, r.output
 
 
 def test_down_to_irreversible_aborts_exit_8(conn, project) -> None:

@@ -134,4 +134,4 @@ class TestGenerator:
         )  # fmt: skip
 
         payload = json.loads(stdout)
-        assert (code, payload["ok"], payload["error"]["code"]) == (3, False, "GEN_001")
+        assert (code, payload["ok"], payload["error"]["code"]) == (1, False, "GEN_001")

@@ -430,9 +430,8 @@ The process exit code is derived from `error.code` (see the
 [CLI reference](../reference/cli.md)).
 
 Distinguish this from a command that *runs* but reports its outcome in its
-result body — e.g. `migrate up` returns `"success": false` when a migration
-failed (exit `3`) or when the run halted at a `requires_superuser` migration
-(exit `1`). `errors` is never empty when `success` is false: a halt names the
+result body — e.g. `migrate up` returns `"success": false`, exit `1`, when a
+migration failed or when the run halted at a `requires_superuser` migration. `errors` is never empty when `success` is false: a halt names the
 migration, its `apply-as` remedy and how many migrations are left in `pending`.
 Detect failures by checking `ok` (envelope) or `success` (result body).
 

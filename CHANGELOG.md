@@ -59,6 +59,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **⚠️ Exit 3 is a connection failure only: the migrate family exits 1** (#727). Exit 3's
+  class is `db_unreachable`, yet a failed migration, a duplicate version or an embedded
+  `COMMIT` exited 3 beside `CONFIG_006`, so a deploy tool branching on the class read them as
+  an unreachable database. They now exit 1 (`internal_error`); `confiture --exit-codes-json`
+  changes accordingly. Old → new:
+
+  | Code | Old | New |
+  |---|:-:|:-:|
+  | `MIGR_001`, `MIGR_004`, `MIGR_100`, `MIGR_102`, `MIGR_106`, `MIGR_107`, `MIGR_108` | 3 | 1 |
+  | `GEN_001` | 3 | 1 |
+
+  `migrate rebuild`, which called every failure `MIGR_001`, now keeps a confiture error's own
+  code and reports a refused connection as `CONFIG_006` (exit 3). A wrapper that read exit 3
+  as "migration failed" reads exit 1 instead.
 - **⚠️ confiture requires pg_tviews 0.1.0-beta.27**, whose registry publishes
   `managed_indexes` (fraiseql/pg_tviews#219); `tviews.contract_version()` stays 1. The column
   is the gate, not the version a build reports. On pg_tviews 0.1.0-beta.26, `migrate up` of a

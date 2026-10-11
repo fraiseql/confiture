@@ -83,5 +83,5 @@ def test_real_duplicate_version_envelope_validates(tmp_path: Path) -> None:
             "json",
         ],
     )
-    assert result.exit_code == 3, result.output
+    assert result.exit_code == 1, result.output
     _envelope_validator().validate(json.loads(result.stdout))

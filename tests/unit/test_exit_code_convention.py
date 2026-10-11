@@ -146,6 +146,11 @@ def test_no_ledger_error_code_is_precondition_at_exit_two() -> None:
     assert EXIT_CODE_SEMANTIC_CLASS[2] == "precondition_failed"
 
 
+def test_only_a_connection_failure_exits_db_unreachable() -> None:
+    """Exit 3 is ``db_unreachable``: no migration or generation failure shares it (#727)."""
+    assert sorted(c for c, ec in CANONICAL_EXIT_CODES.items() if ec == 3) == ["CONFIG_006"]
+
+
 def test_render_exit_codes_json_matches_the_registry() -> None:
     """The machine-readable emit is generated from the same tables, without drift."""
     payload = json.loads(render_exit_codes_json())

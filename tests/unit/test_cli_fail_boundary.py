@@ -20,7 +20,7 @@ def test_fail_emits_json_to_stdout_and_exits_with_code(capsys) -> None:
             json_mode=True,
             output_file=None,
         )
-    assert exc.value.exit_code == 3  # MIGR_106 → 3 (#146)
+    assert exc.value.exit_code == 1  # MIGR_106 → 1 (#727)
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert payload["ok"] is False

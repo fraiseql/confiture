@@ -165,14 +165,14 @@ class TestMigrateUpValidationExitCodes:
 
 
 # ---------------------------------------------------------------------------
-# migrate up — Duplicate versions → exit 3
+# migrate up — Duplicate versions → exit 1
 # ---------------------------------------------------------------------------
 
 
 class TestMigrateUpDuplicateVersionsExitCode:
-    """Duplicate migration versions should already exit 3 (no change needed)."""
+    """Duplicate migration versions exit 1 (MIGR_106, #727)."""
 
-    def test_duplicate_versions_exits_3(self, tmp_path):
+    def test_duplicate_versions_exits_1(self, tmp_path):
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -191,7 +191,7 @@ class TestMigrateUpDuplicateVersionsExitCode:
                 str(migrations_dir),
             ],
         )
-        assert result.exit_code == 3, f"Expected exit 3, got {result.exit_code}"
+        assert result.exit_code == 1, f"Expected exit 1, got {result.exit_code}"
 
 
 # ---------------------------------------------------------------------------
@@ -295,14 +295,14 @@ class TestMigrateUpLockExitCodes:
 
 
 # ---------------------------------------------------------------------------
-# migrate up — Migration execution failure → exit 3
+# migrate up — Migration execution failure → exit 1
 # ---------------------------------------------------------------------------
 
 
 class TestMigrateUpMigrationFailure:
-    """Failed migration SQL execution should exit 3."""
+    """Failed migration SQL execution should exit 1."""
 
-    def test_migration_execution_error_exits_3(self, tmp_path):
+    def test_migration_execution_error_exits_1(self, tmp_path):
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         _write_migrations(migrations_dir, count=2)
@@ -352,7 +352,7 @@ class TestMigrateUpMigrationFailure:
                 ],
             )
 
-        assert result.exit_code == 3, f"Expected exit 3, got {result.exit_code}"
+        assert result.exit_code == 1, f"Expected exit 1, got {result.exit_code}"
 
 
 # ---------------------------------------------------------------------------
