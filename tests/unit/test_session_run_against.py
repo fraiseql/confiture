@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from confiture.core._migrator.session import MigratorSession
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, MigrationError
 from confiture.sql_text import rendered
 from tests.unit._doubles import injected_loader
 
@@ -357,3 +357,30 @@ def test_outer_sp_active_false_skips_rollback_in_finally():
         if 'ROLLBACK TO SAVEPOINT "preflight_run"' in _sql_text(c.args[0])
     ]
     assert len(rollback_calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# A migration the loader refuses (#722)
+# ---------------------------------------------------------------------------
+
+
+def test_a_migration_the_loader_refuses_is_that_migrations_failure():
+    """``migrate up`` refuses it too (MIGR_001): a replay verdict, not a crash of the run."""
+    session, _mock_conn = _make_session()
+    refused = MigrationError(
+        "SQL migration 20260428000000_a.up.sql has no matching .down.sql file."
+    )
+    with injected_loader() as mock_lmc:
+        mock_lmc.side_effect = [refused, _mock_migration_class(version="20260428000001", name="b")]
+        result = session.run_against(
+            [
+                Path("db/migrations/20260428000000_a.up.sql"),
+                Path("db/migrations/20260428000001_b.up.sql"),
+            ],
+            against_url="postgresql://localhost/preflight",
+        )
+
+    failed, replayed = result.migrations
+    assert (failed.version, failed.name, failed.success) == ("20260428000000", "a", False)
+    assert "no matching .down.sql" in (failed.error or "")
+    assert replayed.success is True

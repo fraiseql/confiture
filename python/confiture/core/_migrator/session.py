@@ -738,7 +738,10 @@ class MigratorSession:
                 run outside the SAVEPOINT at the cost of consuming the preflight DB.
 
         Returns:
-            PreflightAgainstResult with one entry per migration.
+            PreflightAgainstResult with one entry per migration. A migration the
+            loader refuses (no ``.down.sql``, an unknown suffix) is a failed entry
+            carrying the loader's message, as ``migrate up`` would refuse it; the
+            rest are still replayed.
 
         Raises:
             ConfigurationError: If called outside a ``with`` block (``self._conn``
