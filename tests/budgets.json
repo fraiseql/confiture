@@ -94,7 +94,7 @@
     "python/confiture/cli/commands/migrate/diff.py": 1,
     "python/confiture/cli/commands/migrate/fix_signatures.py": 2,
     "python/confiture/cli/commands/migrate/generate.py": 2,
-    "python/confiture/cli/commands/migrate/preflight.py": 4,
+    "python/confiture/cli/commands/migrate/preflight.py": 2,
     "python/confiture/cli/commands/migrate/rebuild.py": 1,
     "python/confiture/cli/commands/migrate/status.py": 2,
     "python/confiture/cli/commands/validate_checks.py": 2,

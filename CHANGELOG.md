@@ -218,6 +218,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   environment's `scratch_url` alone, so a gate passing the flag stayed at the structural tier
   without a word, where `confiture drift --scratch-url` compared at the materialised one. The
   flag now wins over the environment's key, as it does for `confiture drift`.
+- **⚠️ `migrate preflight --against` calls only a connection failure one** (#722). Every
+  error in the replay session was reported as `CONFIG_006` "Connection to --against URL
+  failed", exit 3, which a deploy tool reads as "database unreachable". A pending migration
+  `migrate up` refuses to load (no `.down.sql`) ended the run that way; it is now that
+  migration's `PFLIGHT_REPLAY_FAILED` (exit 7), with the loader's message in
+  `details.error`, beside the static `PFLIGHT_MISSING_DOWN`, and the rest of the pending set is
+  still replayed. With a DSN and no `--scope`, a database with no ledger crashed the same way
+  (`relation "tb_confiture" does not exist` as `CONFIG_006`); it now has everything pending,
+  as `--scope pending` says, and a ledger only in another schema is `CONFIG_015`. A refused
+  or lost connection is still `CONFIG_006` (exit 3); a confiture error keeps its own code; an
+  error no one foresaw is reported as itself (exit 1). `MigratorSession.run_against` returns
+  a refused migration as a failed entry instead of raising.
 
 ## [1.35.0] - 2026-10-10
 

@@ -39,7 +39,7 @@ from confiture.cli.options import (
 from confiture.config.environment import Environment
 from confiture.core import connection as _core_connection
 from confiture.core import ledger as _core_ledger
-from confiture.core.connection import DatabaseError, connect_url, load_config
+from confiture.core.connection import ConnectionLost, DatabaseError, connect_url, load_config
 from confiture.core.cor_extractor import find_cor_targets_in_file
 from confiture.core.dependent_objects import DependentObjectsChecker
 from confiture.core.large_tables import large_tables
@@ -203,12 +203,17 @@ def _resolve_preflight_pending(
         else:
             resolved = _resolve_config(config_path or Path("confiture.yaml"), env_name)
             config_data = load_config(resolved)
+        # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
+        from confiture.core.preflight import pending_scope
+
         with open_connection(config_data) as conn:
             migrator = Migrator(
                 connection=conn,
                 migration_table=_get_tracking_table(config_data),
             )
-            return migrator.find_pending(migrations_dir=migrations_dir)
+            # A database with no ledger has applied nothing (#722): the same answer
+            # ``--scope pending`` gives, never a crash read as a connection failure.
+            return pending_scope(migrator, migrations_dir).files
 
     all_files = discover_migration_files(migrations_dir)
 
@@ -892,15 +897,14 @@ class _TrackingDb:
         """*read*'s answer; any failure is the error envelope with its own exit code.
 
         A ``ConfiturError`` (CONFIG_007, CONFIG_010, CONFIG_015, …) keeps its code;
-        anything else reaching the database is a connection failure, CONFIG_006
-        (exit 3, #151).
+        a connection refused or lost is CONFIG_006 (exit 3, #151). Nothing else is
+        (#722): an error no one foresaw reaches the command's boundary as itself.
         """
         try:
             return read()
         except ConfiturError as e:
             fail(e, json_mode=is_json(self.format_type), output_file=self.output_file)
-        # Reason: #151: any other failure resolving the pending set is a connection failure, exit 3
-        except Exception as e:
+        except ConnectionLost as e:
             fail(
                 ConfigurationError(
                     f"Failed to resolve pending migrations: {e}", error_code="CONFIG_006"
@@ -959,6 +963,17 @@ class _AgainstRun:
     tracking_empty: bool
 
 
+def _connection_failure(error: Exception) -> bool:
+    """Whether *error* says the ``--against`` database could not be reached or was lost.
+
+    ``create_connection`` names a refused connection ``CONFIG_006``; the driver's
+    ``OperationalError`` is a connection lost mid-run.
+    """
+    if isinstance(error, ConfiturError):
+        return error.error_code == "CONFIG_006"
+    return isinstance(error, ConnectionLost)
+
+
 def _run_against(
     pending_files: list[Path],
     *,
@@ -1000,11 +1015,13 @@ def _run_against(
                 against_url=against,
                 allow_non_transactional=allow_non_transactional,
             )
-    # Reason: #151: an unreachable --against URL of any kind is exit 3 with the shared envelope
-    except Exception as e:
+    except (ConfiturError, DatabaseError) as e:
         # #151: an unreachable --against URL is a connection failure → exit 3
         # (CONFIG_006), with the shared {ok:false, error} envelope in JSON mode.
-
+        # #722: nothing else is — a refusal keeps its own code, and an error no
+        # one foresaw reaches the command's boundary as itself.
+        if not _connection_failure(e):
+            raise
         fail(
             ConfigurationError(
                 f"Connection to --against URL failed: {e}",

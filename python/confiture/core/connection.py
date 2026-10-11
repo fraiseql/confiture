@@ -18,6 +18,11 @@ from confiture.exceptions import ConfigurationError
 #: this name rather than importing the driver.
 DatabaseError = psycopg.Error
 
+#: The driver's error for a connection refused or lost mid-run: what a command
+#: reports as an unreachable database (``CONFIG_006``) rather than as a failure of
+#: the work it was doing.
+ConnectionLost = psycopg.OperationalError
+
 #: The oldest PostgreSQL major confiture supports. No code branches for a server
 #: below it: what a version-dependent answer distinguishes is a server that was
 #: read (every supported one answers alike) from none at all. Nothing refuses an

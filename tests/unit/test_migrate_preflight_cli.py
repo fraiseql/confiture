@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psycopg
 import pytest
 from typer.testing import CliRunner
 
@@ -12,6 +13,7 @@ from confiture.cli.commands.migrate.preflight import (
     _resolve_preflight_pending,
 )
 from confiture.cli.main import app
+from confiture.exceptions import ConfigurationError
 from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
 
 
@@ -446,7 +448,7 @@ def test_against_unreachable_url_exits_3(runner, tmp_path):
     with patch(
         "confiture.cli.commands.migrate.preflight.MigratorSession",
         autospec=True,
-        side_effect=Exception("connection refused"),
+        side_effect=psycopg.OperationalError("connection refused"),
     ):
         result = runner.invoke(
             app,
@@ -471,7 +473,7 @@ def test_against_unreachable_url_json_envelope_exits_3(runner, tmp_path):
     with patch(
         "confiture.cli.commands.migrate.preflight.MigratorSession",
         autospec=True,
-        side_effect=Exception("connection refused"),
+        side_effect=psycopg.OperationalError("connection refused"),
     ):
         result = runner.invoke(
             app,
@@ -491,6 +493,50 @@ def test_against_unreachable_url_json_envelope_exits_3(runner, tmp_path):
     data = json.loads(result.stdout)
     assert data["ok"] is False
     assert data["error"]["code"] == "CONFIG_006"
+
+
+def _against_failing_with(runner, tmp_path, exc):
+    (tmp_path / "20260428000000_a.up.sql").write_text("SELECT 1;")
+    (tmp_path / "20260428000000_a.down.sql").write_text("SELECT 1;")
+    with patch(
+        "confiture.cli.commands.migrate.preflight.MigratorSession",
+        autospec=True,
+        side_effect=exc,
+    ):
+        return runner.invoke(
+            app,
+            [
+                "migrate",
+                "preflight",
+                "--against",
+                "postgresql://localhost/preflight",
+                "--format",
+                "json",
+                "--migrations-dir",
+                str(tmp_path),
+            ],
+        )
+
+
+def test_against_a_confiture_error_keeps_its_own_code(runner, tmp_path):
+    """#722: only a connection failure is CONFIG_006; a refusal says what it is."""
+    result = _against_failing_with(
+        runner, tmp_path, ConfigurationError("bad tracking table", error_code="CONFIG_001")
+    )
+
+    data = json.loads(result.stdout)
+    assert data["error"]["code"] == "CONFIG_001"
+    assert result.exit_code == 5
+    assert "Connection to --against URL failed" not in data["error"]["message"]
+
+
+def test_against_an_unexpected_error_is_not_a_connection_failure(runner, tmp_path):
+    """#722: an exception confiture did not foresee is not reported as an unreachable database."""
+    result = _against_failing_with(runner, tmp_path, RuntimeError("boom"))
+
+    data = json.loads(result.stdout)
+    assert data["error"]["code"] != "CONFIG_006"
+    assert result.exit_code != 3
 
 
 # ---------------------------------------------------------------------------

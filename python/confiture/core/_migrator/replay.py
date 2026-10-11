@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 
 import time as _time
 
-from confiture.exceptions import ConfigurationError
+from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.exceptions import ConfigurationError, MigrationError
 from confiture.models.results import PreflightAgainstMigration, PreflightAgainstResult
 
 
@@ -42,7 +43,18 @@ def run_against(
     session._conn.execute(t"SAVEPOINT {outer_sp:i}")
     try:
         for migration_file in pending_files:
-            migration_class = session.migration_loader(migration_file)
+            try:
+                migration_class = session.migration_loader(migration_file)
+            except MigrationError as exc:
+                # ``migrate up`` refuses to load it too (no ``.down.sql``, an unknown
+                # suffix): that migration's verdict, not the end of the run (#722).
+                version, name = parse_migration_filename(migration_file.name)
+                results.append(
+                    PreflightAgainstMigration(
+                        version=version, name=name, success=False, error=str(exc)
+                    )
+                )
+                continue
             migration = migration_class(connection=session._conn)
 
             # Non-transactional migration: cannot run inside a SAVEPOINT.

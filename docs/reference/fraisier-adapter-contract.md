@@ -216,6 +216,10 @@ and the payload says so:
 - No ledger anywhere (`ledger.exists: false`) is a database that has applied nothing:
   every migration is judged. A ledger that resolves nowhere for the session but exists
   in another schema is refused (`CONFIG_015`, exit 5) rather than read as absent.
+- With `--against`, `CONFIG_006` (exit 3) means only that the `--against` database or the
+  ledger's could not be reached, or the connection was lost (#722). A pending migration
+  `migrate up` would refuse to load (no `.down.sql`) is that migration's
+  `PFLIGHT_REPLAY_FAILED` (exit 7); any other confiture error keeps its own code.
 - confiture never narrows on its own: `scope` is `all` unless asked, and a payload
   from before 1.36.0 has no `scope` and judged everything.
 
