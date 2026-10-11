@@ -9,6 +9,7 @@ kept as a deprecated alias and covered by one dedicated test.
 import textwrap
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -94,7 +95,11 @@ def test_validate_check_acl_coverage_passes_when_covered_inline(tmp_path: Path) 
     assert result.exit_code == 0, result.output
 
 
-def test_validate_check_acl_coverage_passes_with_global_grant_sweep(tmp_path: Path) -> None:
+def test_validate_check_acl_coverage_passes_with_global_grant_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The sweep is read from the directory the command runs in (#715).
+    monkeypatch.chdir(tmp_path)
     cfg, migrations_dir = _project_with_migrations(
         tmp_path,
         {"20260522120000_add_foo.up.sql": "CREATE TABLE foo (id int);"},

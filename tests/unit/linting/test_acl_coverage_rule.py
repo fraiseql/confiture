@@ -522,6 +522,53 @@ def test_schema_linter_runs_acl_rule_when_lint_enabled(tmp_path: Path) -> None:
     assert len(acl_violations) >= 1
 
 
+def _lint_project(tmp_path: Path, extra_yaml: str = ""):
+    from unittest.mock import patch
+
+    from confiture.core.linting.schema_linter import LintConfig, SchemaLinter
+
+    (tmp_path / "db" / "environments").mkdir(parents=True)
+    (tmp_path / "db" / "environments" / "test.yaml").write_text(
+        "database_url: postgresql://localhost/test\n"
+        "include_dirs: []\n"
+        "acls:\n"
+        "  lint_enabled: true\n"
+        "  expectations:\n"
+        "    - schema: public\n"
+        "      apply_to: ALL_TABLES\n"
+        "      grants:\n"
+        "        - role: my_app\n"
+        "          privileges: [SELECT]\n" + extra_yaml
+    )
+    migrations = tmp_path / "db" / "migrations"
+    migrations.mkdir()
+    (migrations / "20260522120000.up.sql").write_text("CREATE TABLE uncovered (id int);")
+    linter = SchemaLinter(env="test", project_dir=tmp_path, config=LintConfig())
+    with patch.object(linter, "_load_schema"):
+        linter._schema_sql = "-- empty schema"
+        return linter.lint()
+
+
+def test_schema_linter_says_a_configured_grant_sweep_is_missing(tmp_path: Path) -> None:
+    report = _lint_project(tmp_path, "migration:\n  grant_dir: db/grants\n")
+
+    assert [s.code for s in report.degraded if s.code == "acl_001"] == ["acl_001"]
+
+
+def test_schema_linter_without_a_sweep_at_the_default_degrades_nothing(tmp_path: Path) -> None:
+    report = _lint_project(tmp_path)
+
+    assert [s for s in report.degraded if s.code == "acl_001"] == []
+
+
+def test_a_nested_migration_is_not_scanned(tmp_path: Path) -> None:
+    migrations = tmp_path / "migrations"
+    (migrations / "archive").mkdir(parents=True)
+    _write_migration(migrations / "archive", "002_bar.up.sql", "CREATE TABLE bar (id int);")
+
+    assert Acl001GrantCoverage(expectations=_make_expectations()).check(migrations) == []
+
+
 def test_owner_only_with_crlf_line_endings(tmp_path: Path) -> None:
     """The directive walk-back works on Windows-style ``\\r\\n`` line endings."""
     (tmp_path / "20260522120000.up.sql").write_bytes(

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from confiture.config.environment import AclExpectation, AclGrant
 from confiture.core import sql_lexer
+from confiture.core._migrator.discovery import discover_migration_files
 from confiture.core.builder import files_under
 from confiture.core.idempotency.python_migration_extractor import extract_sql_from_python_migration
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
@@ -240,19 +241,13 @@ class Acl001GrantCoverage:
 
     @staticmethod
     def _migration_files(migrations_dir: Path) -> list[Path]:
-        """Migration files to scan: ``.up.sql`` plus ``.py`` (#162).
+        """Migration files to scan: the ones ``migrate up`` runs (#162, #715).
 
-        Recognizes Python migrations the same way the loader does — excluding
-        ``__init__.py`` and ``_``-prefixed helper modules — so a CREATE/GRANT
-        carried by a Python migration is as visible to the ACL lint as one in SQL.
+        ``.up.sql`` and ``.py`` directly in *migrations_dir*, listed as the runner lists
+        them, so a CREATE/GRANT carried by a Python migration is as visible as one in
+        SQL, and a file nested below the directory, which is never applied, is not read.
         """
-        sql = sorted(migrations_dir.rglob("*.up.sql"))
-        py = sorted(
-            f
-            for f in migrations_dir.rglob("*.py")
-            if f.name != "__init__.py" and not f.name.startswith("_")
-        )
-        return sql + py
+        return discover_migration_files(migrations_dir)
 
     def _migration_sql_text(self, migration: Path) -> str:
         """Return the SQL text of a migration, statically extracting from ``.py``.

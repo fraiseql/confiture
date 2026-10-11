@@ -202,3 +202,15 @@ def test_dry_run_reports_changes_without_writing(tmp_path: Path) -> None:
     assert changes[0].file == path
     assert "ALTER TABLE public.foo OWNER TO migrator" in changes[0].after
     assert path.read_text() == original  # unchanged on disk
+
+
+def test_a_nested_migration_is_neither_detected_nor_fixed(tmp_path: Path) -> None:
+    """``migrate up`` lists the directory flat; a nested file is never applied (#715)."""
+    (tmp_path / "archive").mkdir()
+    nested = tmp_path / "archive" / "002_bar.up.sql"
+    nested.write_text("CREATE TABLE public.bar (id int);\n")
+    fixer = OwnershipFixer(expectation=_make_expectation())
+
+    assert fixer.iter_candidates(tmp_path) == []
+    assert fixer.apply(tmp_path) == []
+    assert nested.read_text() == "CREATE TABLE public.bar (id int);\n"

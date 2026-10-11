@@ -303,9 +303,11 @@ CheckAclsOpt = Annotated[
     typer.Option(
         "--check-acls",
         "--check-acl-coverage",
-        help="Static: verify every `CREATE TABLE` in db/migrations/ has a matching "
-        "`GRANT` either in the same migration or in the configured global grant "
-        "sweep directory (defaults to db/7_grant). No-op when the config has no "
+        help="Static: verify every `CREATE TABLE` in a migration `migrate up` runs from "
+        "--migrations-dir has a matching `GRANT` either in the same migration or in the "
+        "grant sweep directory (`migration.grant_dir`, default db/7_grant, relative to "
+        "the directory you run in; a configured one that is missing is reported). "
+        "No-op when the config has no "
         "`acls:` block. No database connection required.  "
         "Use --check-acls; --check-acl-coverage is a deprecated alias.",
     ),
@@ -315,7 +317,7 @@ CheckOwnershipCoverageOpt = Annotated[
     typer.Option(
         "--check-ownership-coverage",
         help="Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
-        "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
+        "in a migration `migrate up` runs from --migrations-dir is paired with a matching `ALTER … OWNER TO <expected_owner>` "
         "in the same file (`own_001`).  Also flags bare `ALTER … OWNER TO` on objects "
         "the migration didn't create (`own_002` — three severity tiers: silent when "
         "guarded + companion `requires_superuser=True`, WARNING when only guarded, "

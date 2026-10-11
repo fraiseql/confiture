@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from confiture.config.environment import OwnershipExpectation
-from confiture.core.linting.libraries.ownership import Own001OwnershipCoverage
+from confiture.core.linting.libraries.ownership import Own001OwnershipCoverage, sql_migrations
 
 # Map the per-relkind statement to the ALTER form that PostgreSQL accepts.
 # Sequences need ``ALTER SEQUENCE``, materialized views need
@@ -88,7 +88,7 @@ class OwnershipFixer:
     def iter_candidates(self, migrations_dir: Path) -> list[FixCandidate]:
         """Return one :class:`FixCandidate` per uncovered CREATE in *migrations_dir*."""
         candidates: list[FixCandidate] = []
-        for migration in sorted(migrations_dir.rglob("*.up.sql")):
+        for migration in sql_migrations(migrations_dir):
             text = migration.read_text()
             for create, kind in self._uncovered_creates(text):
                 candidates.append(
@@ -104,7 +104,7 @@ class OwnershipFixer:
     def preview(self, migrations_dir: Path) -> list[FixPreview]:
         """Return one :class:`FixPreview` per file that would be modified."""
         previews: list[FixPreview] = []
-        for migration in sorted(migrations_dir.rglob("*.up.sql")):
+        for migration in sql_migrations(migrations_dir):
             original = migration.read_text()
             fixed = self.fix_text(original)
             if fixed != original:
@@ -118,7 +118,7 @@ class OwnershipFixer:
         by the fix are not touched.
         """
         modified: list[Path] = []
-        for migration in sorted(migrations_dir.rglob("*.up.sql")):
+        for migration in sql_migrations(migrations_dir):
             original = migration.read_text()
             fixed = self.fix_text(original)
             if fixed != original:
