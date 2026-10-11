@@ -72,6 +72,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **⚠️ `confiture lint`'s `acl_001` reads `--migrations-dir`** (#717). It read
+  `db/migrations` under the project whatever the flag said, while `replica_001`, `own_001` and
+  `own_002` read the directory it named: a project whose migrations live elsewhere had every
+  granted table reported, or, with no `db/migrations`, no `acl_001` and no word. It now reads
+  the same directory, and a migrations directory that does not exist is reported as `acl_001`
+  degraded (`degraded[]` in the JSON) instead of a clean result. `SchemaLinter` takes a
+  `migrations_dir` (default `db/migrations`, project-relative).
 - **⚠️ `--check-acls` and `--check-ownership-coverage` read the project `migrate up` runs**
   (#715). `acl_001` resolved `migration.grant_dir` (default `db/7_grant`) beside the config
   file, so from the layout `confiture init` writes (`db/environments/local.yaml`) it looked in

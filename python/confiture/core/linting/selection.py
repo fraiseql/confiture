@@ -147,7 +147,8 @@ def _under(path: Path | None, project_dir: Path) -> Path | None:
     """A directory an operator named, read relative to ``--project-dir``.
 
     ``--migrations-dir`` and ``--overrides-dir`` are project-relative like
-    ``--baseline`` is; three rules read the first of them and they must all read
+    ``--baseline`` is; four rules read the first of them (``acl_001`` through
+    ``SchemaLinter``, which joins it to the project the same way) and they must all read
     the same directory.
     """
     if path is None or path.is_absolute():

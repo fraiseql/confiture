@@ -190,7 +190,7 @@ def lint(
     replica_safe: ReplicaSafeOpt = False,
     migrations_dir: Path = migrations_dir_option(
         help="Migrations directory the migration-tree rules read — replica_001, "
-        "own_001, own_002 (default: db/migrations)"
+        "own_001, own_002, acl_001 (default: db/migrations)"
     ),
     overrides_dir: OverridesDirOpt = None,
     server_url: ServerUrlOpt = None,
@@ -288,7 +288,9 @@ def lint(
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
             console.print(t"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
-        linter = SchemaLinter(env=env, project_dir=project_dir, config=config)
+        linter = SchemaLinter(
+            env=env, project_dir=project_dir, config=config, migrations_dir=migrations_dir
+        )
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
