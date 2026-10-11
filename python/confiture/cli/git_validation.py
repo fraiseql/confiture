@@ -3,6 +3,8 @@
 Provides helpers for integrating git validation into CLI commands.
 """
 
+from pathlib import Path
+
 from confiture.cli.formatters.common import print_warnings
 from confiture.cli.markup import Printer
 from confiture.core.git import GitRepository
@@ -100,7 +102,7 @@ def validate_migration_accompaniment(
     *,
     check_bodies: bool = False,
     two_dot: bool = False,
-    differ: GitSchemaDiffer | None = None,
+    checker: MigrationAccompanimentChecker | None = None,
 ) -> dict:
     """Validate that DDL changes have migration files.
 
@@ -114,8 +116,9 @@ def validate_migration_accompaniment(
             migration (#178).
         two_dot: Diff two-dot rather than three-dot; set when *target_ref* is a
             tree (the staged index, #184) instead of a commit.
-        differ: A differ shared with the drift check, so each tree is read
-            once; a new one by default.
+        checker: The checker to run — one built with the differ the drift check
+            shares, so each tree is read once, and with ``--migrations-dir``; one
+            for *env* in the current directory by default.
 
     Returns:
         Dictionary with validation results
@@ -127,7 +130,7 @@ def validate_migration_accompaniment(
     try:
         validate_git_flags_in_repo()
 
-        checker = MigrationAccompanimentChecker(env, differ=differ)
+        checker = checker or MigrationAccompanimentChecker(env)
         report = checker.check_accompaniment(
             base_ref, target_ref, check_bodies=check_bodies, two_dot=two_dot
         )
@@ -201,6 +204,7 @@ def report_unmigrated_bodies(
     target_ref: str,
     console: Printer,
     format_output: str = "text",
+    migrations_dir: Path = Path("db/migrations"),
 ) -> dict:
     """Report function body changes not carried by a migration — without failing.
 
@@ -213,7 +217,7 @@ def report_unmigrated_bodies(
     """
     validate_git_flags_in_repo()
 
-    checker = MigrationAccompanimentChecker(env)
+    checker = MigrationAccompanimentChecker(env, migrations_dir=migrations_dir)
     report = checker.check_accompaniment(base_ref, target_ref, check_bodies=True)
     violations = report.body_violations
 
@@ -301,7 +305,7 @@ def validate_grant_accompaniment(
     console: Printer,
     format_output: str = "text",
     grant_dir: str = "db/7_grant",
-    migrations_dir: str = "db/migrations",
+    migrations_dir: str | Path = "db/migrations",
 ) -> dict:
     """Validate that grant file changes are carried by accompanying migrations.
 

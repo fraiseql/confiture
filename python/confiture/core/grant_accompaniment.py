@@ -20,7 +20,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from confiture.core.git import GitRepository
+from confiture.core._migrator.discovery import changed_migrations
+from confiture.core.git import GitRepository, root_relative
 from confiture.core.idempotency.python_migration_extractor import (
     ExtractionKind,
     extract_sql_from_python_source,
@@ -50,8 +51,9 @@ class GrantAccompanimentChecker:
     Attributes:
         repo_path: Repository root directory
         git_repo: GitRepository instance
-        grant_dir: Relative path to grant directory (default: "db/7_grant")
-        migrations_dir: Relative path to migrations directory (default: "db/migrations")
+        grant_dir: The grant directory, relative to *repo_path* (default: "db/7_grant")
+        migrations_dir: Where ``migrate up`` reads the migrations, relative to
+            *repo_path* (default: "db/migrations")
 
     Example:
         >>> checker = GrantAccompanimentChecker()
@@ -63,20 +65,21 @@ class GrantAccompanimentChecker:
     def __init__(
         self,
         repo_path: Path | None = None,
-        grant_dir: str = "db/7_grant",
-        migrations_dir: str = "db/migrations",
+        grant_dir: str | Path = "db/7_grant",
+        migrations_dir: str | Path = "db/migrations",
     ):
         """Initialize grant accompaniment checker.
 
         Args:
-            repo_path: Repository root directory (default: current directory)
-            grant_dir: Relative path to grant directory (default: "db/7_grant")
-            migrations_dir: Relative path to migrations directory (default: "db/migrations")
+            repo_path: The project's directory, in its repository (default: current directory)
+            grant_dir: The grant directory, relative to *repo_path* (default: "db/7_grant")
+            migrations_dir: Where ``migrate up`` reads the migrations, relative to
+                *repo_path* — the same ``--migrations-dir`` (default: "db/migrations")
         """
         self.repo_path = repo_path or Path.cwd()
         self.git_repo = GitRepository(self.repo_path)
-        self.grant_dir = grant_dir
-        self.migrations_dir = migrations_dir
+        self.grant_dir = self.repo_path / grant_dir
+        self.migrations_dir = self.repo_path / migrations_dir
         self._extractor = MigrationGrantExtractor()
 
     def check_accompaniment(
@@ -334,45 +337,19 @@ class GrantAccompanimentChecker:
     # File filtering                                                      #
     # ------------------------------------------------------------------ #
 
+    def _from_root(self, directory: Path) -> str:
+        """*directory* as git names it in a diff: a pathspec from the repository root."""
+        return root_relative(directory, Path(self.git_repo.get_repo_root()).resolve())
+
     def _filter_grant_files(self, files: list[Path]) -> list[Path]:
-        """Filter to files under grant_dir.
-
-        Args:
-            files: List of file paths to filter
-
-        Returns:
-            Files that are under the grant directory
-        """
-        grant_parts = Path(self.grant_dir).parts
-        result = []
-        result.extend(f for f in files if f.parts[: len(grant_parts)] == grant_parts)
-        return result
+        """The changed files under the grant directory, at any depth."""
+        grant_parts = Path(self._from_root(self.grant_dir)).parts
+        return [f for f in files if f.parts[: len(grant_parts)] == grant_parts]
 
     def _filter_migration_files(self, files: list[Path]) -> list[Path]:
-        """Filter to migration files under migrations_dir.
+        """The changed files ``migrate up`` would run from the migrations directory.
 
-        Recognizes both SQL (``.up.sql``) and Python (``.py``) migrations,
-        matching the canonical migration loader (``_migrator/discovery.py``)
-        and ``MigrationAccompanimentChecker._get_new_migrations``: a ``.py``
-        file counts as a migration unless its name starts with ``_`` (which
-        excludes ``__init__.py`` and private helper modules). Migrate
-        environments apply both formats, so both must satisfy the gate.
-
-        Args:
-            files: List of file paths to filter
-
-        Returns:
-            Files that are migration files under the migrations directory
+        One answer with ``MigrationAccompanimentChecker``: ``changed_migrations``. A
+        migration the branch deleted has no text at the target and carries nothing.
         """
-        migrations_parts = Path(self.migrations_dir).parts
-        result = []
-        for f in files:
-            if f.parts[: len(migrations_parts)] != migrations_parts:
-                continue
-            is_sql = f.name.endswith(".up.sql")
-            # "not _-prefixed" excludes __init__.py and _helpers.py. Parity
-            # with the loader: a migration the loader would run must count.
-            is_py = f.name.endswith(".py") and not f.name.startswith("_")
-            if is_sql or is_py:
-                result.append(f)
-        return result
+        return changed_migrations(files, self._from_root(self.migrations_dir))

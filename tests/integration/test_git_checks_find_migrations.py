@@ -20,7 +20,9 @@ from confiture.cli.main import app
 
 pytestmark = pytest.mark.integration
 
-_ENV = "name: local\ndatabase_url: postgresql://localhost/unused\ninclude_dirs:\n  - db/schema\n"
+_ENV = (
+    "name: local\ndatabase_url: postgresql://localhost/nonexistent\ninclude_dirs:\n  - db/schema\n"
+)
 _TABLE_A = "CREATE TABLE tb_a (id bigint PRIMARY KEY);\n"
 _TABLE_B = "CREATE TABLE tb_b (id bigint PRIMARY KEY);\n"
 
