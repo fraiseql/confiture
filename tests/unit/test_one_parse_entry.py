@@ -27,7 +27,8 @@ PARSERS = frozenset({"parse_sql", "parse_sql_json", "parse_sql_protobuf"})
 #: Module → why what it parses can never hold a ``COPY … FROM stdin`` block.
 ALLOWED: dict[str, str] = {
     "python/confiture/core/ddl_objects.py": (
-        "re-parses one statement it rendered itself (an object's `create_sql`, a generated `DROP`)"
+        "re-parses one statement it rendered itself (an object's `create_sql` or stored "
+        "`definition`, a generated `DROP`)"
     ),
     "python/confiture/core/ddl_walk.py": (
         "one expression (`SELECT <default>`), one TVIEW query or one `function_reads` key "

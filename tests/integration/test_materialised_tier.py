@@ -328,25 +328,101 @@ def test_a_duplicate_definition_warns_under_scratch_too(
     assert [w["code"] for w in payload["warnings"]] == ["DIFFER_402"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "a domain, type or policy is read from a database by existence alone: "
-        "its redefinition needs a per-kind deparse the live reader does not have yet"
+_TABLE = "CREATE TABLE t (id bigint PRIMARY KEY);\n"
+
+#: (database, tree, a change without a scratch server, a change with one) — #708.
+#: Without one, what an object *is* is compared, and an analysed expression in it
+#: (a CHECK, a policy's USING, a rule's action) only for presence, as a table's
+#: CHECK is (``analysed_expressions``); with one, everything PostgreSQL stores.
+REDEFINED = {
+    "domain base type": (
+        "CREATE DOMAIN posint AS integer CHECK (VALUE > 0);",
+        "CREATE DOMAIN posint AS bigint CHECK (VALUE > 0);",
+        True, True,
     ),
-)
-@pytest.mark.parametrize("scratch", [True, False])
-def test_a_redefined_domain_is_a_change(
-    scratch: bool, test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+    "domain NOT NULL": (
+        "CREATE DOMAIN posint AS integer CHECK (VALUE > 0);",
+        "CREATE DOMAIN posint AS integer NOT NULL CHECK (VALUE > 0);",
+        True, True,
+    ),
+    "domain CHECK text": (
+        "CREATE DOMAIN posint AS integer CHECK (VALUE > 0);",
+        "CREATE DOMAIN posint AS integer CHECK (VALUE > 1);",
+        False, True,
+    ),
+    "domain spelled another way": (
+        "CREATE DOMAIN posint AS integer CHECK (VALUE > 0);",
+        "create domain posint as int4 check (value>0);",
+        False, False,
+    ),
+    "composite attribute type": (
+        "CREATE TYPE pair AS (a integer, b text);",
+        "CREATE TYPE pair AS (a integer, b integer);",
+        True, True,
+    ),
+    "range subtype": (
+        "CREATE TYPE span AS RANGE (subtype = integer);",
+        "CREATE TYPE span AS RANGE (subtype = bigint);",
+        True, True,
+    ),
+    "policy command": (
+        _TABLE + "CREATE POLICY p ON t FOR SELECT USING (true);",
+        _TABLE + "CREATE POLICY p ON t FOR UPDATE USING (true);",
+        True, True,
+    ),
+    "policy USING text": (
+        _TABLE + "CREATE POLICY p ON t USING (id > 0);",
+        _TABLE + "CREATE POLICY p ON t USING (id > 1);",
+        False, True,
+    ),
+    "policy spelled another way": (
+        _TABLE + "CREATE POLICY p ON t AS PERMISSIVE FOR ALL TO PUBLIC USING (id > 0);",
+        _TABLE + "CREATE POLICY p ON t USING (id > 0);",
+        False, False,
+    ),
+    "rule event": (
+        _TABLE + "CREATE RULE r AS ON INSERT TO t DO INSTEAD NOTHING;",
+        _TABLE + "CREATE RULE r AS ON UPDATE TO t DO INSTEAD NOTHING;",
+        True, True,
+    ),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("scratch", [False, True], ids=["structural", "materialised"])
+@pytest.mark.parametrize("case", sorted(REDEFINED))
+def test_a_redefined_object_is_compared_against_a_database(
+    case: str,
+    scratch: bool,
+    test_db_url: str,
+    fresh_database_factory: Callable[[str], str],
+    tmp_path: Path,
 ) -> None:
-    url = _built(fresh_database_factory, "CREATE DOMAIN posint AS integer CHECK (VALUE > 0);")
+    database, declared, structural, materialised = REDEFINED[case]
+    url = _built(fresh_database_factory, database)
     tree = tmp_path / "schema.sql"
-    tree.write_text("CREATE DOMAIN posint AS integer CHECK (VALUE > 1);\n")
+    tree.write_text(declared + "\n")
     extra = ("--scratch-url", test_db_url) if scratch else ()
 
     payload = _diff_from_db(tree, _config(tmp_path, url), *extra)
 
-    assert payload["changes"] != []
+    changed = [change for change in payload["changes"] if change["type"].startswith("REPLACE_")]
+    assert bool(changed) is (materialised if scratch else structural), payload["changes"]
+
+
+def test_a_redefined_domain_is_drift(
+    test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    database, declared, _, _ = REDEFINED["domain base type"]
+    url = _built(fresh_database_factory, database)
+    tree = tmp_path / "schema.sql"
+    tree.write_text(declared + "\n")
+
+    for scratch_url in (None, test_db_url):
+        report = _drift(url, tree, scratch_url)
+        assert {
+            (i.drift_type.value, i.severity.value, i.subject.kind if i.subject else None)
+            for i in report.drift_items
+        } == {("object_definition_mismatch", "warning", "domain")}
 
 
 #: A materialized view whose query and unique index both drifted (#701): the tree…

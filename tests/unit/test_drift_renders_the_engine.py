@@ -12,7 +12,7 @@ import ast
 from pathlib import Path
 
 import confiture
-from confiture.core.drift import _OBJECT_DRIFT_TYPES, DRIFT_OF, DriftType
+from confiture.core.drift import _OBJECT_DRIFT_TYPES, DRIFT_OF, REDEFINED_DRIFT_TYPES, DriftType
 from confiture.core.schema_change import KINDS
 
 DRIFT = Path(confiture.__file__).resolve().parent / "core" / "drift.py"
@@ -30,6 +30,7 @@ def test_every_change_is_a_finding_or_says_why_not() -> None:
 def test_every_schema_drift_kind_is_reached_from_the_table() -> None:
     reached = {kind for kind, _ in (v for v in DRIFT_OF.values() if not isinstance(v, str))}
     reached |= {kind for pair in _OBJECT_DRIFT_TYPES.values() for kind in pair}
+    reached |= set(REDEFINED_DRIFT_TYPES.values())
     # A constraint dropped and added under one name is one finding.
     reached.add(DriftType.CONSTRAINT_MISMATCH)
     assert set(DriftType) - _NOT_THE_SCHEMAS == reached - {None}
@@ -110,12 +111,28 @@ def test_every_redefinition_drift_does_not_render_says_why() -> None:
     assert all(why.strip() for why in UNRENDERED_REDEFINITIONS.values())
 
 
-def test_drift_meets_no_other_redefinition() -> None:
-    """Against a database, a trigger is compared by existence and other objects as read.
+def test_a_redefinition_is_a_finding_or_says_why_not_never_both() -> None:
+    """A domain's redefinition is never a TVIEW's finding, nor a view's silence (#708)."""
+    from confiture.core.drift import UNRENDERED_REDEFINITIONS
+    from confiture.core.schema_model import DEFINED_OTHER_KINDS
+
+    assert not set(REDEFINED_DRIFT_TYPES) & set(UNRENDERED_REDEFINITIONS)
+    assert set(REDEFINED_DRIFT_TYPES) == {"tview", *DEFINED_OTHER_KINDS}
+    assert {
+        kind
+        for kind, found in REDEFINED_DRIFT_TYPES.items()
+        if found is DriftType.TVIEW_OPTION_MISMATCH
+    } == {"tview"}
+
+
+def test_drift_meets_a_domain_redefined_only_as_its_tier_reads_it() -> None:
+    """Against a database, a trigger is compared by existence and a domain by what it is.
 
     Drift's policies carry parity rules, under which a trigger whose statement
-    differs is the same trigger, and a database reads its other objects at the
-    ``existence`` depth (``live_catalog.read``), so none is ever redefined.
+    differs is the same trigger. A domain is read whole (#708): a CHECK whose text
+    alone changed is the same domain when expressions compare by presence
+    (``CATALOGUED``) and another one when both sides are PostgreSQL's reading
+    (``MATERIALISED``).
     """
     from dataclasses import replace
 
@@ -145,6 +162,7 @@ def test_drift_meets_no_other_redefinition() -> None:
     database = Side(
         replace(before.catalogued, source="catalog", coverage=coverage), before.declared.objects
     )
-    for policy in (CATALOGUED, MATERIALISED):
+    for policy, redefined in ((CATALOGUED, set()), (MATERIALISED, {"domain"})):
         changes = SchemaDiffer().compare_sides(database, Side.of(after, held=True), policy)
-        assert not [c for c in changes.changes if isinstance(c, ObjectReplaced)], policy.name
+        replaced = {c.ref.kind for c in changes.changes if isinstance(c, ObjectReplaced)}
+        assert replaced == redefined, policy.name

@@ -22,12 +22,15 @@ rendering: they say how the statement behaves when the object already exists,
 not what the object is.
 """
 
+import enum
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import pglast
+import pglast.ast
 from pglast.stream import RawStream
 
 from confiture.core.ddl_walk import (
@@ -38,6 +41,7 @@ from confiture.core.ddl_walk import (
     storage_pinned,
     tview_calls,
     tview_of,
+    type_name,
 )
 from confiture.core.linting.duplicates import CreateFlags, wins
 from confiture.core.linting.inventory import (
@@ -66,6 +70,7 @@ from confiture.core.schema_model import (
     tview_option,
 )
 from confiture.core.sql_lexer import ParsedFile
+from confiture.core.type_lattice import canonical_type
 
 #: Which parse nodes this module turns into objects, and why each one that
 #: creates something is absent. A node that is neither tracked nor named here
@@ -788,3 +793,77 @@ def pair_definitions(
             remaining.remove(match)
             pairs.append((before, match))
     return pairs, dropped, remaining
+
+
+# ---------------------------------------------------------------------------
+# Shape: what a definition says once PostgreSQL's analysis is set aside (#708)
+# ---------------------------------------------------------------------------
+
+#: Where a domain, a type, a policy or a rule holds what PostgreSQL stores analysed
+#: (``analysed_expressions``): a CHECK or a DEFAULT, a policy's USING and WITH
+#: CHECK, a rule's WHERE and actions. Shape keeps whether each is there.
+_ANALYSED_SLOTS = frozenset({"raw_expr", "qual", "with_check", "whereClause", "actions"})
+
+#: Qualifiers a name needs none of: the default schema, and ``pg_catalog``, which the
+#: catalog spells on a built-in collation (``pg_catalog."C"``) and an author never does.
+_IMPLIED = frozenset({DEFAULT_SCHEMA, "pg_catalog"})
+
+#: The lists whose order the catalog does not keep.
+_UNORDERED = frozenset({"constraints", "roles"})
+
+
+def shape(definition: str) -> str:
+    """What *definition* says when compared with a database's, under ``analysed_expressions``.
+
+    *definition* is a domain's, a composite or range type's, a policy's or a rule's
+    (:data:`~confiture.core.schema_model.DEFINED_OTHER_KINDS`), as this module renders
+    it. Its parse tree is kept, less what PostgreSQL rewrites on the way into its
+    catalog: an analysed expression is present or not; a type is its canonical
+    spelling (``int4`` is ``integer``), array dimensions folded; a qualifier naming
+    the default schema or ``pg_catalog`` is no qualifier; a CHECK name PostgreSQL made up is no name;
+    constraints and roles are a set. Two definitions with one shape are one object
+    to a comparison that cannot read an expression as PostgreSQL stored it.
+    """
+    stmt = pglast.parse_sql(definition)[0].stmt
+    shaped = _shaped(stmt)
+    if isinstance(stmt, pglast.ast.CreateDomainStmt) and stmt.domainname:
+        domain = str(stmt.domainname[-1].sval)
+        for constraint in shaped["constraints"] or ():
+            if re.fullmatch(
+                rf"{re.escape(domain)}_(check|not_null)\d*", constraint["conname"] or ""
+            ):
+                constraint["conname"] = None
+        shaped["constraints"] = sorted(shaped["constraints"] or (), key=json.dumps)
+    return json.dumps(shaped, sort_keys=True)
+
+
+def _shaped(value: Any) -> Any:
+    if isinstance(value, pglast.ast.TypeName):
+        spelled = canonical_type(type_name(value)) or ""
+        return re.sub(r"(\[\])+", "[]", spelled.removeprefix(f"{DEFAULT_SCHEMA}."))
+    if isinstance(value, pglast.ast.RangeVar):
+        schema = value.schemaname
+        return [None if schema in (None, DEFAULT_SCHEMA) else schema, value.relname]
+    if isinstance(value, pglast.ast.Node):
+        return {
+            field: (
+                getattr(value, field) is not None
+                if field in _ANALYSED_SLOTS
+                else _shaped_field(field, getattr(value, field))
+            )
+            for field in value
+            if field != "location"
+        } | {"@": type(value).__name__}
+    if isinstance(value, enum.Enum):
+        return value.name
+    return value
+
+
+def _shaped_field(field: str, value: Any) -> Any:
+    if not isinstance(value, tuple | list):
+        return _shaped(value)
+    items = [_shaped(item) for item in value]
+    names = [getattr(item, "sval", None) for item in value]
+    if len(names) > 1 and all(isinstance(n, str) for n in names) and names[0] in _IMPLIED:
+        items = items[1:]
+    return sorted(items, key=json.dumps) if field in _UNORDERED else items

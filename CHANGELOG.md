@@ -31,6 +31,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **⚠️ A redefined domain, composite or range type, policy or rule is seen against a
+  database** (#708). The live reader held these kinds by existence alone, so changing one in
+  the tree was no change to `migrate diff --from db` and no drift, with or without
+  `--scratch-url`. A database's domains, types, policies and rules are now read whole, and a
+  redefinition is a change (`REPLACE_DOMAIN`, …) and a new drift kind,
+  **`object_definition_mismatch`** (warning; `subject.kind` says which, `expected` / `actual`
+  the two definitions). Without a scratch server an expression in one (a CHECK, a DEFAULT, a
+  policy's USING or WITH CHECK, a rule's action) is compared only for presence, as a table's
+  CHECK is; with one, as PostgreSQL stores it. ⚠️ Drift that passed can now report a warning,
+  and `migrate diff --from db --generate` writes a migration asking you to write the change; a
+  redefined domain or policy was published as "not drift" in `_common.schema.json`, which now
+  says otherwise. `extra_objects` and DIFFER_404 are unchanged for every other kind.
 - **⚠️ The git checks find migrations where `migrate up` runs them** (#709).
   `--require-migration`, `--require-migration-bodies`, `--list-unmigrated-bodies` and
   `--require-grant-migration` matched changed files against `db/migrations/` (and

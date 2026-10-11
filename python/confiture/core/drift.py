@@ -70,6 +70,7 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.schema_model import (
+    DEFINED_OTHER_KINDS,
     OTHER_OBJECT_KINDS,
     SCHEMALESS_KINDS,
     TVIEW_OPTIONS,
@@ -125,6 +126,7 @@ class DriftType(Enum):
     MISSING_TVIEW = "missing_tview"
     EXTRA_TVIEW = "extra_tview"
     TVIEW_OPTION_MISMATCH = "tview_option_mismatch"
+    OBJECT_DEFINITION_MISMATCH = "object_definition_mismatch"
     MISSING_OBJECT = "missing_object"
     EXTRA_OBJECT = "extra_object"
     MISSING_GRANT = "missing_grant"
@@ -296,6 +298,15 @@ _OBJECT_DRIFT_TYPES: dict[str, tuple[DriftType, DriftType]] = {
     # One generic pair for every kind no typed section holds: ``subject.kind`` says
     # which, and a severity that does not vary by kind needs no wire name per kind.
     **dict.fromkeys(OTHER_OBJECT_KINDS, (DriftType.MISSING_OBJECT, DriftType.EXTRA_OBJECT)),
+}
+
+#: What a redefinition (``ObjectReplaced``) is, by the object's kind: a TVIEW's is one
+#: ``tview_option_mismatch`` per option the tree pins; a domain's, a type's, a
+#: policy's or a rule's one ``object_definition_mismatch`` (#708), ``subject.kind``
+#: saying which. Every other kind's is no finding (:data:`UNRENDERED_REDEFINITIONS`).
+REDEFINED_DRIFT_TYPES: dict[str, DriftType] = {
+    "tview": DriftType.TVIEW_OPTION_MISMATCH,
+    **dict.fromkeys(DEFINED_OTHER_KINDS, DriftType.OBJECT_DEFINITION_MISMATCH),
 }
 
 
@@ -559,8 +570,8 @@ _MATERIALISED = replace(MATERIALISED, author="new")
 #: Every change the comparison makes, as the finding drift reports for it — or,
 #: for a change drift has no finding for, why. A constraint dropped and added under
 #: one name is one ``constraint_mismatch``; an object's kind picks its pair of
-#: ``_OBJECT_DRIFT_TYPES``; a TVIEW redefined is one ``tview_option_mismatch`` per
-#: option the tree pins; the column order's severity is ``column_order_severity``.
+#: ``_OBJECT_DRIFT_TYPES``, and a redefined object's kind its finding in
+#: ``REDEFINED_DRIFT_TYPES``; the column order's severity is ``column_order_severity``.
 #: An index change on a materialized view is an index finding on it, as on a table,
 #: and so is each index change a redefined matview carries; the redefinition itself
 #: is no finding (:data:`UNRENDERED_REDEFINITIONS`).
@@ -615,13 +626,14 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
     SequenceDropped: "drift reports no sequence",
     ObjectAdded: (None, DriftSeverity.CRITICAL),
     ObjectDropped: (None, DriftSeverity.INFO),
-    ObjectReplaced: (DriftType.TVIEW_OPTION_MISMATCH, DriftSeverity.WARNING),
+    ObjectReplaced: (None, DriftSeverity.WARNING),
 }
 
 #: Each kind whose redefinition (``ObjectReplaced``) drift has no finding for, and
-#: why. Against a database these and a TVIEW are the only kinds redefined: a
-#: trigger is compared by existence under every parity rule, and a database reads
-#: its other objects at the ``existence`` depth.
+#: why. Against a database these and :data:`REDEFINED_DRIFT_TYPES`' are the only
+#: kinds redefined: a trigger is compared by existence under every parity rule,
+#: and a database reads its other objects by existence, but for a domain, a type,
+#: a policy and a rule.
 UNRENDERED_REDEFINITIONS: dict[str, str] = {
     **dict.fromkeys(
         ("view", "matview"),
@@ -1051,6 +1063,29 @@ class _Findings:
         )
         for ref in redefined:
             report.drift_items.extend(_tview_options(ref, self.expected, self.actual))
+        defined = sorted(
+            (
+                c.ref
+                for c in changes
+                if isinstance(c, ObjectReplaced) and c.ref.kind in DEFINED_OTHER_KINDS
+            ),
+            key=lambda ref: (ref.kind, ref.schema, ref.name),
+        )
+        report.drift_items.extend(self._redefined_other(ref) for ref in defined)
+
+    def _redefined_other(self, ref: ObjectRef) -> DriftItem:
+        """A domain, a type, a policy or a rule the database defines otherwise (#708)."""
+        declared, live = self.expected.other_objects[ref], self.actual.other_objects[ref]
+        obj = _other(ref, declared)
+        return DriftItem(
+            drift_type=REDEFINED_DRIFT_TYPES[ref.kind],
+            severity=DriftSeverity.WARNING,
+            object_name=obj.written,
+            subject=obj.subject,
+            expected=declared.definition,
+            actual=live.definition,
+            message=f"{_kind_label(ref.kind)} '{obj.written}' is defined differently in database",
+        )
 
 
 def _column_finding(

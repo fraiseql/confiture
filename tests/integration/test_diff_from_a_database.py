@@ -135,8 +135,8 @@ def test_a_database_object_with_no_statement_is_a_warning_not_a_silence(
 ) -> None:
     url = _built(
         fresh_database_factory,
-        "CREATE TABLE t (id INT); CREATE DOMAIN positive AS INT CHECK (VALUE > 0);",
+        "CREATE TABLE t (id INT, b INT); CREATE STATISTICS t_stats ON id, b FROM t;",
     )
-    diff = platform.diff(url, "CREATE TABLE t (id INT);")
+    diff = platform.diff(url, "CREATE TABLE t (id INT, b INT);")
     assert diff.changes == []
     assert [w.code for w in diff.warnings] == ["DIFFER_404"]

@@ -681,7 +681,9 @@ class OtherObject:
     ``name`` are its identity as ``ObjectRef`` keys it (schema folded and
     defaulted, a policy or rule named ``table.name``); ``definition`` is what
     decides whether it changed, ``None`` from a reader that read only that it
-    exists (``Coverage`` says which).
+    exists. The depth is the object's: a database's model reads the kinds of
+    :data:`DEFINED_OTHER_KINDS` whole in a section ``Coverage`` calls
+    ``existence``, and two objects are compared by definition when both hold one.
     """
 
     kind: str
@@ -710,6 +712,11 @@ OTHER_OBJECT_KINDS = (
     "operator_family",
     "access_method",
 )
+
+#: The kinds of :data:`OTHER_OBJECT_KINDS` both readers read whole (#708): a tree from
+#: its statement, a database from its catalog. Every other kind a database holds by
+#: existence alone (``OtherObject.definition`` ``None``), so it is compared by existence.
+DEFINED_OTHER_KINDS = frozenset({"domain", "type", "policy", "rule"})
 
 #: The kinds of :data:`OTHER_OBJECT_KINDS` that live in no schema; their
 #: ``OtherObject.schema`` is the default schema their identity folds to, not a place.

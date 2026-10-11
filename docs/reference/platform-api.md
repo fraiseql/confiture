@@ -297,7 +297,9 @@ an access method: the kinds no typed section holds. `kind`, `schema` and
 `name` are its identity as `ObjectRef` keys it (schema folded and
 defaulted, a policy or rule named `table.name`); `definition` is what
 decides whether it changed, `None` from a reader that read only that it
-exists (`Coverage` says which).
+exists. The depth is the object's: a database's model reads the kinds of
+`DEFINED_OTHER_KINDS` whole in a section `Coverage` calls
+`existence`, and two objects are compared by definition when both hold one.
 
 | Field | Type | Default |
 |---|---|---|

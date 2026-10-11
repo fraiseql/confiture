@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any, Literal, NoReturn
 
-from confiture.core.ddl_objects import DDLObject, pair_definitions
+from confiture.core.ddl_objects import DDLObject, pair_definitions, shape
 from confiture.core.ddl_walk import (
     AS_WRITTEN,
     ConstantSpellings,
@@ -67,6 +67,7 @@ from confiture.core.schema_model import (
     EnumType,
     Index,
     ObjectRef,
+    OtherObject,
     Provenance,
     RelationKind,
     RelationName,
@@ -625,10 +626,12 @@ def _redefined(
     the options it pins. A kind the model holds by existence alone is the same
     object whenever both sides hold it.
     """
+    section = _section(ref.kind)
+    if section == "other_objects":
+        return _other_redefined(old.other_objects.get(ref), new.other_objects.get(ref), policy)
     if not policy.rules:
         return before.definition != after.definition
     rules = policy.rules
-    section = _section(ref.kind)
     if section == "routines":
         old_routine, new_routine = _routine(old, ref, before), _routine(new, ref, after)
         if old_routine is None or new_routine is None:
@@ -643,9 +646,25 @@ def _redefined(
         return parity_view(old_view, rules) != parity_view(new_view, rules)
     if section == "tviews":
         return _tview_redefined(old.tviews[ref], new.tviews[ref], policy)
-    if section == "other_objects" and old.coverage.shared(new.coverage, section) == "definition":
-        return before.definition != after.definition
     return False
+
+
+def _other_redefined(
+    before: OtherObject | None, after: OtherObject | None, policy: ComparisonPolicy
+) -> bool:
+    """Whether an object no typed section holds is defined differently on the two sides.
+
+    Only when both sides read what it is (``OtherObject.definition``): a database
+    reads a schema or an extension by existence alone, and a domain, a type, a policy
+    or a rule whole (#708). Under ``analysed_expressions`` the two are compared by
+    shape — an analysed expression is present or not, as a table's CHECK is — and
+    otherwise as written, which at the materialised tier is PostgreSQL's reading twice.
+    """
+    if before is None or after is None or before.definition is None or after.definition is None:
+        return False
+    if "analysed_expressions" in policy.rules:
+        return shape(before.definition) != shape(after.definition)
+    return before.definition != after.definition
 
 
 def _matview_indexes(model: SchemaModel, ref: ObjectRef) -> tuple[Index, ...]:

@@ -42,6 +42,7 @@ holds, an introspector what the *database* holds.
 """
 
 import functools
+import re
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable, Sequence
 from contextlib import contextmanager
@@ -66,6 +67,7 @@ from confiture.core.ddl_walk import (
 from confiture.core.ddl_walk import type_name as ddl_type_name
 from confiture.core.schema_identity import DEFAULT_SCHEMA, quote_identifier
 from confiture.core.schema_model import (
+    DEFINED_OTHER_KINDS,
     TVIEWS_SCHEMA,
     Column,
     Constraint,
@@ -179,8 +181,8 @@ def _created(catalog: str, oid: str) -> str:
 
 #: Every object of the kinds no typed section holds, by the identity ``ddl_objects``
 #: gives it: ``(kind, schema, name)`` — ``schema`` ``NULL`` for a kind that lives in
-#: no schema, a policy or rule named ``table.name``. Existence only: the definition
-#: each would need is a deparse per kind.
+#: no schema, a policy or rule named ``table.name``. The kinds read whole are read
+#: by :func:`_defined_others`; the rest by existence only.
 _OTHER_OBJECTS = f"""
 SELECT 'schema', NULL, n.nspname FROM pg_namespace n
 WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_namespace", "n.oid")}
@@ -244,12 +246,209 @@ WHERE {_created("pg_am", "a.oid")}
 def _other_objects(
     conn: psycopg.Connection, schemas: Sequence[str]
 ) -> dict[ObjectRef, OtherObject]:
-    """Every object of the kinds no typed section holds, by identity (existence depth)."""
+    """Every object of the kinds no typed section holds: by identity, and whole where it can.
+
+    A domain, a composite or range type, a policy and a rule carry their definition
+    (:data:`DEFINED_OTHER_KINDS`): the statement PostgreSQL's catalog says creates
+    each, read through ``ddl_objects.object_of`` as a tree's statement is. Every
+    other kind is held by existence alone.
+    """
     found = (
         OtherObject(kind, (schema or DEFAULT_SCHEMA).lower(), name.lower())
         for kind, schema, name in conn.execute(_OTHER_OBJECTS, {"schemas": list(schemas)})
     )
-    return {other_ref(obj): obj for obj in found}
+    defined = _defined_others(conn, schemas)
+    return {(ref := other_ref(obj)): replace(obj, definition=defined.get(ref)) for obj in found}
+
+
+def _qualified(schema: str, name: str) -> str:
+    return f"{quote_identifier(schema)}.{quote_identifier(name)}"
+
+
+def _collate(schema: str | None, name: str | None) -> str:
+    """A ``COLLATE`` clause, or nothing when the collation is the type's own."""
+    return "" if name is None else f" COLLATE {_qualified(schema or DEFAULT_SCHEMA, name)}"
+
+
+#: A domain: its base type, a collation other than the base type's, its default,
+#: NOT NULL, and each CHECK by name. PostgreSQL 18 also writes NOT NULL as a
+#: constraint (``contype 'n'``): ``typnotnull`` says it once.
+_DOMAINS = f"""
+SELECT n.nspname, t.typname, format_type(t.typbasetype, t.typtypmod),
+       CASE WHEN t.typcollation NOT IN (0, b.typcollation) THEN cn.nspname END,
+       CASE WHEN t.typcollation NOT IN (0, b.typcollation) THEN co.collname END,
+       pg_get_expr(t.typdefaultbin, 0), t.typnotnull,
+       ARRAY(SELECT k.conname FROM pg_constraint k
+             WHERE k.contypid = t.oid AND k.contype = 'c' ORDER BY k.conname),
+       ARRAY(SELECT pg_get_constraintdef(k.oid) FROM pg_constraint k
+             WHERE k.contypid = t.oid AND k.contype = 'c' ORDER BY k.conname)
+FROM pg_type t
+JOIN pg_namespace n ON n.oid = t.typnamespace
+JOIN pg_type b ON b.oid = t.typbasetype
+LEFT JOIN pg_collation co ON co.oid = t.typcollation
+LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
+WHERE t.typtype = 'd' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+"""
+
+#: A composite type's attributes, in order, each with a collation other than its type's.
+_COMPOSITES = f"""
+SELECT n.nspname, t.typname,
+       ARRAY(SELECT a.attname FROM pg_attribute a
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum),
+       ARRAY(SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum),
+       ARRAY(SELECT cn.nspname FROM pg_attribute a
+             JOIN pg_type at ON at.oid = a.atttypid
+             LEFT JOIN pg_collation co
+               ON co.oid = a.attcollation AND a.attcollation NOT IN (0, at.typcollation)
+             LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum),
+       ARRAY(SELECT co.collname FROM pg_attribute a
+             JOIN pg_type at ON at.oid = a.atttypid
+             LEFT JOIN pg_collation co
+               ON co.oid = a.attcollation AND a.attcollation NOT IN (0, at.typcollation)
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum)
+FROM pg_type t
+JOIN pg_namespace n ON n.oid = t.typnamespace
+JOIN pg_class c ON c.oid = t.typrelid AND c.relkind = 'c'
+WHERE t.typtype = 'c' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+"""
+
+#: A range type: each option only where it is not what PostgreSQL would choose —
+#: the subtype's default operator class, its own collation, no functions.
+_RANGES = f"""
+SELECT n.nspname, t.typname, format_type(r.rngsubtype, NULL),
+       CASE WHEN NOT oc.opcdefault THEN ocn.nspname END,
+       CASE WHEN NOT oc.opcdefault THEN oc.opcname END,
+       CASE WHEN r.rngcollation NOT IN (0, st.typcollation) THEN cn.nspname END,
+       CASE WHEN r.rngcollation NOT IN (0, st.typcollation) THEN co.collname END,
+       canon_n.nspname, canon.proname, diff_n.nspname, diff.proname,
+       mn.nspname, m.typname
+FROM pg_range r
+JOIN pg_type t ON t.oid = r.rngtypid
+JOIN pg_namespace n ON n.oid = t.typnamespace
+JOIN pg_type st ON st.oid = r.rngsubtype
+JOIN pg_opclass oc ON oc.oid = r.rngsubopc
+JOIN pg_namespace ocn ON ocn.oid = oc.opcnamespace
+LEFT JOIN pg_collation co ON co.oid = r.rngcollation
+LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
+LEFT JOIN pg_proc canon ON canon.oid = r.rngcanonical
+LEFT JOIN pg_namespace canon_n ON canon_n.oid = canon.pronamespace
+LEFT JOIN pg_proc diff ON diff.oid = r.rngsubdiff
+LEFT JOIN pg_namespace diff_n ON diff_n.oid = diff.pronamespace
+JOIN pg_type m ON m.oid = r.rngmultitypid
+JOIN pg_namespace mn ON mn.oid = m.typnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+"""
+
+#: A policy: permissive or not, its command, its roles (``0`` is PUBLIC), its two
+#: expressions as the catalog deparses them against its table.
+_POLICIES = f"""
+SELECT n.nspname, c.relname, p.polname, p.polpermissive, p.polcmd,
+       0 = ANY(p.polroles),
+       ARRAY(SELECT r.rolname FROM pg_roles r WHERE r.oid = ANY(p.polroles) ORDER BY r.rolname),
+       pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)
+FROM pg_policy p
+JOIN pg_class c ON c.oid = p.polrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_policy", "p.oid")}
+"""
+
+_RULES = f"""
+SELECT pg_get_ruledef(r.oid)
+FROM pg_rewrite r
+JOIN pg_class c ON c.oid = r.ev_class
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE r.rulename <> '_RETURN' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_rewrite", "r.oid")}
+"""
+
+#: ``polcmd``'s letters, as ``CREATE POLICY … FOR`` spells them.
+_POLICY_COMMANDS = {"*": "ALL", "r": "SELECT", "a": "INSERT", "w": "UPDATE", "d": "DELETE"}
+
+
+def _domain_statement(row: tuple[Any, ...]) -> str:
+    schema, name, base, coll_schema, collation, default, not_null, names, checks = row
+    clauses = [f"CREATE DOMAIN {_qualified(schema, name)} AS {base}"]
+    clauses.append(_collate(coll_schema, collation).strip())
+    if default is not None:
+        clauses.append(f"DEFAULT {default}")
+    if not_null:
+        clauses.append("NOT NULL")
+    for check_name, check in zip(names, checks, strict=True):
+        # A name PostgreSQL made up for an unnamed CHECK is no name, as a table's is.
+        generated = re.fullmatch(rf"{re.escape(name)}_check\d*", check_name)
+        named = "" if generated else f"CONSTRAINT {quote_identifier(check_name)} "
+        clauses.append(named + check.removesuffix(" NOT VALID"))
+    return " ".join(clause for clause in clauses if clause)
+
+
+def _composite_statement(row: tuple[Any, ...]) -> str:
+    schema, name, attributes, types, coll_schemas, collations = row
+    columns = ", ".join(
+        f"{quote_identifier(attribute)} {type_}{_collate(coll_schema, collation)}"
+        for attribute, type_, coll_schema, collation in zip(
+            attributes, types, coll_schemas, collations, strict=True
+        )
+    )
+    return f"CREATE TYPE {_qualified(schema, name)} AS ({columns})"
+
+
+def _default_multirange(name: str) -> str:
+    """The name PostgreSQL gives a range type's multirange when none is written."""
+    at = name.find("range")
+    return f"{name[:at]}multirange{name[at + 5 :]}" if at >= 0 else f"{name}_multirange"
+
+
+def _range_statement(row: tuple[Any, ...]) -> str:
+    (schema, name, subtype, opc_schema, opclass, coll_schema, collation, canon_schema,
+     canonical, diff_schema, diff, multi_schema, multirange) = row  # fmt: skip
+    options = [f"SUBTYPE = {subtype}"]
+    if opclass is not None:
+        options.append(f"SUBTYPE_OPCLASS = {_qualified(opc_schema, opclass)}")
+    if collation is not None:
+        options.append(f"COLLATION = {_qualified(coll_schema, collation)}")
+    if canonical is not None:
+        options.append(f"CANONICAL = {_qualified(canon_schema, canonical)}")
+    if diff is not None:
+        options.append(f"SUBTYPE_DIFF = {_qualified(diff_schema, diff)}")
+    if (multi_schema, multirange) != (schema, _default_multirange(name)):
+        options.append(f"MULTIRANGE_TYPE_NAME = {_qualified(multi_schema, multirange)}")
+    return f"CREATE TYPE {_qualified(schema, name)} AS RANGE ({', '.join(options)})"
+
+
+def _policy_statement(row: tuple[Any, ...]) -> str:
+    schema, table, name, permissive, command, public, roles, using, check = row
+    grantees = (["PUBLIC"] if public else []) + [quote_identifier(role) for role in roles]
+    text = (
+        f"CREATE POLICY {quote_identifier(name)} ON {_qualified(schema, table)}"
+        f" AS {'PERMISSIVE' if permissive else 'RESTRICTIVE'}"
+        f" FOR {_POLICY_COMMANDS[command]} TO {', '.join(grantees)}"
+    )
+    if using is not None:
+        text += f" USING ({using})"
+    if check is not None:
+        text += f" WITH CHECK ({check})"
+    return text
+
+
+def _defined_others(conn: psycopg.Connection, schemas: Sequence[str]) -> dict[ObjectRef, str]:
+    """Each object of :data:`DEFINED_OTHER_KINDS` in *schemas*, as ``object_of`` defines it."""
+    wanted = {"schemas": list(schemas)}
+    texts = [_domain_statement(row) for row in conn.execute(_DOMAINS, wanted)]
+    texts += [_composite_statement(row) for row in conn.execute(_COMPOSITES, wanted)]
+    texts += [_range_statement(row) for row in conn.execute(_RANGES, wanted)]
+    texts += [_policy_statement(row) for row in conn.execute(_POLICIES, wanted)]
+    texts += [row[0] for row in conn.execute(_RULES, wanted)]
+    defined: dict[ObjectRef, str] = {}
+    for text in texts:
+        obj = object_of(text, pglast.parse_sql(text)[0])
+        if obj is not None:
+            defined[obj.ref] = obj.definition
+    return defined
 
 
 #: The ``relkind`` letters of a table, partitioned or not.
@@ -487,8 +686,9 @@ def read(
     ``introspect`` reads ``('r',)``, the plugin's snapshot :data:`TABLE_LIKE`.
 
     *other_objects* reads every object of the kinds no typed section holds — a
-    schema, an extension, a domain, a policy, … — that they exist, not what they
-    are (``Coverage`` says ``existence``).
+    schema, an extension, a domain, a policy, … — that they exist (``Coverage``
+    says ``existence``), and, for a domain, a composite or range type, a policy
+    and a rule, what they are (``OtherObject.definition``, #708).
 
     *routines*, *views* and *triggers* read those too — each a query, and a
     view's a deparse per view — for the callers that compare them. An
@@ -1357,6 +1557,8 @@ def _view_statement(view: View) -> str:
 
 
 def _other_statement(obj: OtherObject) -> str | None:
+    if obj.kind in DEFINED_OTHER_KINDS:
+        return obj.definition
     if obj.kind == "schema":
         return f"CREATE SCHEMA {quote_identifier(obj.name)}"
     if obj.kind == "extension":
@@ -1373,7 +1575,8 @@ def catalogued_objects(
     *model* is :func:`read`'s, of *schemas*. A routine is ``pg_get_functiondef``'s,
     a trigger ``pg_get_triggerdef``'s, a view its ``pg_get_viewdef`` behind the
     ``CREATE`` that names it, a TVIEW the call pg_tviews creates one with, a
-    schema or an extension its name — read through ``ddl_objects.object_of``, as a
+    schema or an extension its name, a domain, a type, a policy or a rule the
+    definition :func:`read` gave it — read through ``ddl_objects.object_of``, as a
     tree's statements are, so a change can carry the statement that undoes it.
     Every other object kind the model holds by existence alone, and has no entry.
     """
