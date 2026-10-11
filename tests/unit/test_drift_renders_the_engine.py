@@ -70,7 +70,7 @@ def test_matview_index_changes_are_rendered() -> None:
 
 
 def test_a_redefined_matviews_index_changes_are_rendered() -> None:
-    """A redefined matview is no finding; the index changes it carries are, as a paired one's."""
+    """A redefined matview is its query's finding; the index changes it carries are, as a paired one's."""
     from dataclasses import replace
 
     from confiture.core.drift import DriftReport, DriftSeverity, _Findings
@@ -95,19 +95,26 @@ def test_a_redefined_matviews_index_changes_are_rendered() -> None:
     _Findings(
         tree.catalogued, replace(database.catalogued, source="catalog"), DriftSeverity.WARNING
     ).render([change], report, column_order=False)
-    (item,) = report.drift_items
-    assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
-    assert item.object_name == "public.mv.ux_mv"
+    index, query = report.drift_items
+    assert (index.drift_type, index.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
+    assert index.object_name == "public.mv.ux_mv"
+    assert (query.drift_type, query.severity) == (
+        DriftType.VIEW_DEFINITION_MISMATCH,
+        DriftSeverity.WARNING,
+    )
 
 
 def test_every_redefinition_drift_does_not_render_says_why() -> None:
-    """A TVIEW's is its options; a view's query and a routine's body are named, with the reason."""
+    """A TVIEW's is its options, a view's its query (#719); a routine's body is named, with the reason."""
     from confiture.core.differ import _SECTIONS
     from confiture.core.drift import UNRENDERED_REDEFINITIONS
 
-    redefinable = {kind for kind, section in _SECTIONS.items() if section in {"views", "routines"}}
-    assert set(UNRENDERED_REDEFINITIONS) == redefinable
-    assert redefinable == {"view", "matview", "function", "procedure", "aggregate"}
+    routines = {kind for kind, section in _SECTIONS.items() if section == "routines"}
+    assert set(UNRENDERED_REDEFINITIONS) == routines
+    assert routines == {"function", "procedure", "aggregate"}
+    views = {kind for kind, section in _SECTIONS.items() if section == "views"}
+    assert views == {"view", "matview"}
+    assert all(REDEFINED_DRIFT_TYPES[kind] is DriftType.VIEW_DEFINITION_MISMATCH for kind in views)
     assert all(why.strip() for why in UNRENDERED_REDEFINITIONS.values())
 
 
@@ -117,7 +124,7 @@ def test_a_redefinition_is_a_finding_or_says_why_not_never_both() -> None:
     from confiture.core.schema_model import DEFINED_OTHER_KINDS
 
     assert not set(REDEFINED_DRIFT_TYPES) & set(UNRENDERED_REDEFINITIONS)
-    assert set(REDEFINED_DRIFT_TYPES) == {"tview", *DEFINED_OTHER_KINDS}
+    assert set(REDEFINED_DRIFT_TYPES) == {"tview", "view", "matview", *DEFINED_OTHER_KINDS}
     assert {
         kind
         for kind, found in REDEFINED_DRIFT_TYPES.items()

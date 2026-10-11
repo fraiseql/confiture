@@ -111,11 +111,13 @@ more of them.
   index; drift still reports its index differences, as for any matview.
 - An index on a TVIEW is reported as an index on a table is (`missing_index`, critical
   when it is unique; `extra_index`); pg_tviews' own indexes never are.
-- A view's or a materialized view's query that changed is not a drift item at any tier:
-  drift reports that a view exists (`missing_view`, `extra_view`, `missing_matview`,
-  `extra_matview`). Compare view bodies with `migrate validate --check-body-views`, or ask
-  `migrate diff --from db` with a scratch server, which writes the `CREATE OR REPLACE VIEW`
-  or the matview's recreate.
+- A view's or a materialized view's query that changed is `view_definition_mismatch`
+  (warning) at the materialised tier, where both queries are PostgreSQL's deparse.
+  `expected` and `actual` are the two queries' hashes, the `source_hash` and `db_hash`
+  `migrate validate --check-body-views` reports; its `--show-diff` prints both queries.
+  A matview whose query changed is reported with its index differences beside it. At the
+  structural tier a view's query is not compared, so drift reports only that a view
+  exists (`missing_view`, `extra_view`, `missing_matview`, `extra_matview`).
 - A finding names an object the way the tree side spells it. At the materialised tier that
   side is PostgreSQL's reading of the tree, so every name is schema-qualified
   (`public.tv_post`).

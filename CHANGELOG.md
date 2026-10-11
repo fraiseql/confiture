@@ -46,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   index. pg_tviews skipped the tree's `CREATE INDEX IF NOT EXISTS`, so the database does not
   hold it; rename the index. An index that is exactly pg_tviews' own is adopted by pg_tviews,
   and confiture takes it as pg_tviews': no change, no drift.
+- ⚠️ **A redefined view or materialized view is `view_definition_mismatch` (warning), a new
+  drift kind (#719).** At the materialised tier (`scratch_url` / `--scratch-url`), where both
+  queries are PostgreSQL's deparse, a view or matview whose query the database holds otherwise
+  used to be no drift item at all: the engine found the redefinition and drift dropped it
+  (`UNRENDERED_REDEFINITIONS`). It is now one finding per view, `subject.relation` the view.
+  `expected` and `actual` are the two queries' hashes, the `source_hash` and `db_hash` that
+  `migrate validate --check-body-views` reports; that check's `--show-diff` prints the queries.
+  A redefined matview's index findings are still reported beside it. At the structural tier a
+  view's query is not compared, so nothing changes there. A gate that escalates by drift kind
+  can escalate it; the kind is in `_common.schema.json`'s enum.
 
 ### Changed
 
@@ -192,6 +202,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drift kind and no severity moved; `indexes_checked` grows by one per extra or INVALID index
   reported. The changed query itself is still no drift item (`migrate validate
   --check-body-views`).
+- **A view whose query a model does not hold is the same view at the structural tier.** Where
+  view queries compare by presence (`view_definitions`), a view read without its query
+  (`definition=None`, as a hand-built model or `live_catalog.views()` holds it) against one with
+  a query was a redefinition. It is now the same view, as the rule says. confiture's own live
+  read always fetches the query, so drift and `migrate diff` were not affected.
 
 ## [1.35.0] - 2026-10-10
 

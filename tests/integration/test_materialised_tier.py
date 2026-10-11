@@ -457,10 +457,14 @@ def test_a_redefined_matview_that_lost_its_unique_index_is_critical_drift(
     materialised = _drift(url, matview_tree, test_db_url)
     structural = _drift(url, matview_tree, None)
 
-    assert _findings(materialised) == {("missing_index", "critical", "public.mv.ux_mv")}
+    assert _findings(materialised) == {
+        ("missing_index", "critical", "public.mv.ux_mv"),
+        ("view_definition_mismatch", "warning", "public.mv"),
+    }
     assert materialised.fidelity == "materialised"
-    # The tiers agree on the index: the scratch server no longer hides it.
-    assert _findings(structural) == _findings(materialised)
+    # The tiers agree on the index: the scratch server no longer hides it. Only the
+    # materialised tier compares the query (#719).
+    assert _findings(structural) == {("missing_index", "critical", "public.mv.ux_mv")}
 
 
 def test_the_drift_command_fails_on_it_with_a_scratch_server(
@@ -481,7 +485,8 @@ def test_the_drift_command_fails_on_it_with_a_scratch_server(
     assert payload["has_drift"] is True
     assert payload["fidelity"] == "materialised"
     assert [(i["type"], i["severity"]) for i in payload["drift_items"]] == [
-        ("missing_index", "critical")
+        ("missing_index", "critical"),
+        ("view_definition_mismatch", "warning"),
     ]
 
 
@@ -505,6 +510,29 @@ def test_check_live_drift_fails_on_it_with_scratch_url_in_the_environment(
     assert "missing_index" in result.stdout
 
 
+def test_its_hashes_are_the_ones_check_body_views_reports(
+    matview_tree: Path,
+    test_db_url: str,
+    fresh_database_factory: Callable[[str], str],
+    tmp_path: Path,
+) -> None:
+    """``expected``/``actual`` name the queries as the check that prints them does (#719)."""
+    url = _built(fresh_database_factory, MATVIEW_DATABASE)
+    (item,) = [
+        i
+        for i in _drift(url, matview_tree, test_db_url).drift_items
+        if i.drift_type is DriftType.VIEW_DEFINITION_MISMATCH
+    ]
+    result = runner.invoke(
+        app,
+        ["migrate", "validate", "--check-body-views", "--config", str(_config(tmp_path, url)),
+         "--schema", str(matview_tree), "--scratch-url", test_db_url, "--format", "json"],
+    )  # fmt: skip
+
+    (found,) = json.loads(result.stdout)["body_drifts"]
+    assert (item.expected, item.actual) == (found["source_hash"], found["db_hash"])
+
+
 def test_a_redefined_matview_with_an_invalid_unique_index_is_the_critical_pair_live(
     test_db_url: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
 ) -> None:
@@ -526,6 +554,7 @@ def test_a_redefined_matview_with_an_invalid_unique_index_is_the_critical_pair_l
     assert _findings(report) == {
         ("missing_index", "critical", "public.mv.ux_mv"),
         ("extra_index", "info", "public.mv.ux_mv"),
+        ("view_definition_mismatch", "warning", "public.mv"),
     }
     missing = next(i for i in report.drift_items if i.drift_type is DriftType.MISSING_INDEX)
     assert "INVALID" in missing.message

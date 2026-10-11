@@ -94,6 +94,7 @@ from confiture.core.schema_read import SchemaRead, read_segments, read_text
 from confiture.core.schema_sources import materialised_side
 from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
+from confiture.core.view_body_drift import viewdef_hash
 from confiture.exceptions import ConfigurationError, SchemaError
 from confiture.exceptions import ValidationError as InvalidOption
 
@@ -128,6 +129,7 @@ class DriftType(Enum):
     EXTRA_TVIEW = "extra_tview"
     TVIEW_OPTION_MISMATCH = "tview_option_mismatch"
     OBJECT_DEFINITION_MISMATCH = "object_definition_mismatch"
+    VIEW_DEFINITION_MISMATCH = "view_definition_mismatch"
     MISSING_OBJECT = "missing_object"
     EXTRA_OBJECT = "extra_object"
     MISSING_GRANT = "missing_grant"
@@ -302,11 +304,14 @@ _OBJECT_DRIFT_TYPES: dict[str, tuple[DriftType, DriftType]] = {
 }
 
 #: What a redefinition (``ObjectReplaced``) is, by the object's kind: a TVIEW's is one
-#: ``tview_option_mismatch`` per option the tree pins; a domain's, a type's, a
-#: policy's or a rule's one ``object_definition_mismatch`` (#708), ``subject.kind``
-#: saying which. Every other kind's is no finding (:data:`UNRENDERED_REDEFINITIONS`).
+#: ``tview_option_mismatch`` per option the tree pins; a view's or a matview's one
+#: ``view_definition_mismatch`` (#719), which only the materialised tier finds, since
+#: only there are both queries PostgreSQL's; a domain's, a type's, a policy's or a
+#: rule's one ``object_definition_mismatch`` (#708), ``subject.kind`` saying which.
+#: Every other kind's is no finding (:data:`UNRENDERED_REDEFINITIONS`).
 REDEFINED_DRIFT_TYPES: dict[str, DriftType] = {
     "tview": DriftType.TVIEW_OPTION_MISMATCH,
+    **dict.fromkeys(("view", "matview"), DriftType.VIEW_DEFINITION_MISMATCH),
     **dict.fromkeys(DEFINED_OTHER_KINDS, DriftType.OBJECT_DEFINITION_MISMATCH),
 }
 
@@ -584,8 +589,8 @@ _MATERIALISED = replace(MATERIALISED, author="new")
 #: ``_OBJECT_DRIFT_TYPES``, and a redefined object's kind its finding in
 #: ``REDEFINED_DRIFT_TYPES``; the column order's severity is ``column_order_severity``.
 #: An index change on a materialized view or a TVIEW is an index finding on it, as on
-#: a table, and so is each index change a redefined matview carries; the redefinition itself
-#: is no finding (:data:`UNRENDERED_REDEFINITIONS`).
+#: a table, and so is each index change a redefined matview carries, beside the
+#: redefinition's own ``view_definition_mismatch``.
 def _missing_index_severity(change: SchemaChange) -> DriftSeverity:
     """A missing unique index is a missing constraint, valid or not; any other a warning (#689)."""
     assert isinstance(change, IndexAdded)
@@ -646,11 +651,6 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
 #: and a database reads its other objects by existence, but for a domain, a type,
 #: a policy and a rule.
 UNRENDERED_REDEFINITIONS: dict[str, str] = {
-    **dict.fromkeys(
-        ("view", "matview"),
-        "a changed query is no drift kind (#701); compare queries with "
-        "`migrate validate --check-body-views`",
-    ),
     **dict.fromkeys(
         ("function", "procedure", "aggregate"),
         "a changed body is no drift kind; compare bodies with "
@@ -1006,10 +1006,10 @@ class _Findings:
         silence from a section nobody asked the catalogue about is not absence.
 
         A matview whose indexes differ is not redefined: its index findings are
-        :meth:`_matview_indexes`'. A matview whose query also differs, under the
-        materialised fidelity, is one ``ObjectReplaced``; its index findings are
-        still :meth:`_matview_indexes`', from the index changes it carries, and the
-        redefinition itself is no finding (:data:`UNRENDERED_REDEFINITIONS`).
+        :meth:`_matview_indexes`'. A view or matview whose query differs, under the
+        materialised fidelity, is one ``ObjectReplaced``: a ``view_definition_mismatch``
+        (#719), and a matview's index findings are still :meth:`_matview_indexes`',
+        from the index changes it carries.
         """
         sections = frozenset(
             section
@@ -1087,6 +1087,38 @@ class _Findings:
             key=lambda ref: (ref.kind, ref.schema, ref.name),
         )
         report.drift_items.extend(self._redefined_other(ref) for ref in defined)
+        views = sorted(
+            (
+                c.ref
+                for c in changes
+                if isinstance(c, ObjectReplaced) and c.ref.kind in {"view", "matview"}
+            ),
+            key=lambda ref: (ref.schema, ref.name),
+        )
+        report.drift_items.extend(self._redefined_view(ref) for ref in views)
+
+    def _redefined_view(self, ref: ObjectRef) -> DriftItem:
+        """A view or matview whose query the database holds otherwise (#719).
+
+        Only the materialised tier finds one, where both queries are PostgreSQL's
+        deparse. A query can be long, so each side is named by the hash
+        ``migrate validate --check-body-views`` prints for it, and that check's
+        ``--show-diff`` prints the two queries.
+        """
+        declared, live = self.expected.views[ref], self.actual.views[ref]
+        named = f"{ref.schema}.{ref.name}"
+        return DriftItem(
+            drift_type=REDEFINED_DRIFT_TYPES[ref.kind],
+            severity=DriftSeverity.WARNING,
+            object_name=named,
+            subject=DriftSubject(ref.schema, declared.name),
+            expected=viewdef_hash(declared.definition or ""),
+            actual=viewdef_hash(live.definition or ""),
+            message=(
+                f"{_kind_label(ref.kind)} '{named}' is defined differently in database; "
+                "`migrate validate --check-body-views --show-diff` prints both queries"
+            ),
+        )
 
     def _redefined_other(self, ref: ObjectRef) -> DriftItem:
         """A domain, a type, a policy or a rule the database defines otherwise (#708)."""

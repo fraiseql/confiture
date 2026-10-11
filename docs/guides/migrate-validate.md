@@ -689,6 +689,9 @@ confiture migrate validate --check-body-views --show-diff \
 - Covers **regular and materialized** views; honours `--schemas`.
 - `--show-diff` adds `expected_def`, `live_def`, and `unified_diff` to each drifted
   view (text and JSON). Default output is hash-only.
+- With a scratch server, `--check-live-drift` and `confiture drift` report the same
+  difference as `view_definition_mismatch` (warning); its `expected` and `actual` are this
+  check's `source_hash` and `db_hash`, and this check's `--show-diff` prints the queries.
 - **Remote read-only live (`--ssh`)**: the scratch database is built on a
   *writable* server, which the read-only production replica is not. Pass
   `--scratch-url postgresql://localhost/postgres` (or a CI server) so the expected

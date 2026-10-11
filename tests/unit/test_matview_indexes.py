@@ -8,6 +8,7 @@ redefined carries its whole index set on its own change instead, so its indexes
 are created with it and never ranked before it exists.
 """
 
+import re
 from dataclasses import replace
 
 import pytest
@@ -200,7 +201,7 @@ def _drift(database: Side, tree: Side) -> DriftReport:
 def test_a_redefined_matview_under_materialised_reports_a_lost_unique_index() -> None:
     """Its query and its unique index both differ: the index is still a finding (#701)."""
     report = _drift(_database(TABLE + VIEW), _author(TABLE + OTHER_VIEW + UNIQUE))
-    (item,) = report.drift_items
+    (item,) = [i for i in report.drift_items if i.drift_type is DriftType.MISSING_INDEX]
     assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
     assert item.object_name == "public.mv.ux_mv"
     assert item.subject is not None
@@ -215,14 +216,48 @@ def test_a_redefined_matview_with_an_invalid_live_index_is_the_critical_pair() -
     assert found == [
         (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL),
         (DriftType.EXTRA_INDEX, DriftSeverity.INFO),
+        (DriftType.VIEW_DEFINITION_MISMATCH, DriftSeverity.WARNING),
     ]
     assert "INVALID" in report.drift_items[0].message
 
 
-def test_a_redefined_matview_alone_is_no_finding() -> None:
-    """The query itself is a redefinition no drift kind says (``UNRENDERED_REDEFINITIONS``)."""
+def test_a_redefined_matview_alone_is_a_view_definition_mismatch() -> None:
+    """The query itself differs: one warning, each side's query named by its hash (#719)."""
     report = _drift(_database(TABLE + VIEW + UNIQUE), _author(TABLE + OTHER_VIEW + UNIQUE))
-    assert report.drift_items == []
+    (item,) = report.drift_items
+    assert (item.drift_type, item.severity) == (
+        DriftType.VIEW_DEFINITION_MISMATCH,
+        DriftSeverity.WARNING,
+    )
+    assert item.drift_type.value == "view_definition_mismatch"
+    assert item.subject is not None
+    assert (item.subject.schema, item.subject.relation) == ("public", "mv")
+    assert item.object_name == "public.mv"
+    assert re.fullmatch(r"[0-9a-f]{12}", item.expected)
+    assert re.fullmatch(r"[0-9a-f]{12}", item.actual)
+    assert item.expected != item.actual
+    assert "--check-body-views --show-diff" in item.message
+
+
+def test_a_redefined_view_is_a_view_definition_mismatch() -> None:
+    """A plain view's query is compared as a matview's is."""
+    view = "CREATE VIEW v AS SELECT id, n FROM tb_item;\n"
+    other = "CREATE VIEW v AS SELECT id FROM tb_item WHERE n > 0;\n"
+    (item,) = _drift(_database(TABLE + view), _author(TABLE + other)).drift_items
+    assert item.drift_type is DriftType.VIEW_DEFINITION_MISMATCH
+    assert item.object_name == "public.v"
+    assert "View 'public.v'" in item.message
+
+
+def test_the_hashes_are_the_body_checks_hashes() -> None:
+    """``expected``/``actual`` are ``--check-body-views``' ``source_hash``/``db_hash``."""
+    from confiture.core.view_body_drift import viewdef_hash
+
+    report = _drift(_database(TABLE + VIEW), _author(TABLE + OTHER_VIEW))
+    (item,) = report.drift_items
+    tree, database = read_text(TABLE + OTHER_VIEW), read_text(TABLE + VIEW)
+    assert item.expected == viewdef_hash(tree.catalogued.views[MV].definition or "")
+    assert item.actual == viewdef_hash(database.catalogued.views[MV].definition or "")
 
 
 def test_a_side_with_the_statement_and_no_model_entry_carries_no_indexes() -> None:
