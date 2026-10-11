@@ -3158,7 +3158,7 @@ confiture lint [OPTIONS]
 | `--require-complete` | - | Flag | off | Exit 2 (not run) when a selected rule was skipped or ran on less than the whole schema — the rules in skipped[] and degraded[] — so a gate cannot pass on reduced coverage |
 | `--list-rules` | - | Flag | off | Print the rule catalogue (code, family, severity, default/opt-in) and exit 0. Honours --format json. |
 | `--replica-safe` | - | Flag | off | Deprecated alias for `--select default,replica` (#139). Still supported; new rules register instead of adding a flag. |
-| `--migrations-dir` | - | path | `db/migrations` | Migrations directory the migration-tree rules read — replica_001, own_001, own_002 (default: db/migrations) |
+| `--migrations-dir` | - | path | `db/migrations` | Migrations directory the migration-tree rules read — replica_001, own_001, own_002, acl_001 (default: db/migrations) |
 | `--overrides-dir` | - | path | - | Overrides mirror directory. tree_004 needs it and is skipped without it: there is no conventional location to guess. |
 | `--server-url` | - | str | - | Writable PostgreSQL server the body family builds its scratch database on. Only the server is used: a throwaway database is created beside the configured one and dropped again. Defaults to the environment's own database_url. |
 | `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant`: the tenant family (tenant_001–tenant_005), which a `tenancy:` block in db/project.yaml already turns on. |

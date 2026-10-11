@@ -373,6 +373,7 @@ class SchemaLinter:
         env: str = "local",
         project_dir: Path | None = None,
         config: LintConfig | None = None,
+        migrations_dir: Path = Path("db/migrations"),
     ):
         """Initialize linter.
 
@@ -380,10 +381,14 @@ class SchemaLinter:
             env: Environment name (local, test, production)
             project_dir: Project root directory
             config: Linting configuration (optional)
+            migrations_dir: The migrations ``acl_001`` reads, relative to
+                ``project_dir`` unless absolute — what ``--migrations-dir`` names
+                for every migration-tree rule.
         """
         self.env = env
         self.project_dir = project_dir or Path()
         self.config = config or LintConfig()
+        self.migrations_dir = self.project_dir / migrations_dir
 
         # Load environment configuration
         self.environment = Environment.load(env, project_dir=project_dir)
@@ -551,8 +556,18 @@ class SchemaLinter:
             and self.environment.acls
         ):
             return
-        migrations_dir = self.project_dir / "db" / "migrations"
-        if not migrations_dir.exists():
+        migrations_dir = self.migrations_dir
+        if not migrations_dir.is_dir():
+            report.degraded.append(
+                RuleStatus(
+                    code="acl_001",
+                    state="degraded",
+                    reason=(
+                        f"the migrations directory {migrations_dir} does not exist, so no "
+                        "migration's grants were read (--migrations-dir names another)"
+                    ),
+                )
+            )
             return
         migration = self.environment.migration
         grant_dir: Path | None = self.project_dir / migration.grant_dir

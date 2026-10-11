@@ -3,8 +3,9 @@
 `--baseline` has always been project-relative. `--migrations-dir` was not: it
 reached `replica_001` as typed, so a lint run from outside the project read the
 migrations of whatever happened to sit under the current directory — usually
-nothing, which is a rule reporting "clean" about a tree it never opened. Three
-rules read that flag now and `--overrides-dir` is a fourth directory of the same
+nothing, which is a rule reporting "clean" about a tree it never opened. Four
+rules read that flag now (`acl_001` too, which read `db/migrations` whatever it
+said, #717) and `--overrides-dir` is a fourth directory of the same
 shape, so there is one resolver.
 """
 
@@ -105,3 +106,56 @@ def test_an_absolute_migrations_dir_is_used_as_given(project_next_door: Path) ->
     assert result.exit_code == 0, result.output
     codes = {i["rule_id"] for i in json.loads(result.stdout)["violations"]["items"]}
     assert codes == {"own_002"}
+
+
+_ACLS = (
+    "acls:\n"
+    "  lint_enabled: true\n"
+    "  expectations:\n"
+    "    - schema: public\n"
+    "      apply_to: ALL_TABLES\n"
+    "      grants:\n"
+    "        - role: my_app\n"
+    "          privileges: [SELECT]\n"
+)
+
+
+@pytest.fixture
+def acl_project(project_next_door: Path) -> Path:
+    """The same project with an ``acls:`` block and its migrations in ``migrations/``."""
+    env = project_next_door / "db" / "environments" / "local.yaml"
+    env.write_text(env.read_text() + _ACLS)
+    (project_next_door / "db" / "migrations").rename(project_next_door / "migrations")
+    return project_next_door
+
+
+def _lint_acl(project: Path, *extra: str) -> dict:
+    result = runner.invoke(
+        app,
+        [
+            "lint",
+            "--project-dir",
+            str(project),
+            *extra,
+            "--select",
+            "acl_001",
+            "--format",
+            "json",
+            "--fail-on",
+            "never",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    return json.loads(result.stdout)
+
+
+def test_acl_001_reads_the_migrations_dir_the_operator_names(acl_project: Path) -> None:
+    payload = _lint_acl(acl_project, "--migrations-dir", "migrations")
+
+    assert {i["rule_id"] for i in payload["violations"]["items"]} == {"acl_001"}
+
+
+def test_acl_001_says_when_its_migrations_dir_is_missing(acl_project: Path) -> None:
+    payload = _lint_acl(acl_project)
+
+    assert [s["code"] for s in payload["degraded"]] == ["acl_001"]
