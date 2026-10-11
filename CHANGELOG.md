@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-10-11
+
+**A TVIEW's indexes are compared like a table's, and a redefinition is seen against a
+database.** ⚠️ confiture requires pg_tviews 0.1.0-beta.27, whose registry names the indexes
+it manages: an index the tree writes on a TVIEW is generated, carried through a redefinition
+and drift-checked (`missing_index`, `extra_index`), `DIFFER_410` refuses one under a name
+pg_tviews owns, and ⚠️ `DIFFER_407` is retired. A redefined view or materialized view is the
+new drift kind `view_definition_mismatch`; a redefined domain, type, policy or rule is seen
+against a database too. ⚠️ Exit 3 now means only an unreachable database: the migrate family
+and `GEN_001` exit 1. The git checks find migrations where `migrate up` runs them, `acl_001`
+and the ACL checks read the project `migrate up` runs, `migrate preflight --against` calls
+only a connection failure one, and `--scratch-url` reaches `--check-live-drift`.
+
 ### Added
 
 - **`DIFFER_409` (exit 5): a definition change with no statement is refused.** A side that is
