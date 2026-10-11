@@ -60,7 +60,7 @@
     "indexes_checked": {
       "type": "integer",
       "minimum": 0,
-      "description": "Indexes checked on tables and materialized views: each the DDL declares, plus each one the database has that the DDL does not (a materialized view's from #690)."
+      "description": "Indexes checked on tables, materialized views and pg_tviews TVIEWs: each the DDL declares, plus each one the database has that the DDL does not (a materialized view's from #690; a TVIEW's user indexes, never pg_tviews' own, from pg_tviews 0.1.0-beta.27)."
     },
     "constraints_checked": {
       "type": "integer",

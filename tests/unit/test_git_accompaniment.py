@@ -257,8 +257,8 @@ class TestMigrationAccompanimentChecker:
         assert "No DDL" in report.summary()
 
 
-def test_a_matview_index_added_without_a_migration_is_reported(tmp_path: Path) -> None:
-    """A materialized view's index is a schema change, as a table's is (#690)."""
+def _index_added_without_a_migration(tmp_path: Path, relation: str, index: str):
+    """The accompaniment report of a commit adding *index* to *relation*, with no migration."""
     import subprocess
 
     def git(*args: str) -> None:
@@ -277,23 +277,41 @@ def test_a_matview_index_added_without_a_migration_is_reported(tmp_path: Path) -
     )
     schema_dir = tmp_path / "db" / "schema"
     schema_dir.mkdir(parents=True)
-    matview = (
-        "CREATE TABLE tb_order (id INT, customer TEXT);\n"
-        "CREATE MATERIALIZED VIEW mv_order AS SELECT id, customer FROM tb_order;\n"
-    )
-    (schema_dir / "orders.sql").write_text(matview)
+    (schema_dir / "orders.sql").write_text(relation)
     (tmp_path / "db" / "migrations").mkdir()
     git("add", ".")
     git("commit", "-m", "Initial")
-    (schema_dir / "orders.sql").write_text(
-        matview + "CREATE UNIQUE INDEX ux_mv_order ON mv_order (id);\n"
-    )
+    (schema_dir / "orders.sql").write_text(relation + index)
     git("add", ".")
-    git("commit", "-m", "Index the matview")
+    git("commit", "-m", "Index it")
+    return MigrationAccompanimentChecker("local", tmp_path).check_accompaniment("HEAD~1", "HEAD")
 
-    report = MigrationAccompanimentChecker("local", tmp_path).check_accompaniment("HEAD~1", "HEAD")
+
+def test_a_matview_index_added_without_a_migration_is_reported(tmp_path: Path) -> None:
+    """A materialized view's index is a schema change, as a table's is (#690)."""
+    report = _index_added_without_a_migration(
+        tmp_path,
+        "CREATE TABLE tb_order (id INT, customer TEXT);\n"
+        "CREATE MATERIALIZED VIEW mv_order AS SELECT id, customer FROM tb_order;\n",
+        "CREATE UNIQUE INDEX ux_mv_order ON mv_order (id);\n",
+    )
 
     assert not report.is_valid
     assert [(c.type, c.table, (c.details or {}).get("name")) for c in report.ddl_changes] == [
         ("ADD_INDEX", "mv_order", "ux_mv_order")
+    ]
+
+
+def test_a_tview_index_added_without_a_migration_is_reported(tmp_path: Path) -> None:
+    """A TVIEW's index is a schema change, as a table's is."""
+    report = _index_added_without_a_migration(
+        tmp_path,
+        "CREATE TABLE tb_order (id INT, customer TEXT);\n"
+        "CREATE TABLE tv_order AS SELECT id, customer FROM tb_order;\n",
+        "CREATE INDEX ix_tv_order_customer ON tv_order (customer);\n",
+    )
+
+    assert not report.is_valid
+    assert [(c.type, c.table, (c.details or {}).get("name")) for c in report.ddl_changes] == [
+        ("ADD_INDEX", "tv_order", "ix_tv_order_customer")
     ]

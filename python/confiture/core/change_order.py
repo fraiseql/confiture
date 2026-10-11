@@ -91,6 +91,10 @@ _DROPPED_FIRST = -9
 _TABLES_DROPPED = -5
 _TABLES_ADDED = 3
 _ALTERED = 4
+#: An index added to a TVIEW runs after the TVIEW is created or replaced: a replace
+#: may add the column it names, and pg_tviews refuses a rebuild over an invalid
+#: index, so its drop stays at ``_ALTERED``.
+_TVIEW_INDEX_ADDED = _CREATED_LAST + 1
 
 
 def _rank(change: SchemaChange) -> int:
@@ -108,6 +112,8 @@ def _rank(change: SchemaChange) -> int:
             return _CREATED["type"]
         case TableAdded() | TableRenamed():
             return _TABLES_ADDED
+        case IndexAdded(relation_kind="tview"):
+            return _TVIEW_INDEX_ADDED
         case (
             ColumnAdded()
             | ColumnDropped()
@@ -182,11 +188,15 @@ def _detached_then_attached(edits: list[SchemaChange]) -> list[SchemaChange]:
     An index or a constraint names columns. Dropped before they change and added after,
     it is never one PostgreSQL cannot build — and neither is it in the down, which
     undoes the up in reverse: the old index comes back after its columns have.
+
+    The edits come ranked, and a table's are grouped within their rank, so each rank's
+    slots are refilled with that rank's edits: an index added to a TVIEW keeps its
+    place after the TVIEW is replaced.
     """
-    by_table: dict[tuple[str, str], list[SchemaChange]] = defaultdict(list)
+    by_table: dict[tuple[int, tuple[str, str]], list[SchemaChange]] = defaultdict(list)
     for change in edits:
         if isinstance(change, _EDITS):
-            by_table[change.table.identity].append(change)
+            by_table[(_rank(change), change.table.identity)].append(change)
     return [change for found in by_table.values() for change in sorted(found, key=_phase)]
 
 

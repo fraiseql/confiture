@@ -63,6 +63,16 @@ missing, extra, changed or INVALID is an index change on the matview, never a re
 of it. A matview that is created, dropped or redefined carries its indexes: `migrate diff`
 writes them right after the `CREATE MATERIALIZED VIEW`, plain and `IF NOT EXISTS`.
 
+A pg_tviews TVIEW's indexes are compared as a table's are, at every tier, and never as a
+redefinition of the TVIEW. Read from a database, they are the user's: every index on the
+TVIEW's table but pg_tviews' own (`tviews.registry.managed_indexes`) and those a
+constraint uses. Between a tree and a database (the structural and materialised tiers),
+a tree index under the name of one of pg_tviews' own is that index when it is the same
+index, as the tier compares it — pg_tviews adopted the tree's statement — and leaves the
+comparison; when it is another index, pg_tviews skipped it, and the comparison refuses
+with `DIFFER_410`. Between two trees or two databases there is no such step: each side
+is compared as it stands.
+
 No tier compares a generated column's expression: no change says how one changed.
 
 A domain, a composite or range type, a policy and a rule are read from a database **whole**:
@@ -99,6 +109,8 @@ more of them.
   uniqueness guarantee) or `extra_index`. At the materialised tier, a matview whose query
   also changed is one redefinition, which `migrate diff` writes as a recreate with every
   index; drift still reports its index differences, as for any matview.
+- An index on a TVIEW is reported as an index on a table is (`missing_index`, critical
+  when it is unique; `extra_index`); pg_tviews' own indexes never are.
 - A view's or a materialized view's query that changed is not a drift item at any tier:
   drift reports that a view exists (`missing_view`, `extra_view`, `missing_matview`,
   `extra_matview`). Compare view bodies with `migrate validate --check-body-views`, or ask

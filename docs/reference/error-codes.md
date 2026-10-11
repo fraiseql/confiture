@@ -55,7 +55,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=8.5) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
 | `CONFIG_013` | 5 | error | {call} needs a connection {mode}: {reason} | Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open |
-| `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run pg_tviews 0.1.0-beta.26 or later, whose `tviews.contract_version()` is the contract confiture reads and whose registry holds every column it reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |
+| `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run pg_tviews 0.1.0-beta.27 or later, whose `tviews.contract_version()` is the contract confiture reads and whose registry holds every column it reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |
 | `CONFIG_015` | 5 | error | The ledger {table!r} does not resolve for this session, but a relation of that name exists in {elsewhere} | Point at the existing ledger — set migration.tracking_table to it, or put its schema on the connection's search_path |
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
@@ -66,9 +66,9 @@ resolution hint surfaced in the envelope.
 | `DIFFER_404` | 0 | warning | {kind} '{identity}' is only in the {side} schema, a database that says it exists and not how it is made: the diff carries no statement for it | Write the statement by hand, or declare the object in the tree so the two sides agree |
 | `DIFFER_405` | 0 | warning | Index '{index}' is on {table}, which neither schema declares: the migration {action} it CONCURRENTLY and assumes the table exists | Make sure the table exists before the migration runs, or declare it in the schema |
 | `DIFFER_406` | 5 | error | Index '{index}' is on {table}: {reason} | Declare the relation in the desired schema, before the index — compose the fragment into the environment's include_dirs, after the file that creates it — or remove the index |
-| `DIFFER_407` | 0 | warning | Index '{index}' is on TVIEW {tview}: migrate diff does not carry it and drift does not check it yet | Keep it in the schema (the build creates it, and pg_tviews keeps it across a rebuild); write any change to it in a migration by hand |
 | `DIFFER_408` | 0 | warning | Index '{index}' is written before {table}, the relation it is on: the current schema's build fails at it, so it is not compared | Move the index after the statement that creates its relation; confiture lint reports it as build_004 |
 | `DIFFER_409` | 5 | error | {change} '{identity}' carries no statement: the side it came from is compared, never generated from | Generate from a side read from a tree (Side.of) or a database (database_side); a stated or slot side is compared, never generated from |
+| `DIFFER_410` | 5 | error | Index '{index}' on TVIEW {tview} has the name of an index pg_tviews created on it, and is another index: pg_tviews skipped its CREATE INDEX, so the database does not hold it | Rename the index in the schema: pg_tviews reserves the names of its own indexes on a TVIEW (tviews.registry.managed_indexes) |
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
@@ -226,6 +226,10 @@ Symbolic error codes are **public API**:
 - The one exception was 0.51.0, which removed 36 codes that had been registered
   but were never emitted by any command (the list is in the CHANGELOG). Every
   code in the table above is one the package can produce; a test keeps it so.
+- A retired code's number is never given to another meaning
+  (`confiture.error_codes.RETIRED_CODES`, held by a test). Retired:
+  `DIFFER_407`, "an index on a TVIEW is not compared", once a TVIEW's indexes
+  were compared, carried and drift-checked.
 
 Some codes (`PGGIT_*`, `GIT_*`) are internal and unlikely to surface in the
 `--format json` output of the migrate family — depend on the codes the migrate

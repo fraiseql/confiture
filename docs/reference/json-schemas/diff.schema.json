@@ -151,7 +151,7 @@
               "object",
               "null"
             ],
-            "description": "The variant's model objects, serialised, for kinds that carry more than a value: a whole table's `columns` and `constraints` (ADD_TABLE, DROP_TABLE), an index's `name`, `columns` and `unique` (and `relation_kind`: `matview` for an index on a materialized view, absent on a table's), a constraint's `name` and `columns`, a rename's `old_name` and `new_name`, an object's `kind`, `name` and `keyword`. Null for a column-level change."
+            "description": "The variant's model objects, serialised, for kinds that carry more than a value: a whole table's `columns` and `constraints` (ADD_TABLE, DROP_TABLE), an index's `name`, `columns` and `unique` (and `relation_kind`: `matview` for an index on a materialized view, `tview` for one on a pg_tviews TVIEW, absent on a table's), a constraint's `name` and `columns`, a rename's `old_name` and `new_name`, an object's `kind`, `name` and `keyword`. Null for a column-level change."
           }
         }
       }

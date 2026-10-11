@@ -44,18 +44,20 @@ class Snapshot:
 def _facts(model: SchemaModel) -> int:
     """How many things *model* says: each table, column, constraint and index, and each object.
 
-    A materialized view's indexes count as a table's do: each is compared, and
-    each one apart is a change.
+    A materialized view's and a TVIEW's indexes count as a table's do: each is
+    compared, and each one apart is a change. pg_tviews' own on a TVIEW are not.
     """
     tables = sum(
         1 + len(t.columns) + len(t.constraints) + len(t.indexes) for t in model.tables.values()
     )
     routines = sum(len(found) for found in model.routines.values())
     matview_indexes = sum(len(v.indexes) for v in model.views.values() if v.materialized)
+    tview_indexes = sum(len(t.indexes or ()) for t in model.tviews.values())
     return (
         tables
         + routines
         + matview_indexes
+        + tview_indexes
         + sum(
             len(section)
             for section in (

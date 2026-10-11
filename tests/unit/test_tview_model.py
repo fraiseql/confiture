@@ -7,12 +7,16 @@ compare a TVIEW, never its parts.
 """
 
 import json
+from dataclasses import fields, replace
 
 from confiture.core.schema_model import (
     FunctionRead,
+    Index,
+    RelationName,
     SchemaModel,
     TView,
     UncascadedTable,
+    parity_tview,
     ref_for,
     tview_ref,
 )
@@ -42,6 +46,8 @@ def test_the_wire_carries_tviews_and_reads_them_back() -> None:
             "time_refresh": None,
             "function_reads": None,
             "uncascaded_tables": None,
+            "indexes": [],
+            "managed_indexes": [],
         }
     ]
     assert SchemaModel.from_json(model.to_json()) == model
@@ -143,3 +149,85 @@ def test_a_wire_written_before_per_table_policies_were_modelled_pins_none() -> N
 
     (read,) = SchemaModel.from_json(json.dumps(wire)).tviews.values()
     assert read.uncascaded_tables is None
+
+
+# A TVIEW's indexes: every one a tree writes on it, or, read from a database, the
+# user's — pg_tviews' own (``tviews.registry.managed_indexes``) held apart.
+_ON = RelationName("app", "tv_post")
+TITLE = Index(name="ix_tv_post_title", table=_ON, columns=("title",))
+MANAGED = Index(name="idx_tv_post_id", table=_ON, columns=("id",))
+_FIELDS_BEFORE_INDEXES = (
+    "name",
+    "schema",
+    "definition",
+    "logged",
+    "fillfactor",
+    "uncascaded_policy",
+    "time_refresh",
+    "function_reads",
+    "uncascaded_tables",
+)
+
+
+def _indexed(**given: object) -> TView:
+    """``POST`` holding *given*: asserted first, so a missing field fails as an assertion."""
+    assert {"indexes", "managed_indexes"} <= {f.name for f in fields(TView)}
+    return replace(POST, **given)
+
+
+def test_a_tview_keeps_its_constructor_shape() -> None:
+    """The fields it gains are appended, so a positional caller is unchanged."""
+    assert tuple(f.name for f in fields(TView))[: len(_FIELDS_BEFORE_INDEXES)] == (
+        _FIELDS_BEFORE_INDEXES
+    )
+    assert TView("tv_post", "app", "SELECT 1 AS pk_post") == POST
+
+
+def test_a_tview_holds_no_index_by_default() -> None:
+    assert (getattr(POST, "indexes", None), getattr(POST, "managed_indexes", None)) == ((), ())
+
+
+def test_the_wire_carries_a_tview_s_indexes_and_reads_them_back() -> None:
+    indexed = _indexed(indexes=(TITLE,), managed_indexes=(MANAGED,))
+    model = SchemaModel(tviews={tview_ref(indexed): indexed})
+
+    (tview,) = json.loads(model.to_json())["tviews"]
+    assert [i["name"] for i in tview["indexes"]] == ["ix_tv_post_title"]
+    assert [i["name"] for i in tview["managed_indexes"]] == ["idx_tv_post_id"]
+    (read,) = SchemaModel.from_json(model.to_json()).tviews.values()
+    assert (read.indexes, read.managed_indexes) == ((TITLE,), (MANAGED,))
+
+
+def test_indexes_not_read_round_trip_as_none() -> None:
+    """``None`` is "not read" (``live_catalog.tviews()``), never "has none"."""
+    unread = _indexed(indexes=None)
+    model = SchemaModel(tviews={tview_ref(unread): unread})
+
+    (read,) = SchemaModel.from_json(model.to_json()).tviews.values()
+    assert read.indexes is None
+
+
+def test_a_wire_written_before_tview_indexes_were_modelled_holds_none() -> None:
+    wire = json.loads(SchemaModel(tviews={tview_ref(POST): POST}).to_json())
+    for tview in wire["tviews"]:
+        tview.pop("indexes", None)
+        tview.pop("managed_indexes", None)
+
+    (read,) = SchemaModel.from_json(json.dumps(wire)).tviews.values()
+    assert (getattr(read, "indexes", None), getattr(read, "managed_indexes", None)) == ((), ())
+
+
+def test_pg_tviews_own_indexes_are_not_what_a_tview_is() -> None:
+    assert _indexed(managed_indexes=(MANAGED,)) == _indexed(managed_indexes=())
+    assert _indexed(indexes=(TITLE,)) != _indexed(indexes=())
+
+
+def test_parity_compares_a_tview_s_indexes_as_a_table_s_and_drops_pg_tviews_own() -> None:
+    """Declaration order is not compared, and pg_tviews' own indexes are not the TVIEW's."""
+    other = Index(name="ix_tv_post_author", table=_ON, columns=("author",))
+    one = _indexed(indexes=(TITLE, other), managed_indexes=(MANAGED,))
+    two = _indexed(indexes=(other, TITLE))
+
+    assert parity_tview(one) == parity_tview(two)
+    assert parity_tview(one).managed_indexes == ()
+    assert parity_tview(_indexed(indexes=None)).indexes is None

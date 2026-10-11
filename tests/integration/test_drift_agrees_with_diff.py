@@ -364,3 +364,60 @@ def test_drift_and_diff_agree_at_the_materialised_tier(
         and (key := _change_key(change)) is not None
     }
     assert reported == expected, mutation
+
+
+#: A TVIEW whose user indexes drift checks as a table's (pg_tviews 0.1.0-beta.27).
+TVIEW_TREE = """
+CREATE TABLE tb_post (pk_post bigint PRIMARY KEY, id uuid NOT NULL UNIQUE, title text);
+CREATE TABLE tv_post AS
+SELECT p.pk_post, p.id, p.title, jsonb_build_object('id', p.id, 'title', p.title) AS data
+FROM tb_post p;
+CREATE INDEX ix_tv_post_title ON tv_post (title);
+CREATE UNIQUE INDEX ux_tv_post_title ON tv_post (title, pk_post);
+"""
+
+
+@pytest.fixture
+def built_tview(fresh_database: str, tmp_path: Path) -> tuple[str, Path]:
+    from tests.conftest import create_supported_pg_tviews
+
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(TVIEW_TREE)
+    schema_file = tmp_path / "schema_tview.sql"
+    # The extension is the tree's too, or the diff would drop it.
+    schema_file.write_text("CREATE EXTENSION pg_tviews;\n" + TVIEW_TREE, encoding="utf-8")
+    return fresh_database, schema_file
+
+
+def test_a_pristine_tview_is_no_drift_and_no_change(built_tview: tuple[str, Path]) -> None:
+    assert _disagreement(*built_tview) == (set(), set(), set())
+
+
+@pytest.mark.parametrize(
+    ("mutation", "drift_type"),
+    [
+        pytest.param("DROP INDEX ix_tv_post_title", "missing_index", id="drop-tview-index"),
+        pytest.param("DROP INDEX ux_tv_post_title", "missing_index", id="drop-tview-unique-index"),
+        pytest.param(
+            "CREATE INDEX ix_tv_post_extra ON tv_post (id, title)",
+            "extra_index",
+            id="add-tview-index",
+        ),
+    ],
+)
+def test_drift_and_diff_agree_on_a_tview_s_indexes(
+    built_tview: tuple[str, Path], mutation: str, drift_type: str
+) -> None:
+    url, schema_file = built_tview
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(mutation)
+    drift_only, diff_only, reported = _disagreement(url, schema_file)
+    assert drift_type in reported, f"{mutation}: drift reported {reported}"
+    assert (drift_only, diff_only) == (set(), set()), mutation
+    reported, expected = _index_severities(url, schema_file)
+    assert reported == expected, mutation

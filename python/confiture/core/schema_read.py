@@ -148,12 +148,8 @@ class SchemaRead:
 
     @cached_property
     def warnings(self) -> list[BuildWarning]:
-        """Two definitions of one object, resolved the way the build resolves them (``DIFFER_402``),
-        and each index on a TVIEW, which the model does not hold yet (``DIFFER_407``)."""
-        return [
-            *duplicate_warnings(self.inventory, self.declared.collapsed),
-            *tview_index_warnings(self.inventory),
-        ]
+        """Two definitions of one object, resolved the way the build resolves them (``DIFFER_402``)."""
+        return duplicate_warnings(self.inventory, self.declared.collapsed)
 
     @cached_property
     def dangling_indexes(self) -> dict[ObjectRef, tuple[Index, ...]]:
@@ -263,32 +259,6 @@ _DUPLICATE_KINDS: dict[str, str] = {"table": "Table", "type": "Type", "sequence"
 def _structural(obj: SchemaObject) -> bool:
     """A table, an enum or a sequence — what the model holds and is compared structurally."""
     return obj.kind in ("table", "sequence") or (obj.kind == "type" and obj.enum_values is not None)
-
-
-def tview_index_warnings(inventory: Inventory) -> list[BuildWarning]:
-    """Say so for each index the tree writes on a TVIEW it declares (``DIFFER_407``).
-
-    PostgreSQL builds it and pg_tviews keeps it across a rebuild, but the model
-    holds no TVIEW index, so neither ``migrate diff`` nor drift sees one: said
-    here rather than dropped in silence. One written before its TVIEW is a
-    dangling index (:attr:`SchemaRead.dangling_indexes`), which the comparison
-    reports.
-    """
-    found = [
-        (index, obj.index_sites.get(index, (None, None))[0])
-        for obj in inventory.objects
-        if obj.kind == "tview"
-        for index in obj.indexes
-    ]
-    return [
-        BuildWarning.of(
-            "DIFFER_407",
-            file=file,
-            index=index.name or ", ".join(index.columns),
-            tview=index.table.qualified,
-        )
-        for index, file in found
-    ]
 
 
 def duplicate_warnings(

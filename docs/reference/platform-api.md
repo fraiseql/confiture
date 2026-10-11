@@ -503,7 +503,7 @@ constraint, and every one a server before 18 holds, is enforced.
 class Index
 ```
 
-An index on one table or materialized view.
+An index on one table, materialized view or TVIEW.
 
 `columns` holds each key as written — a column name or a rendered
 expression. `method` is the access method; PostgreSQL's grammar fills in
@@ -671,6 +671,13 @@ tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
 the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
 call's `options` alone, `()` pinning none, sorted by table.
 
+`indexes` are the TVIEW's own, compared as a table's are: every index a tree
+writes on it, or, read from a database, every index on its table but those
+pg_tviews created (`tviews.registry.managed_indexes`) and those a constraint
+uses, pg_tviews' rule; `None` where they were not read. `managed_indexes`
+are pg_tviews' own, read from the database alone and never compared: a tree
+that writes one of them exactly writes what pg_tviews adopts as its own.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
@@ -682,6 +689,8 @@ call's `options` alone, `()` pinning none, sorted by table.
 | `time_refresh` | `str \| None` | `None` |
 | `function_reads` | `tuple[FunctionRead, ...] \| None` | `None` |
 | `uncascaded_tables` | `tuple[UncascadedTable, ...] \| None` | `None` |
+| `indexes` | `tuple[Index, ...] \| None` | `()` |
+| `managed_indexes` | `tuple[Index, ...]` | `()` |
 
 ### `FunctionRead`
 
@@ -777,7 +786,7 @@ to and closed here; a connection is the caller's.
 ### `MINIMUM_PG_TVIEWS`
 
 ```python
-MINIMUM_PG_TVIEWS = '0.1.0-beta.26'
+MINIMUM_PG_TVIEWS = '0.1.0-beta.27'
 ```
 
 ## What a writer may supply
@@ -1553,7 +1562,7 @@ class IndexAdded(_OnIndexed)
 An index only the new side holds on a relation both hold, or on one neither declares.
 
 `relation_kind` is `"matview"` for an index on a materialized view both
-sides hold. `table_declared` is false for an index on a table neither tree
+sides hold, `"tview"` for one on a TVIEW both hold. `table_declared` is false for an index on a table neither tree
 declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
@@ -1572,7 +1581,7 @@ class IndexDropped(_OnIndexed)
 An index only the old side holds on a relation both hold, or on one neither declares.
 
 `relation_kind` is `"matview"` for an index on a materialized view both
-sides hold. `table_declared` is false for an index on a table neither tree
+sides hold, `"tview"` for one on a TVIEW both hold. `table_declared` is false for an index on a table neither tree
 declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
@@ -1782,8 +1791,8 @@ class ObjectAdded(_ObjectChange)
 
 An object only the new tree defines.
 
-`indexes` are the ones a materialized view is created with, as a table's
-travel on `TableAdded`; `()` for every other kind.
+`indexes` are the ones a materialized view or a TVIEW is created with, as a
+table's travel on `TableAdded`; `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
@@ -1799,8 +1808,8 @@ class ObjectDropped(_ObjectChange)
 
 An object only the old tree defines.
 
-`indexes` are the ones a materialized view held, which its down creates
-again with it; `()` for every other kind.
+`indexes` are the ones a materialized view or a TVIEW held, which its down
+creates again with it; `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|

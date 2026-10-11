@@ -166,3 +166,62 @@ def test_drift_meets_a_domain_redefined_only_as_its_tier_reads_it() -> None:
         changes = SchemaDiffer().compare_sides(database, Side.of(after, held=True), policy)
         replaced = {c.ref.kind for c in changes.changes if isinstance(c, ObjectReplaced)}
         assert replaced == redefined, policy.name
+
+
+def test_tview_index_changes_are_rendered() -> None:
+    """An index change on a TVIEW both models hold is a finding on that TVIEW."""
+    from dataclasses import replace
+
+    from confiture.core.drift import DriftReport, DriftSeverity, _Findings
+    from confiture.core.schema_change import IndexAdded, IndexDropped
+    from confiture.core.schema_model import ref_for
+    from confiture.core.schema_read import read_text
+
+    tview = "CREATE TABLE t (id int);\nCREATE TABLE tv_t AS SELECT id FROM t;\n"
+    expected = read_text(tview + "CREATE UNIQUE INDEX ux_tv_t ON tv_t (id);\n").catalogued
+    actual = read_text(tview + "CREATE INDEX ix_tv_t ON tv_t (id);\n").catalogued
+    actual = replace(actual, source="catalog")
+    ref = ref_for("tview", None, "tv_t")
+    (missing,) = expected.tviews[ref].indexes or ()
+    (extra,) = actual.tviews[ref].indexes or ()
+    report = DriftReport(database_name="db", expected_schema_source="tree")
+    _Findings(expected, actual, DriftSeverity.WARNING).render(
+        [
+            IndexAdded(missing.table, missing, relation_kind="tview"),
+            IndexDropped(extra.table, extra, relation_kind="tview"),
+        ],
+        report,
+        column_order=False,
+    )
+    found = {(i.drift_type, i.severity, i.object_name) for i in report.drift_items}
+    assert found == {
+        (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL, "public.tv_t.ux_tv_t"),
+        (DriftType.EXTRA_INDEX, DriftSeverity.INFO, "public.tv_t.ix_tv_t"),
+    }
+    assert report.indexes_checked == 2
+
+
+def test_tview_indexes_not_read_are_no_finding() -> None:
+    """A side whose TVIEW indexes were not read says nothing about them."""
+    from dataclasses import replace
+
+    from confiture.core.drift import DriftReport, DriftSeverity, _Findings
+    from confiture.core.schema_change import IndexAdded
+    from confiture.core.schema_model import ref_for
+    from confiture.core.schema_read import read_text
+
+    tview = "CREATE TABLE t (id int);\nCREATE TABLE tv_t AS SELECT id FROM t;\n"
+    expected = read_text(tview + "CREATE UNIQUE INDEX ux_tv_t ON tv_t (id);\n").catalogued
+    ref = ref_for("tview", None, "tv_t")
+    actual = read_text(tview).catalogued
+    actual = replace(
+        actual,
+        source="catalog",
+        tviews={ref: replace(actual.tviews[ref], indexes=None)},
+    )
+    (missing,) = expected.tviews[ref].indexes or ()
+    report = DriftReport(database_name="db", expected_schema_source="tree")
+    _Findings(expected, actual, DriftSeverity.WARNING).render(
+        [IndexAdded(missing.table, missing, relation_kind="tview")], report, column_order=False
+    )
+    assert report.drift_items == []

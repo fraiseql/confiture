@@ -28,6 +28,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the comparison's own policy, for a reader that asks about the indexes rather than the
   recreate. It is not a change of the diff: `migrate diff`, its SQL, order, tiers and wire are
   unchanged.
+- **A TVIEW's indexes are compared, carried and drift-checked like a table's.** An index the
+  tree writes on a pg_tviews TVIEW is the TVIEW's (`TView.indexes`): `migrate diff` writes an
+  index added, dropped or changed on one as `CREATE/DROP INDEX CONCURRENTLY` (the change's wire
+  carries `details.relation_kind: "tview"`), a TVIEW added is created with its indexes after
+  `pg_tviews_create_or_replace()` and a TVIEW dropped gets them back in its down. Around a
+  redefinition every index drop runs before `pg_tviews_create_or_replace()` and every add after
+  it — the replace may add the column the index names, and pg_tviews refuses to rebuild over an
+  INVALID index — and the down undoes it in reverse. Drift reports `missing_index` (critical
+  when unique, valid or not) and `extra_index` on a TVIEW, the kinds and severities a table's
+  get. Read from a database, a TVIEW's indexes are the user's: pg_tviews' own, which its
+  registry names (`tviews.registry.managed_indexes`, `TView.managed_indexes`), and those a
+  constraint uses are never compared and never `extra_index`. `--require-migration` notices an
+  index edit on a TVIEW, and the baseline detector counts a TVIEW's indexes.
+- **`DIFFER_410`** (error, exit 5, from `migrate diff --from db` and `confiture drift`): the tree
+  writes an index under the name of one pg_tviews created on that TVIEW, and it is another
+  index. pg_tviews skipped the tree's `CREATE INDEX IF NOT EXISTS`, so the database does not
+  hold it; rename the index. An index that is exactly pg_tviews' own is adopted by pg_tviews,
+  and confiture takes it as pg_tviews': no change, no drift.
+
+### Changed
+
+- **⚠️ confiture requires pg_tviews 0.1.0-beta.27**, whose registry publishes
+  `managed_indexes` (fraiseql/pg_tviews#219); `tviews.contract_version()` stays 1. The column
+  is the gate, not the version a build reports. On pg_tviews 0.1.0-beta.26, `migrate up` of a
+  migration that creates or drops a TVIEW, `migrate preflight --against`, the seam's
+  `require_supported_pg_tviews_on` (a deploy tool's doctor check), `confiture drift`,
+  `migrate diff --from db`, `schema dump-model` and `introspect` refuse with `CONFIG_014`
+  (exit 5). Upgrade the extension **out of band, before the deploy**
+  (`ALTER EXTENSION pg_tviews UPDATE`): a migration that upgrades it beside a TVIEW migration
+  is refused with the rest, since the check runs before anything is applied. pg_tviews
+  0.1.0-beta.27 also revokes `EXECUTE` from `PUBLIC` on its bulk functions and has per-TVIEW
+  functions require ownership; confiture calls none of them.
+- The diff wire's `details.relation_kind` takes `tview` beside `matview`; the schema model's
+  `TView` gains `indexes` and `managed_indexes` (a model written before reads as holding none).
+
+### Removed
+
+- **⚠️ `DIFFER_407` is retired** ("an index on a TVIEW is not compared", a warning, exit 0,
+  since 1.35.0). A TVIEW's indexes are compared now, so nothing emits it; its number is never
+  reused (`confiture.error_codes.RETIRED_CODES`). A consumer matching `DIFFER_407` in
+  `warnings[]` sees an index change instead.
 
 ### Fixed
 

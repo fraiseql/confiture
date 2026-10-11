@@ -417,3 +417,32 @@ def test_a_file_with_a_matview_recreate_and_a_paired_matview_index_runs_in_autoc
         ("IndexStmt", "ix_a", False),
     ]
     assert _detect_transactional(up) is False
+
+
+def test_a_file_with_a_tview_replace_and_its_index_pair_runs_in_autocommit(tmp_path):
+    """The index pair straddles ``pg_tviews_create_or_replace()``: the drop before, the add
+    after, ``CONCURRENTLY``; the down drops the new one, replaces back, re-creates the old."""
+    import pglast
+
+    from confiture.core.differ import SchemaDiffer
+    from confiture.models.sql_file_migration import _detect_transactional
+
+    base = "CREATE TABLE t (id int, n int);\n"
+    old = base + "CREATE TABLE tv_a AS SELECT id FROM t;\nCREATE INDEX ix_tv_a ON tv_a (id);\n"
+    new = base + "CREATE TABLE tv_a AS SELECT id, n FROM t;\nCREATE INDEX ix_tv_a ON tv_a (n);\n"
+    up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+        SchemaDiffer().compare(old, new), name="tviews", version="20260101000000"
+    )
+    down = up.with_name(up.name.replace(".up.sql", ".down.sql"))
+
+    def shapes(path):
+        return [
+            (type(s).__name__, getattr(s, "concurrent", None))
+            for s in (raw.stmt for raw in pglast.parse_sql(path.read_text()))
+        ]
+
+    assert shapes(up) == [("DropStmt", True), ("SelectStmt", None), ("IndexStmt", True)]
+    assert shapes(down) == [("DropStmt", True), ("SelectStmt", None), ("IndexStmt", True)]
+    assert "(n)" in up.read_text().split("pg_tviews_create_or_replace")[1]
+    assert "(id)" in down.read_text().split("pg_tviews_create_or_replace")[1]
+    assert _detect_transactional(up) is False

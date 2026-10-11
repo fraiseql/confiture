@@ -16,6 +16,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import create_supported_pg_tviews
 
 from confiture.core import sql_lexer
 
@@ -43,6 +44,25 @@ NEEDS_SERVER: dict[str, tuple[int, str]] = {
 }
 
 
+#: A pair whose trees create pg_tviews TVIEWs, and why: applied only on a server
+#: carrying a pg_tviews confiture reads (the ``pg-tviews`` CI leg), skipped elsewhere.
+NEEDS_PG_TVIEWS: dict[str, str] = {
+    "tview-indexes": "its TVIEWs are created by pg_tviews_create_or_replace()",
+}
+
+
+def _prepared(conn: psycopg.Connection, name: str) -> None:
+    """*conn*'s database ready for the golden *name*: pg_tviews where it needs it."""
+    pair = name.removesuffix(".old").removesuffix(".new")
+    if pair not in NEEDS_PG_TVIEWS:
+        return
+    if not conn.execute(
+        "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+    ).fetchone():
+        pytest.skip(f"{pair}: {NEEDS_PG_TVIEWS[pair]}, and this server has no pg_tviews")
+    create_supported_pg_tviews(conn)
+
+
 def _apply(conn: psycopg.Connection, path: Path) -> None:
     for statement in sql_lexer.split_statements(path.read_text()):
         if sql_lexer.code_text(statement).text.strip():
@@ -61,6 +81,7 @@ def _relations(conn: psycopg.Connection) -> set[tuple[str, str, str]]:
 @pytest.mark.parametrize("tree", TREES)
 def test_the_tree_is_created_undone_and_created_again(fresh_database: str, tree: str) -> None:
     with psycopg.connect(fresh_database, autocommit=True) as conn:
+        _prepared(conn, tree)
         _apply(conn, GOLDENS / f"{tree}.up.sql")
         created = _relations(conn)
         _apply(conn, GOLDENS / f"{tree}.down.sql")
@@ -71,6 +92,7 @@ def test_the_tree_is_created_undone_and_created_again(fresh_database: str, tree:
 @pytest.mark.parametrize("pair", PAIRS)
 def test_the_pair_applies_on_its_before(fresh_database: str, pair: str) -> None:
     with psycopg.connect(fresh_database, autocommit=True) as conn:
+        _prepared(conn, pair)
         _apply(conn, GOLDENS / f"{pair}.old.up.sql")
         _apply(conn, GOLDENS / f"{pair}.up.sql")
         if pair in UNDONE or _server_major(conn) < NEEDS_SERVER.get(pair, (0, ""))[0]:
@@ -90,3 +112,4 @@ def _server_major(conn: psycopg.Connection) -> int:
 def test_every_undone_entry_is_a_pair() -> None:
     assert set(UNDONE) <= set(PAIRS)
     assert set(NEEDS_SERVER) <= set(PAIRS)
+    assert set(NEEDS_PG_TVIEWS) <= set(PAIRS)

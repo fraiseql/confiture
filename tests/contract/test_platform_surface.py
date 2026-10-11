@@ -289,6 +289,8 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("time_refresh", "str | None"),
         ("function_reads", "tuple[FunctionRead, ...] | None"),
         ("uncascaded_tables", "tuple[UncascadedTable, ...] | None"),
+        ("indexes", "tuple[Index, ...] | None"),
+        ("managed_indexes", "tuple[Index, ...]"),
     ),
     "FunctionRead": (("function", "str"), ("tables", "tuple[str, ...]")),
     "UncascadedTable": (("table", "str"), ("policy", "str")),

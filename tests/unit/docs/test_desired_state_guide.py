@@ -30,7 +30,7 @@ def test_the_pipeline_composes_through_include_dirs() -> None:
 def test_the_guide_names_every_code_the_pipeline_can_raise() -> None:
     text = GUIDE.read_text()
 
-    for code in ("DIFFER_405", "DIFFER_406", "DIFFER_407"):
+    for code in ("DIFFER_405", "DIFFER_406", "DIFFER_410"):
         assert code in text, code
 
 

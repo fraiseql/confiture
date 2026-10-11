@@ -163,8 +163,9 @@ MODELLED_ELSEWHERE: dict[str, str] = {
     ),
     "CreateSeqStmt": "the schema model's sequences, keyed by ObjectRef",
     "IndexStmt": (
-        "the schema model's Table.indexes and a materialized view's View.indexes, "
-        "keyed by bare name within the relation, itself keyed by ObjectRef"
+        "the schema model's Table.indexes, a materialized view's View.indexes and a "
+        "TVIEW's TView.indexes, keyed by bare name within the relation, itself keyed "
+        "by ObjectRef"
     ),
 }
 
