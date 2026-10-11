@@ -3,15 +3,13 @@
 # pg_tviews is in no distribution, so it is built here from a pinned ref with the
 # pgrx version it pins (Cargo.toml: pgrx = "=0.17.0") against PGDG's PostgreSQL 18,
 # and the tree `cargo pgrx package` writes is copied onto the official image of the
-# same Debian release. The ref carries the registry's `managed_indexes`
-# (fraiseql/pg_tviews#219), beside `time_refresh` and `function_reads`
-# (fraiseql/pg_tviews#193), the `uncascaded_policy` option and the backing view in
-# `tviews`, which this tree's TVIEW suites exercise. Fetched by SHA so a build
-# reproduces and the layer cache never serves another tree under the same ref.
-#
-# NOT FOR MERGE: the ref is the head of fraiseql/pg_tviews#221, unreleased. Before
-# merge it moves to the commit of the signed v0.1.0-beta.27 tag
-# (`git rev-parse v0.1.0-beta.27^{commit}`), and this note names that release.
+# same Debian release. The ref is the commit of the signed v0.1.0-beta.27 tag
+# (`git rev-parse v0.1.0-beta.27^{commit}`), the release confiture requires. It
+# carries the registry's `managed_indexes` (fraiseql/pg_tviews#219), beside
+# `time_refresh` and `function_reads` (fraiseql/pg_tviews#193), the
+# `uncascaded_policy` option and the backing view in `tviews`, which this tree's
+# TVIEW suites exercise. Fetched by SHA so a build reproduces and the layer cache
+# never serves another tree under the same ref.
 FROM rust:1.91.1-slim-bookworm AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends wget gnupg ca-certificates lsb-release git \
@@ -22,7 +20,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked cargo-pgrx --version 0.17.0
 RUN cargo pgrx init --pg18 /usr/lib/postgresql/18/bin/pg_config
-ARG PG_TVIEWS_REF=76186b5b287c027b5c9660e6eddb80dd26ee865c
+ARG PG_TVIEWS_REF=4820bfb7505d8c0614d5151dfbc2d1a0f2ab0596
 WORKDIR /src
 RUN git init -q \
  && git fetch -q --depth 1 https://github.com/fraiseql/pg_tviews "$PG_TVIEWS_REF" \
