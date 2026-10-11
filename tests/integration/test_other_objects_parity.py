@@ -16,6 +16,8 @@ import psycopg
 import pytest
 
 from confiture.core import live_catalog
+from confiture.core.ddl_objects import shape
+from confiture.core.schema_model import DEFINED_OTHER_KINDS
 from confiture.core.schema_read import read_text
 
 pytestmark = pytest.mark.integration
@@ -29,6 +31,16 @@ CREATE TYPE app.span AS RANGE (subtype = int4);
 CREATE TABLE app.t (id integer, label text);
 CREATE POLICY own_rows ON app.t USING (true);
 CREATE RULE no_delete AS ON DELETE TO app.t DO INSTEAD NOTHING;
+CREATE DOMAIN app.label AS varchar(40) COLLATE "C" DEFAULT 'none' NOT NULL
+    CONSTRAINT label_short CHECK (length(VALUE) < 30) CHECK (VALUE <> '');
+CREATE DOMAIN app.counts AS int4[];
+CREATE TYPE app.tagged AS (tag text COLLATE "C", n bigint);
+CREATE TYPE app.floatrange AS RANGE (subtype = float8, subtype_diff = float8mi);
+CREATE TYPE app.textspan AS RANGE (subtype = text, collation = "C");
+CREATE POLICY writers ON app.t AS RESTRICTIVE FOR UPDATE TO PUBLIC
+    USING (id > 0) WITH CHECK (label IN ('a', 'b'));
+CREATE RULE log_insert AS ON INSERT TO app.t WHERE NEW.id > 0
+    DO ALSO UPDATE app.t SET label = 'seen' WHERE id = NEW.id;
 CREATE STATISTICS app.t_stats ON id, label FROM app.t;
 CREATE FUNCTION app.fn_ddl() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN END $$;
 CREATE EVENT TRIGGER on_ddl ON ddl_command_end EXECUTE FUNCTION app.fn_ddl();
@@ -62,7 +74,18 @@ def test_a_database_built_from_a_tree_names_the_same_objects(
 
     assert named(live) == named(parsed)
     assert live.coverage.depth("other_objects") == "existence"
-    assert all(obj.definition is None for obj in live.other_objects.values())
+    # A domain, a type, a policy and a rule are read whole, and read back as the
+    # tree wrote them once PostgreSQL's analysis is set aside (#708): no false change.
+    defined = {ref for ref, obj in live.other_objects.items() if obj.definition is not None}
+    assert {ref.kind for ref in defined} == DEFINED_OTHER_KINDS
+    assert all(
+        obj.definition is None for ref, obj in live.other_objects.items() if ref not in defined
+    )
+    assert {
+        ref.name: shape(obj.definition)
+        for ref, obj in live.other_objects.items()
+        if obj.definition is not None
+    } == {ref.name: shape(parsed.other_objects[ref].definition) for ref in defined}
 
 
 def test_without_asking_the_section_is_not_read(fresh_database: str) -> None:

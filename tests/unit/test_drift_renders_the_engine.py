@@ -110,12 +110,14 @@ def test_every_redefinition_drift_does_not_render_says_why() -> None:
     assert all(why.strip() for why in UNRENDERED_REDEFINITIONS.values())
 
 
-def test_drift_meets_no_other_redefinition() -> None:
-    """Against a database, a trigger is compared by existence and other objects as read.
+def test_drift_meets_a_domain_redefined_only_as_its_tier_reads_it() -> None:
+    """Against a database, a trigger is compared by existence and a domain by what it is.
 
     Drift's policies carry parity rules, under which a trigger whose statement
-    differs is the same trigger, and a database reads its other objects at the
-    ``existence`` depth (``live_catalog.read``), so none is ever redefined.
+    differs is the same trigger. A domain is read whole (#708): a CHECK whose text
+    alone changed is the same domain when expressions compare by presence
+    (``CATALOGUED``) and another one when both sides are PostgreSQL's reading
+    (``MATERIALISED``).
     """
     from dataclasses import replace
 
@@ -145,6 +147,7 @@ def test_drift_meets_no_other_redefinition() -> None:
     database = Side(
         replace(before.catalogued, source="catalog", coverage=coverage), before.declared.objects
     )
-    for policy in (CATALOGUED, MATERIALISED):
+    for policy, redefined in ((CATALOGUED, set()), (MATERIALISED, {"domain"})):
         changes = SchemaDiffer().compare_sides(database, Side.of(after, held=True), policy)
-        assert not [c for c in changes.changes if isinstance(c, ObjectReplaced)], policy.name
+        replaced = {c.ref.kind for c in changes.changes if isinstance(c, ObjectReplaced)}
+        assert replaced == redefined, policy.name

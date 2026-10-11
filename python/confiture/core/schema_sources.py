@@ -32,7 +32,13 @@ from confiture.core.live_catalog import (
 )
 from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import TVIEW_OPTIONS, ObjectRef, SchemaModel, ref_for
+from confiture.core.schema_model import (
+    DEFINED_OTHER_KINDS,
+    TVIEW_OPTIONS,
+    ObjectRef,
+    SchemaModel,
+    ref_for,
+)
 from confiture.core.schema_read import SchemaRead, Segment, read_segments
 from confiture.core.server_constants import server_constants
 from confiture.exceptions import SchemaError
@@ -289,7 +295,10 @@ def _with_the_trees(side: Side, tree: Side, default_schema: str) -> Side:
 
     A statement the catalog wrote is kept: it is PostgreSQL's reading. An object
     the catalog holds and wrote none for takes the tree's statements, and a TVIEW
-    the tree's pinned options. *tree*'s notes are carried as they are.
+    the tree's pinned options. A domain, a type, a policy and a rule take the
+    tree's statements too: they are compared by the model's definitions, which
+    are PostgreSQL's here, and the statement is what a migration carries, spelled
+    as the author spelled it (#708). *tree*'s notes are carried as they are.
     """
 
     def trees[V](held: Mapping[ObjectRef, V], ref: ObjectRef) -> V | None:
@@ -304,6 +313,11 @@ def _with_the_trees(side: Side, tree: Side, default_schema: str) -> Side:
         for ref in held_by_definition(model) - side.objects.keys()
         if (statements := trees(tree.objects, ref))
     }
+    authored = {
+        ref: statements
+        for ref in side.objects
+        if ref.kind in DEFINED_OTHER_KINDS and (statements := trees(tree.objects, ref))
+    }
     tviews = {
         ref: replace(view, **{key: getattr(declared, key) for key in TVIEW_OPTIONS})
         if (declared := trees(tree.model.tviews, ref)) is not None
@@ -313,7 +327,7 @@ def _with_the_trees(side: Side, tree: Side, default_schema: str) -> Side:
     return replace(
         side,
         model=replace(model, tviews=tviews),
-        objects={**side.objects, **unstated},
+        objects={**side.objects, **unstated, **authored},
         warnings=tree.warnings,
         quoted=tree.quoted,
         dangling=tree.dangling,
