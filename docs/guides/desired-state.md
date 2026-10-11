@@ -11,7 +11,7 @@ An artifact is a **fragment** of the desired state, not the whole of it: FraiseQ
 part only it knows — the indexes its queries need, on `tv_<type>` relations the project authors
 itself. A desired state is whole, so the artifact is composed into the project's tree rather than
 diffed alone. Emit it into a committed directory and list that directory in the environment's
-`include_dirs`, after the files that declare its tables:
+`include_dirs`, at a higher `order` than the files that declare its tables:
 
 ```yaml
 # db/environments/local.yaml
@@ -30,7 +30,8 @@ confiture migrate up
 ```
 
 `order` is required: every entry defaults to `0`, and inside one order block files sort by path,
-so `db/fraiseql/…` would build before `db/schema/…` and its indexes before their tables.
+so `db/fraiseql/…` would build before `db/schema/…` and its indexes before their tables. Listing
+the entry last changes nothing; only `order` sequences entries.
 `--to-env local` reads exactly what `confiture build --env local` selects — `order`, `include` and
 `exclude` honoured — which is also the tree a deploy builds and checks for drift. A hand-written
 copy of a generated index is a second definition (`confiture lint` reports it as `build_005`).

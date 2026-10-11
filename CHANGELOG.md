@@ -82,6 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`DIFFER_406`'s remedy names `order`** (#721). It said to compose the fragment into
+  `include_dirs` "after the file that creates it", but where an entry is listed sequences
+  nothing: entries build by `order`, then by path, so a fragment listed after its tables still
+  built before them, and the same `DIFFER_406` came back. The remedy now says to give the
+  fragment's entry a higher `order` than the entry that creates the relation; the
+  desired-state guide says the same.
 - **⚠️ `confiture lint`'s `acl_001` reads `--migrations-dir`** (#717). It read
   `db/migrations` under the project whatever the flag said, while `replica_001`, `own_001` and
   `own_002` read the directory it named: a project whose migrations live elsewhere had every

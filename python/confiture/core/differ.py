@@ -354,9 +354,10 @@ def _refuse(index: Index, reason: str) -> NoReturn:
         f"{comment_text(index.table.qualified)}: {reason}",
         error_code="DIFFER_406",
         resolution_hint=(
-            "Declare the relation in the desired schema, before the index — compose the "
-            "fragment into the environment's include_dirs, after the file that creates it — "
-            "or remove the index"
+            "Declare the relation in the desired schema, before the index — give the "
+            "fragment's include_dirs entry a higher `order` than the entry that creates the "
+            "relation (entries build by `order`, then by path; where an entry is listed "
+            "sequences nothing) — or remove the index"
         ),
     )
 
