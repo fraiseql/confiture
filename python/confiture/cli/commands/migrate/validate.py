@@ -296,7 +296,9 @@ ScratchUrlOpt = Annotated[
         help="Writable PostgreSQL server on which to build the expected scratch database "
         "for --check-body-views / --check-body-replay (default: the live server from "
         "the config). Required when using --ssh, since the scratch DB cannot be built "
-        "on the remote read-only live server.",
+        "on the remote read-only live server. --check-live-drift builds the tree there "
+        "and compares at the materialised tier (default: the environment's scratch_url; "
+        "without one, it compares structurally).",
     ),
 ]
 CheckAclsOpt = Annotated[

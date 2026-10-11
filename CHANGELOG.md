@@ -213,6 +213,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`definition=None`, as a hand-built model or `live_catalog.views()` holds it) against one with
   a query was a redefinition. It is now the same view, as the rule says. confiture's own live
   read always fetches the query, so drift and `migrate diff` were not affected.
+- **`migrate validate --scratch-url` reaches `--check-live-drift`** (#723). The flag reached
+  `--check-body-views` and `--check-body-replay` only; `--check-live-drift` read the
+  environment's `scratch_url` alone, so a gate passing the flag stayed at the structural tier
+  without a word, where `confiture drift --scratch-url` compared at the materialised one. The
+  flag now wins over the environment's key, as it does for `confiture drift`.
 
 ## [1.35.0] - 2026-10-10
 

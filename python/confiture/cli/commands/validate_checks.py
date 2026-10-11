@@ -488,6 +488,7 @@ def _run_live_drift(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
         ctx,
         ignore_column_order=opts.ignore_column_order,
         extra_objects=opts.extra_objects,
+        scratch_url=opts.scratch_url,
     )
     payload = render_live_drift(report, json_mode=opts.json_mode)
     return CheckOutcome("live_drift", passed=not report.has_critical_drift, payload=payload)
