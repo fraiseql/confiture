@@ -234,7 +234,9 @@ class GitRepository:
                 error_code="GIT_003",
             )
 
-    def get_changed_files(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
+    def get_changed_files(
+        self, base_ref: str, target_ref: str = "HEAD", *, diff_filter: str | None = None
+    ) -> list[Path]:
         """Get list of files changed between two refs (three-dot).
 
         Args:
@@ -262,9 +264,13 @@ class GitRepository:
             db/schema/users.sql
             db/migrations/001_add_users.up.sql
         """
-        return self._diff_name_only(f"{base_ref}...{target_ref}", base_ref, target_ref)
+        return self._diff_name_only(
+            f"{base_ref}...{target_ref}", base_ref, target_ref, diff_filter=diff_filter
+        )
 
-    def get_changed_files_two_dot(self, base_ref: str, target_ref: str = "HEAD") -> list[Path]:
+    def get_changed_files_two_dot(
+        self, base_ref: str, target_ref: str = "HEAD", *, diff_filter: str | None = None
+    ) -> list[Path]:
         """Get list of files changed between two refs (two-dot).
 
         Two-dot ``base..target`` asks "what does target have that base does
@@ -284,10 +290,18 @@ class GitRepository:
             NotAGitRepositoryError: If not in a git repository
             GitError: If git command fails
         """
-        return self._diff_name_only(f"{base_ref}..{target_ref}", base_ref, target_ref)
+        return self._diff_name_only(
+            f"{base_ref}..{target_ref}", base_ref, target_ref, diff_filter=diff_filter
+        )
 
-    def _diff_name_only(self, spec: str, base_ref: str, target_ref: str) -> list[Path]:
-        """Run ``git diff --name-only <spec>`` and classify failures."""
+    def _diff_name_only(
+        self, spec: str, base_ref: str, target_ref: str, *, diff_filter: str | None = None
+    ) -> list[Path]:
+        """Run ``git diff --name-only <spec>`` and classify failures.
+
+        *diff_filter* is git's ``--diff-filter`` (``"d"``: every change but a deletion,
+        so each path is present at the target).
+        """
         if not self.is_git_repo():
             raise NotAGitRepositoryError(f"Not a git repository: {self.repo_path}")
 
@@ -298,7 +312,7 @@ class GitRepository:
         # Get list of changed files (both added and modified)
         try:
             result = subprocess.run(
-                ["git", "diff", "--name-only", spec],
+                ["git", "diff", "--name-only", *_filter_args(diff_filter), spec],
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -494,7 +508,7 @@ class GitRepository:
         """
         validate_ref(ref)
         root = self.get_repo_root().resolve()
-        specs = None if paths is None else [_root_relative(path, root) for path in paths]
+        specs = None if paths is None else [root_relative(path, root) for path in paths]
         reader = _TreeReader(root, ref, time.monotonic() + _TREE_TIMEOUT)
         tree = reader.git("rev-parse", "--verify", f"{ref}^{{tree}}").decode().strip()
         listing = (
@@ -557,8 +571,10 @@ class GitRepository:
 
         return result.stdout.strip()
 
-    def get_staged_files(self) -> list[Path]:
+    def get_staged_files(self, *, diff_filter: str | None = None) -> list[Path]:
         """Get list of currently staged files.
+
+        *diff_filter* is git's ``--diff-filter``, as :meth:`get_changed_files` takes it.
 
         Returns:
             List of file paths (relative to repo root) that are staged
@@ -579,7 +595,7 @@ class GitRepository:
 
         try:
             result = subprocess.run(
-                ["git", "diff", "--cached", "--name-only"],
+                ["git", "diff", "--cached", "--name-only", *_filter_args(diff_filter)],
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -669,8 +685,17 @@ def _refused(path: str, ref: str, why: str, hint: str | None = None) -> GitError
     )
 
 
-def _root_relative(path: Path, root: Path) -> str:
-    """*path* as a pathspec from the repository root, or a refusal when it is outside it."""
+def _filter_args(diff_filter: str | None) -> list[str]:
+    return [] if diff_filter is None else [f"--diff-filter={diff_filter}"]
+
+
+def root_relative(path: Path, root: Path) -> str:
+    """*path* as a pathspec from the repository root, or a refusal when it is outside it.
+
+    A relative *path* is the cwd's, as every directory a command is given is; git
+    names a changed file from the root (``git diff --name-only``), so a configured
+    directory is compared with it only as this.
+    """
     resolved = path.resolve()
     if not resolved.is_relative_to(root):
         raise GitError(

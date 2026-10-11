@@ -217,6 +217,9 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     )
 
     # Reason: CLI start-up: the ref reader is deferred with the git checks that use it
+    from confiture.core.git_accompaniment import MigrationAccompanimentChecker
+
+    # Reason: CLI start-up: the ref reader is deferred with the git checks that use it
     from confiture.core.git_schema import GitSchemaDiffer
 
     # NotAGitRepositoryError (GIT_002 → exit 7) propagates to fail().
@@ -275,7 +278,9 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
                 format_output=opts.format_output,
                 check_bodies=opts.require_migration_bodies,
                 two_dot=opts.staged,
-                differ=differ,
+                checker=MigrationAccompanimentChecker(
+                    opts.git_env, differ=differ, migrations_dir=opts.migrations_dir
+                ),
             ),
         )
         results["accompaniment"] = acc_result
@@ -297,7 +302,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
                     console=console,
                     format_output=opts.format_output,
                     grant_dir=_resolve_grant_dir(opts, ctx),
-                    migrations_dir=str(opts.migrations_dir),
+                    migrations_dir=opts.migrations_dir,
                 )
             # Reason: any failure inside a git-backed check is reported as GitError naming the check
             except Exception as e:
@@ -367,6 +372,7 @@ def _run_list_unmigrated_bodies(opts: ValidateOptions, ctx: ValidationContext) -
         target_ref="HEAD",
         console=console,
         format_output=opts.format_output,
+        migrations_dir=opts.migrations_dir,
     )
     payload = {"check": "unmigrated_bodies", **body_result} if opts.json_mode else None
     # Report-only by contract (#178): sizes the backlog, never fails.
