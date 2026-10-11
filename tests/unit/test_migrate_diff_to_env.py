@@ -1,7 +1,7 @@
 """``migrate diff --to-env``: the desired state is what ``confiture build --env`` selects (#679).
 
 A FraiseQL index fragment is composed into the environment's tree through
-``include_dirs``, after the file that declares its table; the diff then reads
+``include_dirs``, at a higher ``order`` than the file that declares its table; the diff then reads
 that tree in build order, ``order``, ``include`` and ``exclude`` honoured — never
 a second walk of its own.
 """
@@ -77,6 +77,21 @@ def test_the_fragment_diffed_alone_is_refused(project: Path) -> None:
 
     assert result.exit_code == 5, result.output
     assert json.loads(result.stdout)["error"]["code"] == "DIFFER_406"
+
+
+def test_a_fragment_listed_after_its_table_but_at_the_same_order_names_order(
+    project: Path,
+) -> None:
+    """Listing an entry later sequences nothing (#721): the remedy names ``order``."""
+    (project / "db/environments/local.yaml").write_text(COMPOSED.replace("    order: 900\n", ""))
+
+    result = _diff("--from", "current.sql", "--to-env", "local")
+
+    assert result.exit_code == 5, result.output
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "DIFFER_406"
+    assert "higher `order`" in error["actionable"]
+    assert "after the file" not in error["actionable"]
 
 
 def test_an_excluded_file_is_not_read(project: Path) -> None:

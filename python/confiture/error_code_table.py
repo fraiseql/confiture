@@ -254,9 +254,10 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Declare the relation in the desired schema, before the index — compose the "
-            "fragment into the environment's include_dirs, after the file that creates it — "
-            "or remove the index"
+            "Declare the relation in the desired schema, before the index — give the "
+            "fragment's include_dirs entry a higher `order` than the entry that creates the "
+            "relation (entries build by `order`, then by path; where an entry is listed "
+            "sequences nothing) — or remove the index"
         ),
     },
     {
