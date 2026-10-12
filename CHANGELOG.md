@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.1] - 2026-10-12
+
+**`--scratch-url` compares a TVIEW tree as TVIEWs.** A tree that declared TVIEWs without
+creating pg_tviews itself was built on the scratch server as plain tables, and drift reported
+each TVIEW of a database built from that same tree as a critical `missing_table`. The scratch
+database now gets the extension, or the comparison is refused with `CONFIG_014`.
+
 ### Fixed
 
 - **`--scratch-url` builds a TVIEW tree with pg_tviews** (#730). The materialised tier builds
