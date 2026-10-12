@@ -104,6 +104,7 @@ class ExpectedSchemaDB:
         self._mode: str | None = None
         self._schema_sql: str | None = None
         self._search_path: str | None = None
+        self._pg_tviews = False
         self._base_sql: str | None = None
         self._replay: Replay | None = None
 
@@ -115,7 +116,11 @@ class ExpectedSchemaDB:
     # -- mode selection -------------------------------------------------- #
 
     def from_source(
-        self, *, schema_sql: str | None = None, search_path: str | None = None
+        self,
+        *,
+        schema_sql: str | None = None,
+        search_path: str | None = None,
+        pg_tviews: bool = False,
     ) -> ExpectedSchemaDB:
         """Build the scratch DB from the expected DDL.
 
@@ -126,10 +131,19 @@ class ExpectedSchemaDB:
             search_path: The schema an unqualified name lands in, ahead of
                 ``public``, as the DDL is applied and read back; PostgreSQL's
                 default when ``None``.
+            pg_tviews: Create pg_tviews in the scratch database before the DDL,
+                for DDL that declares TVIEWs and does not create the extension
+                itself: without it, each ``CREATE TABLE tv_x AS`` builds a plain
+                table (#730).
+
+        Raises (on entering the context):
+            ConfigurationError: ``CONFIG_014`` when *pg_tviews* is asked for and
+                the server does not offer the extension.
         """
         self._mode = _MODE_SOURCE
         self._schema_sql = schema_sql
         self._search_path = search_path
+        self._pg_tviews = pg_tviews
         return self
 
     def from_base_plus_migrations(
@@ -208,6 +222,8 @@ class ExpectedSchemaDB:
         assert self._td is not None and self._temp_url is not None  # set by __enter__
         if self._mode == _MODE_SOURCE:
             schema_sql = self._resolve_source_sql()
+            if self._pg_tviews:
+                self._create_pg_tviews()
             if self._search_path is not None:
                 self._set_search_path(self._search_path)
             self._td.apply_schema(self._temp_url, schema_sql)
@@ -215,6 +231,29 @@ class ExpectedSchemaDB:
             if self._base_sql:
                 self._td.apply_schema(self._temp_url, self._base_sql)
             self._replay_migrations()
+
+    def _create_pg_tviews(self) -> None:
+        """pg_tviews in the scratch database, or ``CONFIG_014`` where the server has none.
+
+        ``pg_available_extensions``, not ``pg_extension``: the database is new, and
+        what matters is whether the *server* has the files.
+        """
+        assert self._temp_url is not None
+        with psycopg.connect(self._temp_url, autocommit=True) as conn:
+            offered = conn.execute(
+                "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+            ).fetchone()
+            if offered is None:
+                raise ConfigurationError(
+                    "The scratch server does not offer pg_tviews, and the tree declares "
+                    "TVIEWs: built without it, each would be a plain table.",
+                    error_code="CONFIG_014",
+                    resolution_hint=(
+                        "Point --scratch-url (or scratch_url) at a server that has pg_tviews "
+                        "installed, the release the database you compare with runs"
+                    ),
+                )
+            conn.execute("CREATE EXTENSION pg_tviews")
 
     def _set_search_path(self, schema: str) -> None:
         """Every later session on the scratch database resolves a bare name in *schema* first."""

@@ -281,13 +281,22 @@ def materialised_side(
     """
     wanted = list(schemas) if schemas is not None else declared_schemas(read.model)
     search_path = None if default_schema == DEFAULT_SCHEMA else default_schema
-    with ExpectedSchemaDB(scratch_url).from_source(schema_sql=sql, search_path=search_path) as conn:
+    pg_tviews = bool(read.model.tviews) and not _creates_pg_tviews(read)
+    scratch = ExpectedSchemaDB(scratch_url).from_source(
+        schema_sql=sql, search_path=search_path, pg_tviews=pg_tviews
+    )
+    with scratch as conn:
         model = read_catalog(
             conn, schemas=wanted, routines=True, views=True, triggers=True, other_objects=True
         )
         model = _the_projects(model, read.model, None)
         objects = catalogued_objects(conn, model, wanted)
     return _with_the_trees(Side(model, objects), Side.of(read, held=True), default_schema)
+
+
+def _creates_pg_tviews(read: SchemaRead) -> bool:
+    """Whether the tree runs ``CREATE EXTENSION pg_tviews`` itself."""
+    return any(ref.kind == "extension" and ref.name == "pg_tviews" for ref in read.declared.objects)
 
 
 def _with_the_trees(side: Side, tree: Side, default_schema: str) -> Side:

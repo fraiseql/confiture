@@ -547,13 +547,18 @@ def test_squash_from_build_accepts_a_tree_with_a_tview(
 
 
 def _materialised_drift(
-    url: str, ddl: str, scratch_url: str, tmp_path
+    url: str,
+    ddl: str,
+    scratch_url: str,
+    tmp_path,
+    *,
+    extension: str = "CREATE EXTENSION IF NOT EXISTS pg_tviews;\n",
 ) -> list[tuple[str, str, str]]:
     """``confiture drift`` with a scratch server: the tree built there, read back, compared."""
     from confiture.core.drift import SchemaDriftDetector
 
     schema = tmp_path / "schema.sql"
-    schema.write_text(f"CREATE EXTENSION IF NOT EXISTS pg_tviews;\n{ddl}")
+    schema.write_text(f"{extension}{ddl}")
     with psycopg.connect(url) as conn:
         report = SchemaDriftDetector(conn, scratch_url=scratch_url).compare_with_schema_file(
             str(schema)
@@ -582,6 +587,27 @@ def test_a_materialised_pinned_option_changed_by_hand_is_drift(
     assert _materialised_drift(pinned_database, PINNED, test_db_url, tmp_path) == [
         ("tview_option_mismatch", "warning", "public.tv_post"),
     ]
+
+
+@pytest.mark.parametrize(
+    "extension",
+    ["", "CREATE EXTENSION pg_tviews;\n"],
+    ids=["tree-does-not-create-it", "tree-creates-it-plainly"],
+)
+def test_a_materialised_tree_is_built_with_pg_tviews_whoever_creates_it(
+    tview_database: str, test_db_url: str, tmp_path, extension: str
+) -> None:
+    """The scratch database gets pg_tviews unless the tree creates it itself (#730).
+
+    Built without it, every ``CREATE TABLE tv_x AS`` is a plain table, and drift
+    reported the TVIEW a database built from this very tree holds as missing.
+    """
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+
+    assert (
+        _materialised_drift(tview_database, TREE, test_db_url, tmp_path, extension=extension) == []
+    )
 
 
 def test_the_seam_accepts_a_supported_pg_tviews_by_url_or_connection(reads_database: str) -> None:
