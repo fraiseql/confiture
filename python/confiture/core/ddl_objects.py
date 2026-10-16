@@ -551,16 +551,18 @@ def _dollar_quoted(text: str) -> str:
 def _tview_create(ref: ObjectRef, tview: TView) -> str:
     """A TVIEW as a migration writes it: ``tviews.pg_tviews_create_or_replace(…)``.
 
-    pg_tviews' read contract 1: the call creates, replaces in place or rebuilds,
-    and answers ``unchanged`` when applied again, so the migration re-applies.
-    The name is the author's spelling; ``options`` holds what the tree pins
-    (:data:`~confiture.core.schema_model.TVIEW_OPTIONS`) and is left out when it
-    pins nothing.
+    pg_tviews' read contract 2: the call creates, replaces in place or rebuilds,
+    and answers ``unchanged`` when applied again, so the migration re-applies. The
+    options it passes are the whole declaration — one left out is at its default —
+    so ``options`` holds what the tree pins
+    (:data:`~confiture.core.schema_model.TVIEW_OPTIONS`) and every other key it
+    wrote (``TView.other_options``), and is left out when there are none.
     """
     arguments = [_literal(ref.qualified), _dollar_quoted(tview.definition or "")]
-    options = {
-        key: value for key in TVIEW_OPTIONS if (value := tview_option(tview, key)) is not None
-    }
+    options = dict(tview.other_options)
+    options.update(
+        (key, value) for key in TVIEW_OPTIONS if (value := tview_option(tview, key)) is not None
+    )
     if options:
         arguments.append(f"options => {_literal(json.dumps(options, sort_keys=True))}")
     return f"SELECT {TVIEWS_SCHEMA}.pg_tviews_create_or_replace({', '.join(arguments)})"

@@ -722,7 +722,7 @@
     },
     "TView": {
       "type": "object",
-      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `time_refresh` (`external`) and `function_reads` are what the TVIEW declares of the reads no write to a tracked table changes: the time, and the tables a non-immutable function reads (pg_tviews 0.1.0-beta.26). A tree pins them in a `pg_tviews_create_or_replace()` call's `options` alone; `function_reads` `[]` pins none. `uncascaded_tables` is each table's own `uncascaded_policy`, overriding the TVIEW's for a write to that table (pg_tviews 0.1.0-beta.26, the `uncascaded_tables` option, `tviews.registry.uncascaded_table_policies`): pinned the same way, `[]` pinning none. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before an option was modelled lacks its key and pins nothing. `indexes` are the TVIEW's own, compared as a table's are: every index a tree writes on it, or, read from a database, every index on its table but pg_tviews' own (`tviews.registry.managed_indexes`, pg_tviews 0.1.0-beta.27) and those a constraint uses; `null` where they were not read. `managed_indexes` are pg_tviews' own, read from a database alone and never compared. A TVIEW written before its indexes were modelled lacks both keys and holds none.",
+      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry.options` holds, every key set (pg_tviews read contract 2: a TVIEW is LOGGED unless it says otherwise). `time_refresh` (`external`) and `function_reads` are what the TVIEW declares of the reads no write to a tracked table changes: the time, and the tables a non-immutable function reads . A tree pins them in a `pg_tviews_create_or_replace()` call's `options` alone; `function_reads` `[]` pins none. `uncascaded_tables` is each table's own `uncascaded_policy`, overriding the TVIEW's for a write to that table (the `uncascaded_tables` option): pinned the same way, `[]` pinning none. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before an option was modelled lacks its key and pins nothing. `indexes` are the TVIEW's own, compared as a table's are: every index a tree writes on it, or, read from a database, every index on its table but pg_tviews' own (`tviews.registry.managed_indexes`, pg_tviews 0.1.0-beta.27) and those a constraint uses; `null` where they were not read. `managed_indexes` are pg_tviews' own, read from a database alone and never compared. A TVIEW written before its indexes were modelled lacks both keys and holds none. `other_options` are the `options` keys the model does not compare (`data_gin_index`, `group_keys`, `typename`, …), as the tree's call writes them or every one the registry holds: a call leaves none out, since under contract 2 an omitted option is at its default. Never compared; a TVIEW written before they were carried lacks the key and carries none.",
       "additionalProperties": false,
       "required": [
         "name",
@@ -735,7 +735,8 @@
         "function_reads",
         "uncascaded_tables",
         "indexes",
-        "managed_indexes"
+        "managed_indexes",
+        "other_options"
       ],
       "properties": {
         "name": {
@@ -809,6 +810,9 @@
           "items": {
             "$ref": "#/$defs/Index"
           }
+        },
+        "other_options": {
+          "type": "object"
         }
       }
     },

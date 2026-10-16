@@ -1232,14 +1232,15 @@ into a table it keeps in step with its base tables. From 0.1.0-beta.18 it indexe
 each `fk_*` column and sets fillfactor 85 itself; what it leaves to the author is
 said on the `CREATE` (`UNLOGGED`, `WITH (fillfactor = n)`, which pg_tviews
 0.1.0-beta.20 accepts), in a `pg_tviews_create_or_replace()` call's `options`, or
-*after* the conversion (`CREATE INDEX`, `ALTER TABLE tv_x SET LOGGED`). The rules read
-the tree, with no database; `tview_002` reads the `logged` the schema model pins, the
-one drift compares and a generated migration passes.
+*after* the conversion (`CREATE INDEX`, `ALTER TABLE tv_x SET UNLOGGED`). A TVIEW is
+LOGGED unless it says otherwise (pg_tviews' read contract 2). The rules read the tree,
+with no database; `tview_002` reads the `logged` the schema model pins, the one drift
+compares and a generated migration passes.
 
 | Rule | Says | Fix |
 |---|---|---|
 | `tview_001` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
-| `tview_002` | replicas are declared and the TVIEW is not pinned logged (UNLOGGED is pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED`, or `options => '{"logged": true}'` |
+| `tview_002` | replicas are declared and the TVIEW is pinned UNLOGGED (`CREATE UNLOGGED TABLE`, `SET UNLOGGED`, `"logged": false`): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED`, or drop the `UNLOGGED` pin |
 
 `tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
 removed when it is fixed. `tview_001` sees only the indexes the tree declares.
@@ -1277,7 +1278,7 @@ db/schema/20_views/v_product.sql:4  tview_003  tv_product reads current_setting(
   `"time_refresh": "external"` and a non-immutable function not declared in
   `"function_reads"` — under its `error` and `full_refresh` policies, so neither rule
   reports a TVIEW declaring `uncascaded_policy: warn`; pg_tviews 0.1.0-beta.26 is the
-  first release that refuses them (confiture's minimum is 0.1.0-beta.27). A `CREATE TABLE … AS`
+  first release that refuses them (confiture's minimum is 0.1.0-beta.30). A `CREATE TABLE … AS`
   cannot pass options: write the TVIEW as a `pg_tviews_create_or_replace()` call, or
   waive the read. `tview_003` is on because pg_tviews does not refuse `current_setting`
   (a `pg_catalog` function), yet the stored row is wrong for every other reader.

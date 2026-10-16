@@ -291,6 +291,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("uncascaded_tables", "tuple[UncascadedTable, ...] | None"),
         ("indexes", "tuple[Index, ...] | None"),
         ("managed_indexes", "tuple[Index, ...]"),
+        ("other_options", "Mapping[str, Any]"),
     ),
     "FunctionRead": (("function", "str"), ("tables", "tuple[str, ...]")),
     "UncascadedTable": (("table", "str"), ("policy", "str")),

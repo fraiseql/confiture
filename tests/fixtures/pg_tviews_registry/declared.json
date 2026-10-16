@@ -1,0 +1,106 @@
+{
+  "captured_from": {
+    "commit": "eadacb058c09fb996d045e87434b1c55b3a1a817",
+    "contract": 2,
+    "pg_tviews": "0.1.0-beta.30"
+  },
+  "registry": [
+    {
+      "base_tables": [
+        "tb_label",
+        "tb_setting",
+        "tb_user"
+      ],
+      "cascade_kinds": {
+        "tb_label": "all_keys",
+        "tb_setting": "all_keys",
+        "tb_user": "local"
+      },
+      "entity": "user",
+      "identity": [
+        "pk_user"
+      ],
+      "managed_indexes": [
+        "idx_tv_user_data_gin",
+        "idx_tv_user_data_name",
+        "idx_tv_user_id"
+      ],
+      "name": "tv_user",
+      "needs_reregister": false,
+      "options": {
+        "data_compression": "lz4",
+        "data_gin_index": true,
+        "data_storage": "extended",
+        "fillfactor": 90,
+        "function_reads": {
+          "public.label_of(bigint)": [
+            "tb_setting"
+          ]
+        },
+        "group_keys": null,
+        "indexes": [
+          [
+            "name"
+          ]
+        ],
+        "logged": false,
+        "time_refresh": null,
+        "toast_tuple_target": 4096,
+        "typename": "Member",
+        "uncascaded_policy": "full_refresh",
+        "uncascaded_tables": {
+          "tb_label": "warn"
+        }
+      },
+      "query": "\nSELECT u.pk_user, u.id,\n       jsonb_build_object('name', u.name, 'label', (SELECT v FROM tb_label LIMIT 1),\n                          'setting', label_of(u.pk_user)) AS data\nFROM tb_user u",
+      "references": {},
+      "schema": "public",
+      "time_dependent": false,
+      "typename": "Member",
+      "uncascaded_tables": [
+        "tb_label",
+        "tb_setting"
+      ],
+      "view": "tviews.public__tv_user"
+    },
+    {
+      "base_tables": [
+        "tb_user"
+      ],
+      "cascade_kinds": {
+        "tb_user": "local"
+      },
+      "entity": "visit",
+      "identity": [
+        "pk_visit"
+      ],
+      "managed_indexes": [
+        "idx_tv_visit_id"
+      ],
+      "name": "tv_visit",
+      "needs_reregister": false,
+      "options": {
+        "data_compression": "lz4",
+        "data_gin_index": false,
+        "data_storage": "main",
+        "fillfactor": 85,
+        "function_reads": {},
+        "group_keys": null,
+        "indexes": [],
+        "logged": true,
+        "time_refresh": "external",
+        "toast_tuple_target": null,
+        "typename": null,
+        "uncascaded_policy": "error",
+        "uncascaded_tables": {}
+      },
+      "query": "\nSELECT u.pk_user AS pk_visit, u.id,\n       jsonb_build_object('recent', u.seen_at > now() - interval '1 day') AS data\nFROM tb_user u",
+      "references": {},
+      "schema": "public",
+      "time_dependent": true,
+      "typename": "Visit",
+      "uncascaded_tables": [],
+      "view": "tviews.public__tv_visit"
+    }
+  ]
+}
