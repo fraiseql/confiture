@@ -1,0 +1,53 @@
+{
+  "captured_from": {
+    "commit": "eadacb058c09fb996d045e87434b1c55b3a1a817",
+    "contract": 2,
+    "pg_tviews": "0.1.0-beta.30"
+  },
+  "registry": [
+    {
+      "base_tables": [
+        "tb_order",
+        "tb_user"
+      ],
+      "cascade_kinds": {
+        "tb_order": "local",
+        "tb_user": "local"
+      },
+      "entity": "user_summary",
+      "identity": [
+        "pk_user_summary"
+      ],
+      "managed_indexes": [
+        "idx_tv_user_summary_id"
+      ],
+      "name": "tv_user_summary",
+      "needs_reregister": false,
+      "options": {
+        "data_compression": "lz4",
+        "data_gin_index": false,
+        "data_storage": "main",
+        "fillfactor": 85,
+        "function_reads": {},
+        "group_keys": {
+          "tb_order": "fk_user",
+          "tb_user": "pk_user"
+        },
+        "indexes": [],
+        "logged": true,
+        "time_refresh": null,
+        "toast_tuple_target": null,
+        "typename": null,
+        "uncascaded_policy": "error",
+        "uncascaded_tables": {}
+      },
+      "query": "\nSELECT o.fk_user AS pk_user_summary, u.id,\n       jsonb_build_object('orders', count(*), 'total', sum(o.total)) AS data\nFROM tb_order o JOIN tb_user u ON u.pk_user = o.fk_user\nGROUP BY o.fk_user, u.id",
+      "references": {},
+      "schema": "public",
+      "time_dependent": false,
+      "typename": "UserSummary",
+      "uncascaded_tables": [],
+      "view": "tviews.public__tv_user_summary"
+    }
+  ]
+}

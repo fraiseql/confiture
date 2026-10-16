@@ -28,14 +28,17 @@ any other view. A TVIEW whose definition embeds another TVIEW reads that TVIEW's
 | `migrate preflight --against` | the finding below |
 | `confiture lint --select tview` | the two storage rules below |
 
-Confiture reads pg_tviews through its **read contract 1**: `tviews.registry` for what
+Confiture reads pg_tviews through its **read contract 2**: `tviews.registry` for what
 a database registers, `tviews.pg_tviews_create_or_replace()` and
 `tviews.pg_tviews_drop()` for what a migration writes, and `tviews.contract_version()`
-to say which contract they keep. pg_tviews grows contract 1 by appending registry
-columns, and confiture reads six of them (`view`, `uncascaded_policy`,
-`function_reads`, `time_refresh`, `uncascaded_table_policies`, `managed_indexes`), so it
-needs **pg_tviews 0.1.0-beta.27** or later. The column is the gate, not the version: a
-build that reports 0.1.0-beta.27 without `managed_indexes` is refused too.
+to say which contract they keep. Under contract 2 every option is a key of
+`tviews.registry.options`, its default filled, and the options a call passes are the
+whole declaration. Confiture needs **pg_tviews 0.1.0-beta.30** or later, the first
+release offering it, and reads the registry's `schema`, `name`, `query`, `options`,
+`view` and `managed_indexes`. The column is the gate, not the version: a build whose
+registry lacks one is refused too. A pg_tviews that offers contract 1 (0.1.0-beta.27
+and earlier) is refused with the upgrade: `ALTER EXTENSION pg_tviews UPDATE`, then
+`SELECT * FROM tviews.pg_tviews_reregister_all()` once.
 Where confiture reads TVIEWs from a live database (drift, `schema dump-model`,
 `migrate preflight --against`, the platform's `introspect`), a pg_tviews that answers
 another contract, has none, or whose registry lacks one of those columns is refused
@@ -60,15 +63,22 @@ rows are reconciled, which is why the change set reads the call as
 safely (a view reads the TVIEW, the table has RLS policies, …) is refused, naming the
 reason.
 
-The TVIEW is named as the tree names it (`tv_x` or `app.tv_x`). `options` holds only
-what the tree pins: `UNLOGGED` is `"logged": false`, `WITH (fillfactor = n)` is
+The TVIEW is named as the tree names it (`tv_x` or `app.tv_x`). `options` holds what
+the tree pins: `UNLOGGED` is `"logged": false`, `WITH (fillfactor = n)` is
 `"fillfactor": n`, a call's `"uncascaded_policy"`, `"uncascaded_tables"`,
-`"time_refresh"` and `"function_reads"` are passed as written (below), and a later `ALTER TABLE tv_x SET LOGGED` (or `SET UNLOGGED`) is
-`"logged": true` (or `false`), the same pin drift compares and `tview_002` reads; a
+`"time_refresh"` and `"function_reads"` are passed as written (below), and a later `ALTER TABLE tv_x SET UNLOGGED` (or `SET LOGGED`) is
+`"logged": false` (or `true`), the same pin drift compares and `tview_002` reads; a
 later `ALTER TABLE tv_x SET (fillfactor = n)` is `"fillfactor": n`, and `RESET
-(fillfactor)` is `"fillfactor": 100`, PostgreSQL's default, as pg_tviews' registry reads it. A key left out takes pg_tviews' default on
-create and keeps its current value on replace, so a setting tuned on the database is
-not reset by a migration that only changes the query.
+(fillfactor)` is `"fillfactor": 100`, PostgreSQL's default, as pg_tviews' registry reads it.
+Every other key a call writes (`data_gin_index`, `group_keys`, `typename`, `indexes`, the
+storage keys) is passed back as written: confiture does not compare them, but it never
+leaves one out.
+
+The options are the whole declaration: a key left out is at pg_tviews' default, on
+create **and on an existing TVIEW**. A TVIEW is LOGGED with fillfactor 85 and policy
+`error` unless the tree says otherwise, and no setting changes a default. An option
+tuned on the database by hand, and not in the tree, is reset by the next migration
+that writes the TVIEW: put it in the tree.
 
 A table named `tv_*` is a TVIEW only when it is created `AS SELECT`; `CREATE TABLE
 tv_x (…)` with a column list is a plain table.
@@ -77,9 +87,9 @@ tv_x (…)` with a column list is a plain table.
 
 A TVIEW may read a table no cascade can trace back to its rows (a table read in a
 subquery under `LIMIT`, a lookup joined on no key, …). From pg_tviews 0.1.0-beta.25
-the TVIEW declares what a write to such a table does, and the
-`pg_tviews.uncascaded_policy` setting defaults to **`error`**: a definition that reads
-one is refused at create unless it declares a policy.
+the TVIEW declares what a write to such a table does, and the policy defaults to
+**`error`**: a definition that reads one is refused at create unless it declares a
+policy.
 
 | Policy | A write to an uncascaded table |
 |---|---|
@@ -97,22 +107,19 @@ SELECT tviews.pg_tviews_create_or_replace('tv_post', $$SELECT …$$,
 Confiture reads the key as it reads `logged` and `fillfactor`: the tree pins it,
 `migrate diff --generate` passes it in the call it writes (pg_tviews answers `altered`
 when only the policy changes), and drift compares it with
-`tviews.registry.uncascaded_policy` (not `options`, where pg_tviews does not keep it)
-as `tview_option_mismatch`. A tree that names no policy pins none: never drift.
+`tviews.registry.options->>'uncascaded_policy'` as `tview_option_mismatch`. A tree
+that names no policy pins none: it is at the default, `error`, and never drift.
 
-`CREATE TABLE … AS` and `pg_tviews_create()` take no options and read the session's
-`pg_tviews.uncascaded_policy` instead (`SET pg_tviews.uncascaded_policy =
-'full_refresh';` before the statement). Confiture does not model session settings, so
-a policy set that way is no pin: drift does not compare it, and a migration
-`migrate diff --generate` writes for that TVIEW passes none, which pg_tviews refuses
-on a fresh database under the `error` default. Declare the policy in the call's
-`options` when the TVIEW reads an uncascaded table.
+`CREATE TABLE … AS` takes no options, so a TVIEW written that way is at the default
+policy; `pg_tviews_create(tview, query, options)` takes the same options as
+`pg_tviews_create_or_replace()`. Declare the policy in a call's `options` when the
+TVIEW reads an uncascaded table.
 
 `"uncascaded_tables"` gives one table its own policy, overriding the TVIEW's for a
 write to that table: `{"public.tb_category": "full_refresh"}` rebuilds the TVIEW when a
 category moves and keeps `error` for every other table. Confiture reads it as it reads
 `uncascaded_policy` — the tree pins it, `migrate diff --generate` passes it, drift
-compares it with `tviews.registry.uncascaded_table_policies` as `tview_option_mismatch`
+compares it with `tviews.registry.options->'uncascaded_tables'` as `tview_option_mismatch`
 (subject `uncascaded_tables`) — with each table compared by identity, since the
 registry writes one on the read path unqualified. `uncascaded_tables: {}` pins none.
 
@@ -138,7 +145,7 @@ tables are reads no cascade reaches, so the TVIEW's policy (or `uncascaded_table
 decides what a write to one does.
 
 Confiture reads both keys as it reads `uncascaded_policy`: the tree pins them, `migrate
-diff --generate` passes them, and drift compares them with `tviews.registry` as
+diff --generate` passes them, and drift compares them with `tviews.registry.options` as
 `tview_option_mismatch`. The registry spells a declaration its own way (the function
 qualified and its argument types as `format_type` writes them, a table on the read path
 unqualified), so `function_reads` are compared by identity: `label_suffix()` and
@@ -160,8 +167,11 @@ SELECT tviews.pg_tviews_create_or_replace('tv_post', $$SELECT …$$,
 ```
 
 The call is read when its name and query are string constants (`tv_post`, `post` and
-`app.tv_post` alike, arguments positional or named); `options` pins the keys it
-passes. `SELECT tviews.pg_tviews_drop('tv_post')` drops a TVIEW the tree declared
+`app.tv_post` alike, arguments positional or named `tview`, `query`, `options`);
+`options` pins the keys it passes. `pg_tviews_create()` is read the same way. An
+aggregate TVIEW is `pg_tviews_create()` with `"group_keys"` in its options
+(`pg_tviews_create_aggregate()` is gone from contract 2), and the generated call passes
+the keys back. `SELECT tviews.pg_tviews_drop('tv_post')` drops a TVIEW the tree declared
 before it, as `DROP TABLE tv_post` does. Moving a TVIEW from one spelling to the other
 is no change: `migrate diff` generates nothing for it.
 
@@ -219,10 +229,9 @@ compares what each writes, with no registry to ask, so:
   (`55000`). Generate against the database (`migrate diff --from db`, which drops and
   rebuilds the INVALID index around the replace), or `REINDEX` the index first.
 
-**pg_tviews 0.1.0-beta.27.** Beside `managed_indexes`, beta.27 revokes `EXECUTE` from
-`PUBLIC` on `pg_tviews_refresh_all()`, `pg_tviews_refresh_all_entities()`,
-`pg_tviews_rebuild_all()`, `pg_tviews_reregister_all()`, `pg_tviews_set_logged()`,
-`pg_tviews_ensure_propagation_indexes()` and `pg_tviews_invalidate_caches()`, and the
+**Privileges.** pg_tviews revokes `EXECUTE` from `PUBLIC` on its operator functions
+(`pg_tviews_refresh_all()`, `pg_tviews_rebuild_all()`, `pg_tviews_reregister_all()`,
+`pg_tviews_ensure_propagation_indexes()`, `pg_tviews_invalidate_caches()`, …), and the
 per-TVIEW functions require ownership: grant them to the roles that call them.
 confiture calls none of them.
 
@@ -237,10 +246,10 @@ confiture calls none of them.
 `confiture lint --select tview` (off by default) reads the tree:
 
 - `tview_001`: an index over `data` or `updated_at`, which every refresh rewrites, so no update is HOT
-- `tview_002`: replicas declared and the TVIEW not pinned logged, by `SET LOGGED` or `options => '{"logged": true}'` (UNLOGGED is the default, and a standby cannot read it)
+- `tview_002`: replicas declared and the TVIEW pinned UNLOGGED (`CREATE UNLOGGED TABLE`, `SET UNLOGGED` or `options => '{"logged": false}'`): a standby cannot read it. A TVIEW is LOGGED by default
 
 pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts
-`CREATE INDEX`, `ALTER TABLE … SET LOGGED` and `SET (fillfactor = n)` after the conversion, and `UNLOGGED` and
+`CREATE INDEX`, `ALTER TABLE … SET UNLOGGED` and `SET (fillfactor = n)` after the conversion, and `UNLOGGED` and
 `WITH (fillfactor = n)` on the `CREATE`. See the [rule reference](../reference/lint-rules.md).
 
 In a tree that also uses pg_treekey, `treekey_001` and `treekey_002` (on by default) report a
@@ -254,7 +263,7 @@ TVIEW, under `warn` its rows go stale. See
 
 `confiture restore` brings a TVIEW back registered, and it keeps following its base
 tables, cascades included, when the source database runs a pg_tviews confiture reads
-(0.1.0-beta.20 or later): `pg_dump` carries pg_tviews' registration with the extension.
+(0.1.0-beta.30 or later): `pg_dump` carries pg_tviews' registration with the extension.
 One condition, measured on pg_tviews 0.1.0-beta.19:
 
 - **No `--disable-triggers`.** pg_tviews rebinds each OID it recorded in a trigger as

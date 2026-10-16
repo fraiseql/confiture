@@ -434,6 +434,7 @@ jobs:
           tests/unit/test_tview_indexes.py \
           tests/unit/test_drift_tviews.py \
           tests/unit/test_pg_tviews_contract.py \
+          tests/unit/test_pg_tviews_registry.py \
           -q -rs -p no:randomly
 
   wheel-python-314:

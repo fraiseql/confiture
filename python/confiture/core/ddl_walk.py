@@ -221,9 +221,8 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
 class TViewOptions(TypedDict, total=False):
     """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent.
 
-    ``uncascaded_policy``, ``time_refresh``, ``function_reads`` and
-    ``uncascaded_tables`` are passed in ``options`` too, though pg_tviews stores
-    them beside them (columns of ``tviews.registry``).
+    ``other_options`` holds every other key the call passes, as written: the keys
+    the model does not compare, and a modelled key whose value it could not read.
     """
 
     logged: bool
@@ -232,6 +231,7 @@ class TViewOptions(TypedDict, total=False):
     time_refresh: str
     function_reads: tuple[FunctionRead, ...]
     uncascaded_tables: tuple[UncascadedTable, ...]
+    other_options: dict[str, Any]
 
 
 def tview_of(name: str, definition: str | None, options: TViewOptions) -> TView:
@@ -245,6 +245,7 @@ def tview_of(name: str, definition: str | None, options: TViewOptions) -> TView:
         time_refresh=options.get("time_refresh"),
         function_reads=options.get("function_reads"),
         uncascaded_tables=options.get("uncascaded_tables"),
+        other_options=options.get("other_options", {}),
     )
 
 
@@ -309,10 +310,10 @@ def _fillfactor_set(options: Any) -> TViewOptions:
 
 #: pg_tviews' functions that register or drop a TVIEW, each naming it by its first
 #: argument, and what each does: ``create_or_replace`` may create, replace or rebuild.
+#: An aggregate TVIEW is a create whose options hold ``group_keys`` (read contract 2).
 TVIEW_FUNCTIONS: dict[str, Literal["create", "create_or_replace", "drop"]] = {
     "pg_tviews_create_or_replace": "create_or_replace",
     "pg_tviews_create": "create",
-    "pg_tviews_create_aggregate": "create",
     "pg_tviews_drop": "drop",
 }
 
@@ -340,11 +341,10 @@ class TViewCall:
 
 
 #: Each argument a call's reader reads: its parameter names, and its position.
-#: Only ``pg_tviews_create_or_replace`` takes ``options`` third;
-#: ``pg_tviews_create_aggregate``'s third is its group keys.
+#: A create takes ``options`` third; a drop takes none.
 _TVIEW_ARGUMENTS: dict[str, tuple[frozenset[str], int | None]] = {
-    "name": (frozenset({"tview_name"}), 0),
-    "query": (frozenset({"query", "select_sql"}), 1),
+    "name": (frozenset({"tview"}), 0),
+    "query": (frozenset({"query"}), 1),
     "options": (frozenset({"options"}), None),
 }
 
@@ -388,7 +388,7 @@ def tview_calls(stmt: Any) -> list[TViewCall]:
 def _tview_arguments(node: Any, action: str) -> dict[str, Any]:
     """The call's arguments by the role :data:`_TVIEW_ARGUMENTS` gives them."""
     positions = {role: at for role, (_names, at) in _TVIEW_ARGUMENTS.items() if at is not None}
-    if action == "create_or_replace":
+    if action != "drop":
         positions["options"] = 2
     found: dict[str, Any] = {}
     for at, arg in enumerate(node.args or ()):
@@ -454,6 +454,8 @@ def _options_passed(arg: Any) -> TViewOptions:
     tables = passed.get("uncascaded_tables")
     if isinstance(tables, dict) and all(isinstance(p, str) for p in tables.values()):
         options["uncascaded_tables"] = uncascaded_tables(tables)
+    if other := {key: value for key, value in passed.items() if key not in options}:
+        options["other_options"] = other
     return options
 
 

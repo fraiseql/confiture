@@ -5,6 +5,8 @@ and only that one, so the reader applies the same rule. Until #504 the
 statement was invisible: neither a table nor a view.
 """
 
+import json
+
 import pglast
 import pytest
 from pglast.stream import RawStream
@@ -107,7 +109,7 @@ CALL = f"{TABLES}SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT
     [
         f"SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT}$q$)",
         f"SELECT pg_tviews_create_or_replace('post', '{SELECT}')",
-        f"SELECT tviews.pg_tviews_create_or_replace(tview_name => 'tv_post', query => $q${SELECT}$q$)",
+        f"SELECT tviews.pg_tviews_create_or_replace(tview => 'tv_post', query => $q${SELECT}$q$)",
         f"SELECT tviews.pg_tviews_create('tv_post', $q${SELECT}$q$)",
     ],
     ids=["create_or_replace", "entity-unqualified", "named", "create"],
@@ -130,6 +132,38 @@ def test_a_call_pins_the_options_it_passes(options: str) -> None:
     pinned = f"{TABLES}CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS {SELECT};\n"
 
     assert read_text(f"{TABLES}{call}").model.tviews == read_text(pinned).model.tviews
+
+
+def test_pg_tviews_create_pins_the_options_it_passes_third() -> None:
+    """Contract 2: ``pg_tviews_create(tview, query, options)`` takes options like create_or_replace."""
+    call = f"""SELECT tviews.pg_tviews_create('tv_post', $q${SELECT}$q$, '{{"logged": false, "fillfactor": 70}}');\n"""
+    pinned = f"{TABLES}CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS {SELECT};\n"
+
+    assert read_text(f"{TABLES}{call}").model.tviews == read_text(pinned).model.tviews
+
+
+def test_a_call_carries_the_options_confiture_does_not_model() -> None:
+    """Contract 2 resets an omitted option: the generated call passes back every one written."""
+    from confiture.core.ddl_walk import tview_calls
+
+    written = {"data_gin_index": True, "typename": "Post", "group_keys": {"tb_post": "pk_post"}}
+    call = (
+        f"SELECT tviews.pg_tviews_create('tv_post', $q${SELECT}$q$, "
+        f"'{{\"logged\": false, {json.dumps(written)[1:]}');\n"
+    )
+    ((obj,),) = _tracked(call).values()
+    (tview,) = read_text(f"{TABLES}{call}").model.tviews.values()
+    (generated,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+
+    assert tview.other_options == written
+    assert generated.options == {"logged": False, "other_options": written}
+
+
+def test_the_removed_create_aggregate_declares_no_tview() -> None:
+    """``pg_tviews_create_aggregate`` is gone (contract 2): ``group_keys`` is an option of a create."""
+    call = f"SELECT tviews.pg_tviews_create_aggregate('tv_post', $q${SELECT}$q$, '{{}}');\n"
+
+    assert read_text(f"{TABLES}{call}").model.tviews == {}
 
 
 def test_a_call_names_its_schema() -> None:
@@ -220,7 +254,7 @@ def test_set_logged_pins_the_tview_logged(tree: str, logged: bool | None) -> Non
     ids=["ctas", "set-logged", "set-unlogged-after", "call-logged", "call-unlogged"],
 )
 def test_the_lint_and_the_model_agree_on_whether_a_tview_is_logged(tree: str) -> None:
-    """``tview_002`` fires exactly when the model does not pin the TVIEW logged."""
+    """``tview_002`` fires exactly when the model pins the TVIEW unlogged (LOGGED is the default)."""
     from confiture.core.linting.tview_rules import tview_findings
 
     flagged = any(
@@ -228,7 +262,7 @@ def test_the_lint_and_the_model_agree_on_whether_a_tview_is_logged(tree: str) ->
     )
     (tview,) = read_text(tree).model.tviews.values()
 
-    assert flagged is (tview.logged is not True)
+    assert flagged is (tview.logged is False)
 
 
 def test_a_generated_tview_passes_the_logged_its_tree_set() -> None:
@@ -305,7 +339,7 @@ POLICY = CALL.replace("$q$);", """$q$, options => '{"uncascaded_policy": "full_r
 
 
 def test_a_call_pins_the_uncascaded_policy_it_passes() -> None:
-    """pg_tviews 0.1.0-beta.25 takes the key in ``options`` and stores it beside them."""
+    """``uncascaded_policy`` is an ``options`` key like any other (pg_tviews read contract 2)."""
     (tview,) = read_text(POLICY).model.tviews.values()
 
     assert (tview.uncascaded_policy, tview.logged, tview.fillfactor) == ("full_refresh", None, None)
@@ -313,7 +347,7 @@ def test_a_call_pins_the_uncascaded_policy_it_passes() -> None:
 
 @pytest.mark.parametrize("tree", [CTAS, CALL], ids=["ctas", "call"])
 def test_a_tview_that_names_no_policy_pins_none(tree: str) -> None:
-    """``CREATE TABLE … AS`` reads ``pg_tviews.uncascaded_policy``, a session setting: no pin."""
+    """A TVIEW that names no policy is at pg_tviews' default, ``error``: no pin."""
     (tview,) = read_text(tree).model.tviews.values()
 
     assert tview.uncascaded_policy is None

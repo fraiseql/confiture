@@ -44,7 +44,7 @@ holds, an introspector what the *database* holds.
 import functools
 import re
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Concatenate
@@ -68,6 +68,7 @@ from confiture.core.ddl_walk import type_name as ddl_type_name
 from confiture.core.schema_identity import DEFAULT_SCHEMA, quote_identifier
 from confiture.core.schema_model import (
     DEFINED_OTHER_KINDS,
+    TVIEW_OPTIONS,
     TVIEWS_SCHEMA,
     Column,
     Constraint,
@@ -1141,31 +1142,23 @@ _PG_TVIEWS = "SELECT extversion FROM pg_extension WHERE extname = 'pg_tviews'"
 
 #: The read contract confiture reads: ``tviews.registry``, its ``options`` keys, and
 #: what ``pg_tviews_create_or_replace()`` takes and returns. pg_tviews bumps
-#: ``tviews.contract_version()`` on any change a reader could misread.
-CONTRACT_VERSION = 1
+#: ``tviews.contract_version()`` on any change a reader could misread; contract 2
+#: (pg_tviews ADR 0211) moved every policy column into ``options`` and made the
+#: options a call passes the whole declaration.
+CONTRACT_VERSION = 2
 
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-#: The first pg_tviews whose registry holds every column confiture reads.
-MINIMUM_PG_TVIEWS = "0.1.0-beta.27"
+#: The first pg_tviews release that offers :data:`CONTRACT_VERSION`.
+MINIMUM_PG_TVIEWS = "0.1.0-beta.30"
 
-#: The registry columns pg_tviews appended under contract 1 that confiture reads:
-#: ``view``, the backing view in pg_tviews' own schema, and ``uncascaded_policy``,
-#: stored beside ``options`` (0.1.0-beta.25, fraiseql/pg_tviews#181);
-#: ``function_reads`` and ``time_refresh`` (0.1.0-beta.26, fraiseql/pg_tviews#193), and
-#: ``uncascaded_table_policies``, the ``uncascaded_tables`` option (0.1.0-beta.26,
-#: fraiseql/pg_tviews#195); ``managed_indexes``, the indexes pg_tviews created on a
-#: TVIEW's table, which tells them from the user's (0.1.0-beta.27,
-#: fraiseql/pg_tviews#219). A build without one is refused, not read as a TVIEW that
-#: declares nothing — whatever version it reports: the column is the gate.
-REGISTRY_COLUMNS = (
-    "view",
-    "uncascaded_policy",
-    "function_reads",
-    "time_refresh",
-    "uncascaded_table_policies",
-    "managed_indexes",
-)
+#: The registry columns confiture reads: ``options`` holds every option, defaults
+#: filled; ``view`` is the backing view in pg_tviews' own schema; ``managed_indexes``
+#: the indexes pg_tviews created on the TVIEW's table, which tells them from the
+#: user's. A contract grows by appended columns, so a build without one is refused,
+#: not read as a TVIEW that declares nothing — whatever version it reports: the
+#: column is the gate.
+REGISTRY_COLUMNS = ("schema", "name", "query", "options", "view", "managed_indexes")
 
 _REGISTRY_COLUMNS_HELD = """
 SELECT attname::text FROM pg_attribute
@@ -1334,8 +1327,8 @@ def require_supported_pg_tviews(
     *contract* is what ``tviews.contract_version()`` answers, ``None`` where the
     function does not exist: pg_tviews 0.1.0-beta.19 and earlier, which kept
     their objects wherever ``search_path`` put them. *missing* are the
-    :data:`REGISTRY_COLUMNS` its registry lacks: contract 1 grows by appended
-    columns, so a release before :data:`MINIMUM_PG_TVIEWS` offers it without them.
+    :data:`REGISTRY_COLUMNS` its registry lacks: a contract grows by appended
+    columns, so a build of it may lack one.
 
     Raises:
         ConfigurationError: ``CONFIG_014``, naming the installed release and what it lacks.
@@ -1356,8 +1349,8 @@ def require_supported_pg_tviews(
     if contract is None:
         raise ConfigurationError(
             f"pg_tviews {release} has no read contract (tviews.contract_version()); "
-            f"confiture reads contract {CONTRACT_VERSION}, which pg_tviews 0.1.0-beta.20 "
-            "and later offer.",
+            f"confiture reads contract {CONTRACT_VERSION}, which pg_tviews "
+            f"{MINIMUM_PG_TVIEWS} and later offer.",
             error_code="CONFIG_014",
             resolution_hint=(
                 "Upgrade the server's pg_tviews. An extension created by 0.1.0-beta.19 or "
@@ -1365,14 +1358,22 @@ def require_supported_pg_tviews(
                 "not ALTER EXTENSION UPDATE"
             ),
         )
+    if contract < CONTRACT_VERSION:
+        hint = (
+            f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later: "
+            "ALTER EXTENSION pg_tviews UPDATE, then "
+            "SELECT * FROM tviews.pg_tviews_reregister_all()"
+        )
+    else:
+        hint = (
+            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
+            f"contract {CONTRACT_VERSION}"
+        )
     raise ConfigurationError(
         f"pg_tviews {release} offers read contract {contract}; "
         f"confiture reads contract {CONTRACT_VERSION}.",
         error_code="CONFIG_014",
-        resolution_hint=(
-            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
-            f"contract {CONTRACT_VERSION}"
-        ),
+        resolution_hint=hint,
     )
 
 
@@ -1412,15 +1413,12 @@ def _tviews(
     if installed is None:
         return []
     _require_readable(conn, installed[0])
-    # Each registered TVIEW: its relation, the query pg_tviews holds, the storage
-    # options it reads from the catalog, what it declares of its reads, and its
-    # backing view's oid — in pg_tviews' own schema, so a ``v_<entity>`` view
-    # beside the table is the tree's — ``NULL`` once that view is gone, and the
-    # names of the indexes pg_tviews created on its table (``NULL`` once it is gone).
+    # Each registered TVIEW as the registry writes it, read by name; its backing
+    # view's oid — in pg_tviews' own schema, so a ``v_<entity>`` view beside the
+    # table is the tree's — ``NULL`` once that view is gone, and the names of the
+    # indexes pg_tviews created on its table (``NULL`` once it is gone).
     query = t"""
-        SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
-               r.uncascaded_policy, r.time_refresh, r.function_reads,
-               r.uncascaded_table_policies, r.view::oid::bigint,
+        SELECT to_jsonb(r), r.view::oid::bigint,
                COALESCE(ARRAY(
                    SELECT c.relname::text FROM unnest(r.managed_indexes) m
                    JOIN pg_class c ON c.oid = m
@@ -1430,35 +1428,33 @@ def _tviews(
         ORDER BY r.schema, r.name
         """
     return [
-        (
-            TView(
-                name=name,
-                schema=schema,
-                definition=rendered_query(definition),
-                logged=logged,
-                fillfactor=fillfactor,
-                uncascaded_policy=policy,
-                time_refresh=time_refresh,
-                function_reads=function_reads(reads),
-                uncascaded_tables=uncascaded_tables(table_policies or {}),
-            ),
-            view_oid,
-            frozenset(managed),
-        )
-        for (
-            schema,
-            name,
-            definition,
-            logged,
-            fillfactor,
-            policy,
-            time_refresh,
-            reads,
-            table_policies,
-            view_oid,
-            managed,
-        ) in conn.execute(query).fetchall()
+        (registry_tview(row), view_oid, frozenset(managed))
+        for row, view_oid, managed in conn.execute(query).fetchall()
     ]
+
+
+def registry_tview(row: Mapping[str, Any]) -> TView:
+    """A ``tviews.registry`` row, as ``to_jsonb`` writes it, as the model's :class:`TView`.
+
+    Contract 2 holds every option in ``options``, each key set, its default
+    filled. A column this reader does not know is ignored: pg_tviews adds them
+    without bumping the contract. Every option the model does not compare is
+    carried in ``other_options``, so the call written from this side passes back
+    what the database holds: the contract's round trip.
+    """
+    options = row["options"]
+    return TView(
+        name=row["name"],
+        schema=row["schema"],
+        definition=rendered_query(row["query"]),
+        logged=options["logged"],
+        fillfactor=options["fillfactor"],
+        uncascaded_policy=options["uncascaded_policy"],
+        time_refresh=options["time_refresh"],
+        function_reads=function_reads(options["function_reads"]),
+        uncascaded_tables=uncascaded_tables(options["uncascaded_tables"]),
+        other_options={k: v for k, v in options.items() if k not in TVIEW_OPTIONS},
+    )
 
 
 @reads_under_one_path

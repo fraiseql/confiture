@@ -14,6 +14,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**confiture reads pg_tviews' read contract 2.** ⚠️ confiture requires pg_tviews
+0.1.0-beta.30 and refuses an earlier one with `CONFIG_014`: upgrade the extension
+(`ALTER EXTENSION pg_tviews UPDATE`, then `SELECT * FROM tviews.pg_tviews_reregister_all()`
+once) before deploying this confiture.
+
+### Changed
+
+- **pg_tviews read contract 2** (#714). `tviews.contract_version()` 2 moved every policy
+  column of `tviews.registry` (`logged`, `uncascaded_policy`, `uncascaded_table_policies`,
+  `function_reads`, `time_refresh`) into `options`, which now holds every option with its
+  default filled. The live side reads a registry row by name through `options`, ignoring
+  columns and keys it does not know. `CONTRACT_VERSION` is 2 and `MINIMUM_PG_TVIEWS`
+  `0.1.0-beta.30`, the first release to offer it. A contract-1 pg_tviews is refused with
+  `CONFIG_014`, and its hint names the upgrade.
+- **A TVIEW is LOGGED by default.** pg_tviews' settings are gone and its defaults fixed:
+  `logged: true`, fillfactor 85, policy `error`. A tree that pins nothing is LOGGED, and
+  `logged: false` (`CREATE UNLOGGED TABLE`, `SET UNLOGGED`, `"logged": false`) is the pin
+  drift compares. `tview_002` now names a TVIEW pinned UNLOGGED where replicas are
+  declared, not every TVIEW that does not pin LOGGED.
+- **A generated `pg_tviews_create_or_replace()` passes every option the tree writes.**
+  Under contract 2 an option a call leaves out is at its default, also on an existing
+  TVIEW. The keys confiture does not compare (`data_gin_index`, `group_keys`, `typename`,
+  `indexes`, the storage keys) are carried as written in the new
+  `TView.other_options`, which is never compared. Before this, they were dropped, and a
+  generated migration would have reset them: measured on pg_tviews main, an aggregate
+  TVIEW came back `rebuilt` as a plain one. A call written from a database passes back
+  every key the registry holds, the contract's round trip (`unchanged`).
+- **Calls read as contract 2 writes them.** The name parameter is `tview` (it was
+  `tview_name`). `pg_tviews_create(tview, query, options)` takes options third, like
+  `pg_tviews_create_or_replace()`. `pg_tviews_create_aggregate()` is gone: an aggregate
+  TVIEW is `pg_tviews_create()` with `group_keys`.
+- The schema model's wire gains `tviews[].other_options` (an object; additive, and a
+  model written before reads as carrying none). `schema-model.schema.json` and the
+  `tview-indexes` model goldens are refreshed for it.
+- The `pg-tviews` CI leg builds pg_tviews at `eadacb05`, the tree v0.1.0-beta.30 is cut from.
+
 ## [1.36.1] - 2026-10-12
 
 **`--scratch-url` compares a TVIEW tree as TVIEWs.** A tree that declared TVIEWs without

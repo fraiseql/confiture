@@ -587,6 +587,12 @@ class TView:
     uses, pg_tviews' rule; ``None`` where they were not read. ``managed_indexes``
     are pg_tviews' own, read from the database alone and never compared: a tree
     that writes one of them exactly writes what pg_tviews adopts as its own.
+
+    ``other_options`` are the ``options`` keys the model does not compare
+    (``data_gin_index``, ``group_keys``, ``typename``, …), as written: the tree's
+    call's, or every one the registry holds. Under pg_tviews' read contract 2 an
+    option a call leaves out is at its default, also on an existing TVIEW, so the
+    call a migration writes passes them back; they are never compared.
     """
 
     name: str
@@ -600,6 +606,7 @@ class TView:
     uncascaded_tables: tuple[UncascadedTable, ...] | None = None
     indexes: tuple[Index, ...] | None = ()
     managed_indexes: tuple[Index, ...] = field(default=(), compare=False)
+    other_options: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
     @property
     def entity(self) -> str:
@@ -1125,8 +1132,8 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "`integer`). signature_key is the identity compared"
     ),
     "tview_defaults": (
-        "a TVIEW option the tree does not pin is pg_tviews' to choose, and the registry "
-        "holds every key: a stock pg_tviews creates a TVIEW unlogged with fillfactor 85, "
+        "a TVIEW option the tree does not pin is at pg_tviews' default, and the registry "
+        "holds every key: pg_tviews creates a TVIEW LOGGED with fillfactor 85, "
         "uncascaded_policy error, no function_reads and no uncascaded_tables, so those "
         "values are no pin, on either side"
     ),
@@ -1281,12 +1288,12 @@ def parity_view(view: View, rules: frozenset[str] = ALL_PARITY_RULES) -> View:
     )
 
 
-#: The fillfactor a stock pg_tviews creates a TVIEW with (``pg_tviews.fillfactor``);
-#: ``pg_tviews.unlogged_by_default`` is on, so it is created unlogged.
+#: The fillfactor pg_tviews creates a TVIEW with when its options name none: a
+#: documented default of read contract 2, which no setting changes. A TVIEW is
+#: LOGGED by default, so ``logged: false`` is the pin.
 _TVIEW_DEFAULT_FILLFACTOR = 85
 
-#: The policy a stock pg_tviews stores for a TVIEW whose create named none: its
-#: ``pg_tviews.uncascaded_policy`` default, ``error`` from 0.1.0-beta.25.
+#: The policy pg_tviews stores for a TVIEW whose options name none (contract 2).
 _TVIEW_DEFAULT_UNCASCADED_POLICY = "error"
 
 
@@ -1308,7 +1315,7 @@ def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TVie
         return tview
     return replace(
         tview,
-        logged=True if tview.logged else None,
+        logged=False if tview.logged is False else None,
         fillfactor=None if tview.fillfactor == _TVIEW_DEFAULT_FILLFACTOR else tview.fillfactor,
         uncascaded_policy=None
         if tview.uncascaded_policy == _TVIEW_DEFAULT_UNCASCADED_POLICY

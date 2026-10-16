@@ -6,6 +6,7 @@ elsewhere.
 """
 
 from collections.abc import Callable
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -154,7 +155,7 @@ def uncascaded_database(fresh_database_factory: Callable[[str], str]) -> str:
 
 
 def test_the_live_side_reads_the_uncascaded_policy(uncascaded_database: str) -> None:
-    """``tviews.registry.uncascaded_policy``, stored beside ``options`` and not in them."""
+    """``tviews.registry.options->>'uncascaded_policy'`` (a column of its own under contract 1)."""
     from confiture.core.schema_model import normalise_for_parity
 
     with psycopg.connect(uncascaded_database) as conn:
@@ -171,11 +172,10 @@ def test_the_live_side_reads_the_uncascaded_policy(uncascaded_database: str) -> 
 
 def test_a_policy_changed_on_the_database_is_drift(uncascaded_database: str) -> None:
     with psycopg.connect(uncascaded_database, autocommit=True) as conn:
-        (definition,) = conn.execute("SELECT query FROM tviews.registry").fetchone()
+        # Every option passed back but the one changed: contract 2 resets an omitted key.
         (answer,) = conn.execute(
-            "SELECT tviews.pg_tviews_create_or_replace('tv_user', %s,"
-            ' options => \'{"uncascaded_policy": "warn"}\')',
-            (definition,),
+            "SELECT tviews.pg_tviews_create_or_replace('tv_user', query,"
+            ' options => options || \'{"uncascaded_policy": "warn"}\') FROM tviews.registry'
         ).fetchone()
 
     assert answer == "altered"
@@ -251,11 +251,11 @@ def test_the_live_side_reads_the_declared_reads(reads_database: str) -> None:
 
 def test_a_declared_read_changed_on_the_database_is_drift(reads_database: str) -> None:
     with psycopg.connect(reads_database, autocommit=True) as conn:
-        (definition,) = conn.execute("SELECT query FROM tviews.registry").fetchone()
+        # Every option passed back but the one changed: contract 2 resets an omitted key.
         (answer,) = conn.execute(
-            "SELECT tviews.pg_tviews_create_or_replace('tv_contract', %s, options =>"
-            """ '{"function_reads": {"label_suffix()": ["tb_setting", "tb_locale"]}}')""",
-            (definition,),
+            "SELECT tviews.pg_tviews_create_or_replace('tv_contract', query, options => options"
+            """ || '{"function_reads": {"label_suffix()": ["tb_setting", "tb_locale"]}}')"""
+            " FROM tviews.registry"
         ).fetchone()
 
     assert answer == "altered"
@@ -324,11 +324,11 @@ def pinned_database(fresh_database_factory: Callable[[str], str]) -> str:
 
 
 def test_the_live_side_reads_every_option_the_registry_holds(tview_database: str) -> None:
-    """The registry holds each key, pinned or not; stock pg_tviews: unlogged, fillfactor 85."""
+    """The registry holds each key, pinned or not; stock pg_tviews: LOGGED, fillfactor 85."""
     with psycopg.connect(tview_database) as conn:
         (found,) = live_catalog.tviews(conn, ["public"])
 
-    assert (found.logged, found.fillfactor) == (False, 85)
+    assert (found.logged, found.fillfactor) == (True, 85)
 
 
 def test_a_tview_left_at_pg_tviews_defaults_reads_as_pinning_nothing(tview_database: str) -> None:
@@ -341,7 +341,7 @@ def test_a_tview_left_at_pg_tviews_defaults_reads_as_pinning_nothing(tview_datab
 
     assert ((declared.logged, declared.fillfactor), (found.logged, found.fillfactor)) == (
         (None, None),
-        (False, 85),
+        (True, 85),
     )
 
 
@@ -408,20 +408,34 @@ def test_a_tree_that_calls_pg_tviews_is_the_database_it_builds(
 
 
 LOGGED = f"{TREE}ALTER TABLE tv_post SET LOGGED;\n"
+UNLOGGED = f"{TREE}ALTER TABLE tv_post SET UNLOGGED;\n"
 
 
-def test_set_logged_in_the_tree_is_what_the_database_holds(tview_database: str) -> None:
-    """The tree ``tview_002`` asks for, built, reads back as itself; left unlogged, it drifts."""
+def test_set_logged_in_the_tree_is_pg_tviews_default(tview_database: str) -> None:
+    """A TVIEW is LOGGED by default (pg_tviews contract 2): pinning it is what the database holds."""
     from confiture.core.schema_model import normalise_for_parity
 
-    assert _drift(tview_database, LOGGED) == [("tview_option_mismatch", "warning", "tv_post")]
-
-    with psycopg.connect(tview_database, autocommit=True) as conn:
-        conn.execute("ALTER TABLE tv_post SET LOGGED")
+    with psycopg.connect(tview_database) as conn:
         live = live_catalog.read(conn, schemas=["public"])
 
     assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(LOGGED).model).tviews
     assert _drift(tview_database, LOGGED) == []
+
+
+def test_set_unlogged_in_the_tree_is_what_the_database_holds(tview_database: str) -> None:
+    """``SET UNLOGGED`` built reads back as itself; left LOGGED, it drifts."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    assert _drift(tview_database, UNLOGGED) == [("tview_option_mismatch", "warning", "tv_post")]
+
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET UNLOGGED")
+        live = live_catalog.read(conn, schemas=["public"])
+
+    assert (
+        normalise_for_parity(live).tviews == normalise_for_parity(read_text(UNLOGGED).model).tviews
+    )
+    assert _drift(tview_database, UNLOGGED) == []
 
 
 FILLED = f"{TREE}ALTER TABLE tv_post SET (fillfactor = 70);\n"
@@ -629,7 +643,7 @@ def test_the_seam_accepts_a_database_without_pg_tviews(
 def test_the_live_side_reads_each_table_s_uncascaded_policy(
     fresh_database_factory: Callable[[str], str],
 ) -> None:
-    """``tviews.registry.uncascaded_table_policies``, the table as ``regclass`` text."""
+    """``tviews.registry.options->'uncascaded_tables'``, the table as ``regclass`` text."""
     from confiture.core.schema_model import UncascadedTable
 
     tree = """
@@ -656,3 +670,65 @@ FROM tb_category n$q$,
 
     assert found.uncascaded_tables == (UncascadedTable("tb_category", "full_refresh"),)
     assert _drift(url, tree) == []
+
+
+REGISTRY_TREES = Path(__file__).resolve().parent.parent / "fixtures" / "pg_tviews_registry"
+
+
+@pytest.fixture(params=["defaults", "unlogged", "declared", "aggregate"])
+def registry_tree(request: pytest.FixtureRequest) -> str:
+    return (REGISTRY_TREES / f"{request.param}.sql").read_text()
+
+
+def _built(url: str, tree: str) -> None:
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(tree)
+
+
+def test_a_generated_call_passes_every_option_the_tree_declares(
+    registry_tree: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """Contract 2 resets an option a call leaves out: the call confiture writes leaves none out.
+
+    Applied to the database its own tree built, each generated call is ``unchanged``,
+    the options confiture does not model (``data_gin_index``, ``group_keys``, …) included.
+    """
+    from confiture.core.ddl_objects import objects_in
+    from confiture.core.sql_lexer import parse_file
+
+    url = fresh_database_factory("confiture_tv")
+    _built(url, registry_tree)
+    calls = [
+        obj.create_sql
+        for ref, (obj,) in objects_in([parse_file(registry_tree)]).items()
+        if ref.kind == "tview"
+    ]
+    with psycopg.connect(url, autocommit=True) as conn:
+        answers = [conn.execute(call).fetchone() for call in calls]
+
+    assert calls
+    assert answers == [("unchanged",)] * len(calls)
+
+
+def test_the_call_a_database_side_writes_round_trips(
+    registry_tree: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """The registry's ``options`` passed back whole are ``unchanged`` (the contract's round trip)."""
+    from confiture.core.ddl_objects import tview_object
+
+    url = fresh_database_factory("confiture_tv")
+    _built(url, registry_tree)
+    with psycopg.connect(url, autocommit=True) as conn:
+        live = live_catalog.read(conn, schemas=["public"])
+        answers = [
+            conn.execute(tview_object(ref, tview).create_sql).fetchone()
+            for ref, tview in live.tviews.items()
+        ]
+
+    assert answers
+    assert answers == [("unchanged",)] * len(answers)

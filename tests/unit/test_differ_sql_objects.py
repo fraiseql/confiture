@@ -228,7 +228,7 @@ class TestTViewDDL:
 
     ``tviews.pg_tviews_create_or_replace()`` creates, replaces in place or rebuilds,
     and returns ``unchanged`` when applied again; ``tviews.pg_tviews_drop(…,
-    if_exists => true)`` drops. Both are pg_tviews' read contract 1, so the
+    if_exists => true)`` drops. Both are pg_tviews' read contract, so the
     migration re-applies and never guesses at a ``CREATE TABLE … AS``.
     """
 

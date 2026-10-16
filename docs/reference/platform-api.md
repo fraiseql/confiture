@@ -678,6 +678,12 @@ uses, pg_tviews' rule; `None` where they were not read. `managed_indexes`
 are pg_tviews' own, read from the database alone and never compared: a tree
 that writes one of them exactly writes what pg_tviews adopts as its own.
 
+`other_options` are the `options` keys the model does not compare
+(`data_gin_index`, `group_keys`, `typename`, …), as written: the tree's
+call's, or every one the registry holds. Under pg_tviews' read contract 2 an
+option a call leaves out is at its default, also on an existing TVIEW, so the
+call a migration writes passes them back; they are never compared.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
@@ -691,6 +697,7 @@ that writes one of them exactly writes what pg_tviews adopts as its own.
 | `uncascaded_tables` | `tuple[UncascadedTable, ...] \| None` | `None` |
 | `indexes` | `tuple[Index, ...] \| None` | `()` |
 | `managed_indexes` | `tuple[Index, ...]` | `()` |
+| `other_options` | `Mapping[str, Any]` | empty |
 
 ### `FunctionRead`
 
@@ -786,7 +793,7 @@ to and closed here; a connection is the caller's.
 ### `MINIMUM_PG_TVIEWS`
 
 ```python
-MINIMUM_PG_TVIEWS = '0.1.0-beta.27'
+MINIMUM_PG_TVIEWS = '0.1.0-beta.30'
 ```
 
 ## What a writer may supply

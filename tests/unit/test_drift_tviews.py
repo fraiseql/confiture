@@ -184,7 +184,7 @@ def test_a_pinned_uncascaded_policy_is_compared_with_the_registrys() -> None:
 
 
 def test_a_policy_the_tree_does_not_pin_is_never_drift() -> None:
-    """A ``CREATE TABLE … AS`` takes the session's ``pg_tviews.uncascaded_policy``."""
+    """A ``CREATE TABLE … AS`` names no policy: it is at pg_tviews' default, the tree's to leave."""
     found = compare_pinned(
         DECLARED,
         live(TView(name="tv_post", schema="public", uncascaded_policy="warn")),

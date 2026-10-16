@@ -9,6 +9,8 @@ compare a TVIEW, never its parts.
 import json
 from dataclasses import fields, replace
 
+import pytest
+
 from confiture.core.schema_model import (
     FunctionRead,
     Index,
@@ -48,6 +50,7 @@ def test_the_wire_carries_tviews_and_reads_them_back() -> None:
             "uncascaded_tables": None,
             "indexes": [],
             "managed_indexes": [],
+            "other_options": {},
         }
     ]
     assert SchemaModel.from_json(model.to_json()) == model
@@ -231,3 +234,13 @@ def test_parity_compares_a_tview_s_indexes_as_a_table_s_and_drops_pg_tviews_own(
     assert parity_tview(one) == parity_tview(two)
     assert parity_tview(one).managed_indexes == ()
     assert parity_tview(_indexed(indexes=None)).indexes is None
+
+
+@pytest.mark.parametrize(("logged", "pinned"), [(True, None), (False, False), (None, None)])
+def test_a_tview_is_logged_unless_it_says_otherwise(
+    logged: bool | None, pinned: bool | None
+) -> None:
+    """pg_tviews contract 2 creates a TVIEW LOGGED: ``logged: false`` is the only pin."""
+    from confiture.core.schema_model import parity_tview
+
+    assert parity_tview(TView(name="tv_post", logged=logged)).logged is pinned

@@ -96,8 +96,7 @@ def test_pg_tviews_own_and_constraint_indexes_are_not_the_user_s(tview_database:
     with psycopg.connect(tview_database, autocommit=True) as conn:
         conn.execute(USER_INDEX)
         conn.execute("CREATE UNIQUE INDEX ux_tv_post_id ON tv_post (id)")
-        # A TVIEW is unlogged by default, and only an unlogged table may reference it.
-        conn.execute("CREATE UNLOGGED TABLE tb_ref (post uuid REFERENCES tv_post (id))")
+        conn.execute("CREATE TABLE tb_ref (post uuid REFERENCES tv_post (id))")
         tview = _tview(conn)
         managed = _registry_managed(conn)
 

@@ -48,18 +48,37 @@ def test_an_index_on_a_stable_column_is_fine() -> None:
     assert _findings(sql, "tview_001") == []
 
 
-def test_an_unlogged_tview_with_replicas_is_named() -> None:
-    (finding,) = _findings(TVIEW, "tview_002", replicas=True)
+def test_a_tview_that_pins_nothing_is_logged() -> None:
+    """pg_tviews contract 2 creates a TVIEW LOGGED by default: a standby reads it."""
+    assert _findings(TVIEW, "tview_002", replicas=True) == []
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        TVIEW.replace("CREATE TABLE", "CREATE UNLOGGED TABLE"),
+        TVIEW + "ALTER TABLE tv_post SET UNLOGGED;\n",
+        "SELECT tviews.pg_tviews_create_or_replace('tv_post', $q$SELECT p.pk_post, p.id, "
+        "jsonb_build_object('title', p.title) AS data FROM tb_post p$q$, "
+        "options => '{\"logged\": false}');\n",
+    ],
+    ids=["create-unlogged", "set-unlogged", "options"],
+)
+def test_an_unlogged_tview_with_replicas_is_named(sql: str) -> None:
+    (finding,) = _findings(sql, "tview_002", replicas=True)
 
     assert finding.object_name == "tv_post"
+    assert "pg_tviews' default" not in finding.message
 
 
 def test_no_replicas_nothing_to_say() -> None:
-    assert _findings(TVIEW, "tview_002", replicas=False) == []
+    unlogged = TVIEW.replace("CREATE TABLE", "CREATE UNLOGGED TABLE")
+
+    assert _findings(unlogged, "tview_002", replicas=False) == []
 
 
 def test_set_logged_satisfies_it() -> None:
-    sql = TVIEW + "ALTER TABLE tv_post SET LOGGED;\n"
+    sql = TVIEW + "ALTER TABLE tv_post SET UNLOGGED;\nALTER TABLE tv_post SET LOGGED;\n"
 
     assert _findings(sql, "tview_002", replicas=True) == []
 

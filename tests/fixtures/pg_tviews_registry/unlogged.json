@@ -1,0 +1,48 @@
+{
+  "captured_from": {
+    "commit": "eadacb058c09fb996d045e87434b1c55b3a1a817",
+    "contract": 2,
+    "pg_tviews": "0.1.0-beta.30"
+  },
+  "registry": [
+    {
+      "base_tables": [
+        "tb_post"
+      ],
+      "cascade_kinds": {
+        "tb_post": "local"
+      },
+      "entity": "post",
+      "identity": [
+        "pk_post"
+      ],
+      "managed_indexes": [
+        "idx_tv_post_id"
+      ],
+      "name": "tv_post",
+      "needs_reregister": false,
+      "options": {
+        "data_compression": "lz4",
+        "data_gin_index": false,
+        "data_storage": "main",
+        "fillfactor": 70,
+        "function_reads": {},
+        "group_keys": null,
+        "indexes": [],
+        "logged": false,
+        "time_refresh": null,
+        "toast_tuple_target": null,
+        "typename": null,
+        "uncascaded_policy": "error",
+        "uncascaded_tables": {}
+      },
+      "query": "SELECT p.pk_post, p.id, jsonb_build_object('id', p.id, 'title', p.title) AS data\nFROM tb_post p",
+      "references": {},
+      "schema": "public",
+      "time_dependent": false,
+      "typename": "Post",
+      "uncascaded_tables": [],
+      "view": "tviews.public__tv_post"
+    }
+  ]
+}
