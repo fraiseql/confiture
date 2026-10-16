@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-10-16
+
 **confiture reads pg_tviews' read contract 2.** ⚠️ confiture requires pg_tviews
 0.1.0-beta.30 and refuses an earlier one with `CONFIG_014`: upgrade the extension
 (`ALTER EXTENSION pg_tviews UPDATE`, then `SELECT * FROM tviews.pg_tviews_reregister_all()`
@@ -48,7 +50,7 @@ once) before deploying this confiture.
 - The schema model's wire gains `tviews[].other_options` (an object; additive, and a
   model written before reads as carrying none). `schema-model.schema.json` and the
   `tview-indexes` model goldens are refreshed for it.
-- The `pg-tviews` CI leg builds pg_tviews at `eadacb05`, the tree v0.1.0-beta.30 is cut from.
+- The `pg-tviews` CI leg builds pg_tviews at the commit of the signed v0.1.0-beta.30 tag (`9e0d70b4`).
 
 ## [1.36.1] - 2026-10-12
 
