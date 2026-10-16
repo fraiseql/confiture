@@ -3,11 +3,11 @@
 # pg_tviews is in no distribution, so it is built here from a pinned ref with the
 # pgrx version it pins (Cargo.toml: pgrx = "=0.17.0") against PGDG's PostgreSQL 18,
 # and the tree `cargo pgrx package` writes is copied onto the official image of the
-# same Debian release. The ref is pg_tviews main at eadacb05, the tree its
-# v0.1.0-beta.30 release is cut from (fraiseql/pg_tviews#248 adds only its
-# CHANGELOG stamp): the first release that offers read contract 2, which confiture
-# reads (`registry.options` holding every option, LOGGED by default, the `tview`
-# parameter; ADR 0211/0220), with the registry's `managed_indexes` and the backing
+# same Debian release. The ref is the commit of the signed v0.1.0-beta.30 tag
+# (`git rev-parse v0.1.0-beta.30^{commit}`), the release confiture requires: the
+# first that offers read contract 2, which confiture reads (`registry.options`
+# holding every option, LOGGED by default, the `tview` parameter; ADR 0211/0220),
+# with the registry's `managed_indexes` and the backing
 # view in `tviews` that this tree's TVIEW suites exercise. Fetched by SHA so a build
 # reproduces and the layer cache never serves another tree under the same ref.
 FROM rust:1.91.1-slim-bookworm AS build
@@ -20,7 +20,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked cargo-pgrx --version 0.17.0
 RUN cargo pgrx init --pg18 /usr/lib/postgresql/18/bin/pg_config
-ARG PG_TVIEWS_REF=eadacb058c09fb996d045e87434b1c55b3a1a817
+ARG PG_TVIEWS_REF=9e0d70b446ae0ce014d91531012f59267846abb6
 WORKDIR /src
 RUN git init -q \
  && git fetch -q --depth 1 https://github.com/fraiseql/pg_tviews "$PG_TVIEWS_REF" \
