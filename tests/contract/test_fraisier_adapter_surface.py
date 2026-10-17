@@ -259,7 +259,11 @@ def test_preflight_exposes_top_level_window_safe_verdict(tmp_path: Path) -> None
 
 
 def test_version_output_shape_matches_adapter_parser() -> None:
-    """`confiture --version` ends in the version token (adapter parse_version)."""
+    """`confiture --version` ends in the version token (adapter parse_version).
+
+    fraiseql v2 runs it too, to tell whether confiture is installed, and reads only
+    the exit status (``crates/fraiseql-cli/src/commands/migrate.rs:498``).
+    """
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0, result.output
     # The adapter (fraisier doctor) reads the first line only and takes its last
@@ -423,21 +427,40 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
     assert _VERSIONS[1][0] in down_payload["rolled_back"]
 
 
+@pytest.mark.parametrize("verb", ["up", "down", "status"])
 def test_adapter_dsn_handoff_is_env_only_under_no_config(
-    adapter_db, migrations_dir, tmp_path
+    verb, adapter_db, migrations_dir, tmp_path
 ) -> None:
     """Under --no-config the env DSN is the sole source — proving the adapter handoff.
 
-    A successful `migrate up` driven purely by CONFITURE_DATABASE_URL (no --config,
-    no DSN in argv) is end-to-end proof that confiture honours the adapter's
-    secrets-via-env contract.
+    fraisier hands ``up`` its DSN this way; fraiseql v2 hands ``up``, ``down`` and
+    ``status`` theirs (``crates/fraiseql-cli/src/commands/migrate.rs:336``). Each verb,
+    driven purely by CONFITURE_DATABASE_URL (no --config, no DSN in argv), reads or
+    writes the ledger in that database: ``status`` reporting the applied versions is
+    the proof, since without a DSN it lists every migration as ``unknown``.
     """
+    versions = [v for v, _ in _VERSIONS]
     report = tmp_path / "r.json"
-    result = _adapter_invoke("up", dsn=adapter_db, report=report, migrations_dir=migrations_dir)
+    if verb != "up":
+        applied = _adapter_invoke(
+            "up", dsn=adapter_db, report=report, migrations_dir=migrations_dir
+        )
+        assert applied.exit_code == 0, applied.output
+        report.unlink()
+    extra = ("--steps", "1") if verb == "down" else ()
+    result = _adapter_invoke(
+        verb, *extra, dsn=adapter_db, report=report, migrations_dir=migrations_dir
+    )
     assert result.exit_code == 0, result.output
     payload = _read_report(result, report)
-    assert payload["success"] is True
-    assert [m["version"] for m in payload["applied"]] == [v for v, _ in _VERSIONS]
+    if verb == "up":
+        assert payload["success"] is True
+        assert [m["version"] for m in payload["applied"]] == versions
+    elif verb == "down":
+        assert payload["success"] is True
+        assert [m["version"] for m in payload["rolled_back"]] == versions[-1:]
+    else:
+        assert payload["applied"] == versions
 
 
 def test_adapter_up_that_halts_is_a_failure_that_says_why(adapter_db, tmp_path) -> None:

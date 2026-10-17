@@ -4,6 +4,12 @@ A ``.py`` migration is imported from its path; an ``.up.sql`` file becomes a
 ``FileSQLMigration`` with its ``.down.sql`` twin. This is the migrator's concern,
 not the connection's: ``core.connection`` opens a database and knows nothing about
 migrations.
+
+``load_migration_class`` is public as ``confiture.load_migration_class``: a tool
+that reads a migration file without running the migrator imports it from there.
+``load_migration_module`` and ``get_migration_class`` are its two halves for
+``.py`` files and stay internal, since a caller holding a module rather than a
+file has stepped around the ``.up.sql`` branch.
 """
 
 import importlib.util
@@ -92,9 +98,11 @@ def load_migration_class(migration_file: Path) -> type:
     Returns:
         Migration class (not instance)
 
+    A ``.py`` file is imported, which executes it: load only migrations you trust.
+
     Raises:
-        MigrationError: If migration cannot be loaded
-        FileNotFoundError: If SQL down file is missing
+        MigrationError: If the file cannot be loaded, an ``.up.sql`` file has no
+            ``.down.sql`` beside it, or the suffix is neither ``.py`` nor ``.up.sql``
 
     Example:
         >>> # Python migration

@@ -298,6 +298,34 @@ database.
 
 ---
 
+## Loading a migration file
+
+`confiture.load_migration_class(path)` turns one migration file into the
+`Migration` class it defines, the same way `migrate up` reads it. Use it in a
+tool that inspects or tests a migration without running the migrator. To apply
+migrations, open a session (above): it takes the lock, writes the ledger and
+verifies checksums, and a loop of your own over loaded classes does none of that.
+
+```python
+from pathlib import Path
+
+from confiture import load_migration_class
+
+# A Python migration: the class the file defines.
+cls = load_migration_class(Path("db/migrations/001_create_users.py"))
+print(cls.version, cls.name)
+
+# An SQL migration: the .up.sql file, with its .down.sql beside it.
+cls = load_migration_class(Path("db/migrations/002_add_posts.up.sql"))
+migration = cls(connection=conn)
+```
+
+A `.py` file is **imported, which executes it**: only load migrations you trust.
+An `.up.sql` file without its `.down.sql`, or a file with any other suffix,
+raises `MigrationError`.
+
+---
+
 ## Result objects
 
 These are dataclasses from `confiture.models.results`.

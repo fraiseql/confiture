@@ -1,11 +1,18 @@
 """Contract test pinning the command lines confiture's consumers spell.
 
-fraisier and a downstream application drive confiture over a subprocess, from Python,
-Makefiles, CI job definitions and shell scripts. None of it runs in confiture's CI,
+fraisier, fraiseql v2 and a downstream application drive confiture over a subprocess,
+from Rust, Python, Makefiles, CI job definitions and shell scripts. None of it runs in confiture's CI,
 so a renamed command or a dropped flag surfaces as a failed deploy or a red ship
 gate in someone else's repository. Each row below is one invocation as the
 consumer writes it, with the consumer's own ``file:line``: removing a command or a
 flag is then a deliberate edit to this table that names who it breaks.
+
+fraiseql v2's rows are read from its source: ``ConfitureCommand::argv`` in
+``crates/fraiseql-cli/src/commands/migrate.rs`` (``fraiseql/fraiseql``, branch
+``dev`` at ``1c6d131c``) builds every command line it runs, and each row cites the
+call site that picks the verb. It hands a DSN only to ``up``, ``down`` and
+``status``, as ``CONFITURE_DATABASE_URL`` with ``--no-config``; that mechanism is
+held end to end in ``test_fraisier_adapter_surface.py``.
 
 Resolution goes through the live Typer tree, the same walk the docs guards use
 (``tests/unit/docs/command_truth.py``), never through a list of names kept here.
@@ -19,6 +26,7 @@ import re
 from typing import NamedTuple
 
 import pytest
+import typer
 from tests.unit.docs.command_truth import resolve
 from typer.testing import CliRunner
 
@@ -33,6 +41,8 @@ class Invocation(NamedTuple):
     flags: tuple[str, ...]
     source: str
     """The consumer's own ``file:line`` that spells it."""
+    arguments: tuple[str, ...] = ()
+    """The positional arguments the consumer passes, by parameter name."""
 
 
 _FRAISIER_DBOPS = "fraisier:fraisier/dbops/confiture.py"
@@ -40,6 +50,7 @@ _FRAISIER_DRIFT = "fraisier:fraisier/dbops/drift.py"
 _FRAISES = "app:fraises.yaml"
 _MAKEFILE = "app:Makefile"
 _DEFINITION_DRIFT = "app:scripts/ops/check_definition_drift.py"
+_FRAISEQL_V2 = "fraiseql:crates/fraiseql-cli/src/commands/migrate.rs"
 
 INVOCATIONS: tuple[Invocation, ...] = (
     # fraisier
@@ -86,6 +97,44 @@ INVOCATIONS: tuple[Invocation, ...] = (
         ("migrate", "preflight"),
         ("--against", "--migrations-dir", "--format", "--config", "--since"),
         "fraisier:fraisier/dbops/preflight.py:771",
+    ),
+    # fraiseql v2
+    Invocation(
+        "fraiseql",
+        ("migrate", "up"),
+        ("--migrations-dir", "--no-config", "--format"),
+        f"{_FRAISEQL_V2}:88",
+    ),
+    Invocation(
+        "fraiseql",
+        ("migrate", "down"),
+        ("--migrations-dir", "--steps", "--no-config", "--format"),
+        f"{_FRAISEQL_V2}:101",
+    ),
+    Invocation(
+        "fraiseql",
+        ("migrate", "status"),
+        ("--migrations-dir", "--no-config", "--format"),
+        f"{_FRAISEQL_V2}:111",
+    ),
+    Invocation(
+        "fraiseql",
+        ("migrate", "generate"),
+        ("--migrations-dir", "--format"),
+        f"{_FRAISEQL_V2}:121",
+        arguments=("name",),
+    ),
+    Invocation(
+        "fraiseql",
+        ("migrate", "validate"),
+        ("--migrations-dir", "--format"),
+        f"{_FRAISEQL_V2}:139",
+    ),
+    Invocation(
+        "fraiseql",
+        ("migrate", "preflight"),
+        ("--migrations-dir", "--format"),
+        f"{_FRAISEQL_V2}:148",
     ),
     # A downstream application
     Invocation(
@@ -220,6 +269,36 @@ def test_consumer_invocation_still_resolves(row: Invocation) -> None:
         f"`confiture {' '.join(row.command)}` lost {missing} — "
         f"{row.consumer} passes them at {row.source}"
     )
+    arguments = [p.name for p in command.params if p.param_type_name == "argument"]
+    assert list(row.arguments) == arguments[: len(row.arguments)], (
+        f"`confiture {' '.join(row.command)}` takes {arguments} positionally — "
+        f"{row.consumer} passes {list(row.arguments)} at {row.source}"
+    )
+
+
+@pytest.mark.parametrize(
+    "row",
+    [row for row in INVOCATIONS if row.consumer == "fraiseql"],
+    ids=lambda r: " ".join(r.command),
+)
+def test_fraiseql_format_json_is_accepted(row: Invocation) -> None:
+    """Under its global ``--json`` fraiseql v2 passes ``--format json`` to every verb.
+
+    ``--format`` is a string option whose callback holds each command's own
+    vocabulary, so the flag resolving says nothing about ``json``: the callback is
+    run on the value fraiseql passes.
+    """
+    _, command, _ = resolve(row.command)
+    option = next(p for p in command.params if "--format" in getattr(p, "opts", ()))
+    try:
+        # Typer vendors its own click, so the context is the command's own class.
+        accepted = option.process_value(command.context_class(command), "json")
+    except typer.Exit as refused:
+        pytest.fail(
+            f"`confiture {' '.join(row.command)} --format json` exits {refused.exit_code} — "
+            f"fraiseql passes it at {row.source}"
+        )
+    assert accepted == "json"
 
 
 runner = CliRunner()
