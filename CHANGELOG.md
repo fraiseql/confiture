@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-10-17
+
 ### Added
 
 - **`confiture.load_migration_class`** (#737): the public name for turning a migration
@@ -27,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fraiseql's own `file:line`. `docs/operations/release-trains.md` names fraiseql among
   the consumers told before a release, and a test fails on a pinned consumer the page
   does not name.
+- **fraiseql v1's library surface is pinned** (#737). fraiseql-python's `migrate` commands
+  run through `Migrator.from_config` → `MigratorSession`. `tests/contract/test_consumer_symbols.py`
+  pins the names, parameters and result fields they use, each citing its line in fraiseql's
+  `migrate.py`. `tests/contract/test_fraiseql_session_contract.py` pins three behaviours:
+  a directory can mix `.py` and `.up.sql` migrations, a failed `up` returns its failure
+  rather than raising, and `status` raises when the server can't be reached.
 
 ## [1.37.0] - 2026-10-16
 
