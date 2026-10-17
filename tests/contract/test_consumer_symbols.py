@@ -1,6 +1,6 @@
 """Contract test pinning the Python symbols confiture's consumers import.
 
-Two projects import confiture as a library, and neither is visible to this
+Three projects import confiture as a library, and none is visible to this
 repository's CI:
 
 - **fraisier** probes its import surface in
@@ -9,6 +9,12 @@ repository's CI:
   or a method whose parameters narrowed, passes its probe and fails a deploy.
 - **A downstream application** names what it imports in a ``pyproject.toml`` comment, and
   runs every one of its migrations through ``models.migration.Migration``.
+- **fraiseql v1** (``fraiseql/fraiseql-python``) has no probe of its own. Its rows are
+  read from ``src/fraiseql/cli/commands/migrate.py`` at the commit cited, which drives
+  ``up``, ``down`` and ``status`` through ``Migrator.from_config`` and
+  ``MigratorSession``, and writes migration files that subclass
+  ``models.migration.Migration``. (fraiseql v2 runs the CLI and is pinned in
+  ``test_consumer_cli_surface.py``.)
 
 Confiture is the side that knows what the shape was, so the shape is pinned here.
 Each row names the consumer file and line it was read from: removing or narrowing a
@@ -141,6 +147,18 @@ APP_SYMBOLS: tuple[Symbol, ...] = (
         "app:src/app/core/migration_runner.py:79",
         "1.14.0",
     ),
+)
+
+# fraiseql-python@b1e53640 (#548), the file that drives confiture.
+_FRAISEQL_V1 = "fraiseql:src/fraiseql/cli/commands/migrate.py"
+
+FRAISEQL_SYMBOLS: tuple[Symbol, ...] = (
+    Symbol(
+        "fraiseql", "confiture.config.environment", "Environment", f"{_FRAISEQL_V1}:17", "1.38.0"
+    ),
+    Symbol("fraiseql", "confiture.core.migrator", "Migrator", f"{_FRAISEQL_V1}:18", "1.38.0"),
+    # Written into every file `fraiseql migrate create` generates.
+    Symbol("fraiseql", "confiture.models.migration", "Migration", f"{_FRAISEQL_V1}:274", "1.38.0"),
 )
 
 _FRAISIER_DBOPS = "fraisier:fraisier/dbops/confiture.py"
@@ -348,6 +366,53 @@ CALL_SHAPES: tuple[CallShape, ...] = (
         f"{_APP_SETUP}:97",
         "1.14.0",
     ),
+    # A file holding a `database:` mapping is read as its other keys (those
+    # `fraiseql migrate init` writes, :176) plus a URL built from the mapping (:45-47).
+    CallShape(
+        "fraiseql",
+        "confiture.config.environment:Environment",
+        ("name", "include_dirs", "exclude_dirs", "database_url"),
+        f"{_FRAISEQL_V1}:48",
+        "1.38.0",
+    ),
+    # With an `Environment` here and a `Path` at :49; that both are accepted is
+    # pinned in `test_fraiseql_session_contract.py`.
+    CallShape(
+        "fraiseql",
+        "confiture.core.migrator:Migrator.from_config",
+        ("config", "migrations_dir"),
+        f"{_FRAISEQL_V1}:48",
+        "1.38.0",
+    ),
+    CallShape(
+        "fraiseql",
+        "confiture.core.migrator:MigratorSession.status",
+        (),
+        f"{_FRAISEQL_V1}:375",
+        "1.38.0",
+    ),
+    CallShape(
+        "fraiseql",
+        "confiture.core.migrator:MigratorSession.up",
+        ("target",),
+        f"{_FRAISEQL_V1}:452",
+        "1.38.0",
+    ),
+    CallShape(
+        "fraiseql",
+        "confiture.core.migrator:MigratorSession.down",
+        ("steps",),
+        f"{_FRAISEQL_V1}:529",
+        "1.38.0",
+    ),
+    # The generated migration's commented example (`self.execute("""…""")`).
+    CallShape(
+        "fraiseql",
+        "confiture.models.migration:Migration.execute",
+        ("sql",),
+        f"{_FRAISEQL_V1}:289",
+        "1.38.0",
+    ),
 )
 
 MEMBERS: tuple[Members, ...] = (
@@ -436,6 +501,65 @@ MEMBERS: tuple[Members, ...] = (
         "app:pyproject.toml:31",
         "1.14.0",
     ),
+    # Every session is used as a context manager (:374, :451, :515).
+    Members(
+        "fraiseql",
+        "confiture.core.migrator:MigratorSession",
+        ("__enter__", "__exit__"),
+        f"{_FRAISEQL_V1}:374",
+        "1.38.0",
+    ),
+    Members(
+        "fraiseql",
+        "confiture.models.results:StatusResult",
+        ("migrations",),
+        f"{_FRAISEQL_V1}:376",
+        "1.38.0",
+    ),
+    Members(
+        "fraiseql",
+        "confiture.models.results:MigrationInfo",
+        ("version", "name", "status"),
+        f"{_FRAISEQL_V1}:376",
+        "1.38.0",
+    ),
+    Members(
+        "fraiseql",
+        "confiture.models.results:StatusResult",
+        ("applied",),
+        f"{_FRAISEQL_V1}:516",
+        "1.38.0",
+    ),
+    Members(
+        "fraiseql",
+        "confiture:MigrateUpResult",
+        ("success", "migrations_applied", "skipped", "error_summary"),
+        f"{_FRAISEQL_V1}:454",
+        "1.38.0",
+    ),
+    # Each applied migration here, and each rolled-back one at :533.
+    Members(
+        "fraiseql",
+        "confiture.models.results:MigrationApplied",
+        ("version", "name"),
+        f"{_FRAISEQL_V1}:456",
+        "1.38.0",
+    ),
+    Members(
+        "fraiseql",
+        "confiture:MigrateDownResult",
+        ("success", "migrations_rolled_back", "error"),
+        f"{_FRAISEQL_V1}:531",
+        "1.38.0",
+    ),
+    # A generated migration declares `version` and `name` and overrides `up`/`down`.
+    Members(
+        "fraiseql",
+        "confiture.models.migration:Migration",
+        ("version", "name", "up", "down", "execute"),
+        f"{_FRAISEQL_V1}:277",
+        "1.38.0",
+    ),
 )
 
 
@@ -452,7 +576,7 @@ def _row_id(row: NamedTuple) -> str:
     return f"{row[0]}:{row[1]}{'.' + row[2] if isinstance(row, Symbol) else ''}"
 
 
-@pytest.mark.parametrize("row", FRAISIER_SYMBOLS + APP_SYMBOLS, ids=_row_id)
+@pytest.mark.parametrize("row", FRAISIER_SYMBOLS + APP_SYMBOLS + FRAISEQL_SYMBOLS, ids=_row_id)
 def test_consumer_symbol_is_importable_by_name(row: Symbol) -> None:
     """Every symbol a consumer imports still exists where the consumer looks."""
     module = importlib.import_module(row.module)
