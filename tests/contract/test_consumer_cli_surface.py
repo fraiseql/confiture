@@ -25,8 +25,8 @@ that: ``lint`` accepts ``table`` and ``seed validate`` rejects it with
 import re
 from typing import NamedTuple
 
-import click
 import pytest
+import typer
 from tests.unit.docs.command_truth import resolve
 from typer.testing import CliRunner
 
@@ -291,8 +291,9 @@ def test_fraiseql_format_json_is_accepted(row: Invocation) -> None:
     _, command, _ = resolve(row.command)
     option = next(p for p in command.params if "--format" in getattr(p, "opts", ()))
     try:
-        accepted = option.process_value(click.Context(command), "json")
-    except click.exceptions.Exit as refused:
+        # Typer vendors its own click, so the context is the command's own class.
+        accepted = option.process_value(command.context_class(command), "json")
+    except typer.Exit as refused:
         pytest.fail(
             f"`confiture {' '.join(row.command)} --format json` exits {refused.exit_code} — "
             f"fraiseql passes it at {row.source}"
