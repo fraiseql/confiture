@@ -45,8 +45,9 @@ string to `{schema, name}`; both would have been majors under a guarantee
 
 - **Every break is flagged.** Its CHANGELOG entry is marked ⚠️ and says what
   changed, old to new, and what a consumer does about it.
-- **The known consumers are told before the release.** Today they are fraisier
-  and a downstream application.
+- **The known consumers are told before the release.** Today they are fraisier,
+  fraiseql (v1 imports confiture as a library, v2 runs the `confiture` CLI) and a
+  downstream application.
 - **The enforcement is a test, not a version number.** `tests/contract/` pins
   what each known consumer imports, calls, runs and reads, with the consumer's
   own `file:line`. That includes the answers of the properties they branch on
@@ -77,8 +78,8 @@ fraisier-core vendors; the pull request that adds it says so.
 **A published enum does not shrink.** A member that cannot be emitted yet is kept,
 documented and filed.
 
-**The consumer surface is a test.** The symbols fraisier and a downstream application
-import, the call shapes they rely on, and the command lines they run are pinned
+**The consumer surface is a test.** The symbols fraisier, fraiseql and a downstream
+application import, the call shapes they rely on, and the command lines they run are pinned
 in `tests/contract/`, each row naming the consumer file that depends on it.
 Removing one is a deliberate edit that names who it breaks.
 
