@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`confiture.load_migration_class`** (#737): the public name for turning a migration
+  file (`.py`, or `.up.sql` with its `.down.sql`) into its `Migration` class. It is the
+  loader `migrate up` uses, the same function object, so a tool that read a migration
+  through `confiture.core.connection.load_migration_class` before 1.16.0 (#341) has a
+  supported import again. `docs/api/migrator.md` § "Loading a migration file".
+
 ## [1.37.0] - 2026-10-16
 
 **confiture reads pg_tviews' read contract 2.** ⚠️ confiture requires pg_tviews
