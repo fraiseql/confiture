@@ -8,7 +8,11 @@ about a value names the line the value is on.
 
 A statement level 1 cannot check is never passed over in silence: it is an
 :class:`Unread` with the reason, unless :data:`UNREAD_SEED_STATEMENTS` says why a
-statement of its kind writes no row to check.
+statement of its kind writes no row to check. An :class:`Unread` that writes rows
+(``INSERT … SELECT``, a data-modifying CTE, ``UPDATE``, ``MERGE``) still names the
+table it writes, so :meth:`SeedStatements.targets` is every table the file
+populates. One limit is named rather than guessed at: a statement that writes
+through a function (``SELECT app.fn_load()``) writes tables no static reader sees.
 """
 
 from bisect import bisect_left
@@ -33,7 +37,10 @@ _SETOP_NONE = _pg_member("SetOperation", "SETOP_NONE")
 UNREAD_SEED_STATEMENTS: dict[str, str] = {
     "VariableSetStmt": "SET changes a session setting; it writes no row",
     "TransactionStmt": "BEGIN, COMMIT and SAVEPOINT bracket statements; they write no row",
-    "SelectStmt": "a SELECT (a setval, a query) writes no row; its UNION branches are checked",
+    "SelectStmt": (
+        "a SELECT (a setval, a query) writes no row; its UNION branches are checked, and a "
+        "data-modifying CTE inside it is reported"
+    ),
     "TruncateStmt": "TRUNCATE empties a table; it writes no row",
     "DeleteStmt": "DELETE removes rows; it writes none",
 }
@@ -89,10 +96,15 @@ class SeedWrite:
 
 @dataclass(frozen=True)
 class Unread:
-    """A statement level 1 does not check, the line it is on, and why."""
+    """A statement level 1 does not check, the line it is on, and why.
+
+    ``relation`` is the table it writes when it writes one: its rows are not
+    read, and the table is still one the file populates.
+    """
 
     line: int
     reason: str
+    relation: RelationName | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +123,15 @@ class SeedStatements:
     unread: tuple[Unread, ...]
     unions: tuple[UnionQuery, ...]
     union_comment_lines: tuple[int, ...]
+
+    def targets(self) -> tuple[RelationName, ...]:
+        """Every table the file writes rows into, each once, in the order first written."""
+        written = sorted(
+            [(w.line, w.relation) for w in self.writes]
+            + [(u.line, u.relation) for u in self.unread if u.relation is not None],
+            key=lambda item: item[0],
+        )
+        return tuple(dict.fromkeys(relation for _line, relation in written))
 
 
 class SeedParseError(ValueError):
@@ -179,11 +200,14 @@ def _insert(
 ) -> SeedWrite | Unread:
     stmt = parsed.stmt
     select = stmt.selectStmt
-    if select is None:
-        return Unread(parsed.line, "INSERT … DEFAULT VALUES writes no value to check")
-    if not select.valuesLists:
-        return Unread(parsed.line, "an INSERT … SELECT: the values are computed at run time")
     relation = stmt.relation
+    target = RelationName(relation.schemaname, relation.relname)
+    if select is None:
+        return Unread(parsed.line, "INSERT … DEFAULT VALUES writes no value to check", target)
+    if not select.valuesLists:
+        return Unread(
+            parsed.line, "an INSERT … SELECT: the values are computed at run time", target
+        )
     openings = _row_openings(toks, starts, relation.location, parsed.location + parsed.length)
     if len(openings) != len(select.valuesLists):
         openings = [parsed.location] * len(select.valuesLists)
@@ -195,6 +219,40 @@ def _insert(
     )
     columns = tuple(target.name for target in stmt.cols) if stmt.cols else None
     return SeedWrite(relation.schemaname, relation.relname, columns, rows, parsed.line, "insert")
+
+
+#: The statements that write rows level 1 does not read, and how a message names each.
+_ROW_WRITERS: dict[str, str] = {
+    "InsertStmt": "an INSERT in a data-modifying CTE",
+    "UpdateStmt": "an UPDATE",
+    "MergeStmt": "a MERGE",
+}
+
+
+def _nested_writes(parsed: sql_lexer.ParsedStatement) -> list[Unread]:
+    """Every row-writing statement inside *parsed* other than the statement itself.
+
+    A data-modifying CTE (``WITH a AS (INSERT …) SELECT …``) writes rows that no
+    ``VALUES`` list level 1 reads holds; ``DELETE`` writes none.
+    """
+    return [
+        Unread(
+            parsed.line,
+            f"{_ROW_WRITERS[type(node).__name__]}: the rows it writes are not read",
+            RelationName(node.relation.schemaname, node.relation.relname),
+        )
+        for node in walk_nodes(parsed.stmt)
+        if node is not parsed.stmt
+        and type(node).__name__ in _ROW_WRITERS
+        and getattr(node, "relation", None) is not None
+    ]
+
+
+def _unread_statement(parsed: sql_lexer.ParsedStatement, node: str) -> Unread:
+    """A top-level statement level 1 does not read, naming the table it writes, if any."""
+    relation = getattr(parsed.stmt, "relation", None) if node in _ROW_WRITERS else None
+    target = None if relation is None else RelationName(relation.schemaname, relation.relname)
+    return Unread(parsed.line, f"level 1 does not read a {node}", target)
 
 
 def _options(stmt: Any) -> dict[str, str]:
@@ -368,9 +426,8 @@ def read_seed_statements(sql: str) -> SeedStatements:
             reason = "a COPY that does not read its rows from the file level 1 is reading"
             found.append((statement.location, Unread(statement.line, reason)))
         elif node not in UNREAD_SEED_STATEMENTS:
-            found.append(
-                (statement.location, Unread(statement.line, f"level 1 does not read a {node}"))
-            )
+            found.append((statement.location, _unread_statement(statement, node)))
+        found.extend((statement.location, unread) for unread in _nested_writes(statement))
     found.extend((block.start, _copy(lines, block)) for block in sql_lexer.copy_blocks(sql))
     found.sort(key=lambda item: item[0])
 

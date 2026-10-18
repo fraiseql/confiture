@@ -27,7 +27,7 @@ SHAPES = "tests/fixtures/seed_shapes/"
 READ_KINDS = frozenset({"InsertStmt", "CopyStmt"})
 
 #: Kinds level 1 reports as not checked (an INFO finding), each pinned by a shape.
-REPORTED_KINDS = frozenset({"UpdateStmt"})
+REPORTED_KINDS = frozenset({"UpdateStmt", "MergeStmt"})
 
 #: Per shape: (rows read, statements reported as not checked); ``None`` when the
 #: parser rejects the file.
@@ -41,6 +41,8 @@ READS: dict[str, tuple[int, int] | None] = {
     "session_statements.sql": (0, 0),
     "unparseable.sql": None,
     "update.sql": (0, 1),
+    "writable_cte.sql": (0, 1),
+    "merge.sql": (0, 1),
 }
 
 
