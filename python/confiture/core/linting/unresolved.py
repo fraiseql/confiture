@@ -40,6 +40,7 @@ from fnmatch import fnmatch
 from typing import Any
 
 from confiture.core import live_catalog
+from confiture.core.linting.extensions import BuiltExtension
 from confiture.core.linting.inventory import KIND_KEYWORD, SchemaObject
 from confiture.core.linting.references import (
     AT_CREATE_IF_CHECKED,
@@ -50,6 +51,7 @@ from confiture.core.linting.references import (
     ReferenceScan,
 )
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 
 RULE_ID = "build_003"
 FORWARD_RULE_ID = "build_004"
@@ -139,7 +141,7 @@ def _noun(reference: Reference) -> str:
     return "relation" if reference.kind == RELATION else "routine"
 
 
-def _finding(file: str | None, reference: Reference) -> LintViolation:
+def _finding(file: str | None, reference: Reference, note: str = "") -> LintViolation:
     referrer_noun = KIND_KEYWORD.get(reference.referrer_kind, reference.referrer_kind).capitalize()
     return LintViolation(
         rule_id=RULE_ID,
@@ -151,10 +153,14 @@ def _finding(file: str | None, reference: Reference) -> LintViolation:
             f"{referrer_noun} '{reference.referrer}' references "
             f"{_noun(reference)} '{reference.qualified}', and no file in the build creates it"
             + ("" if reference.line_is_exact else INEXACT_LINE)
+            + (f"; {note}" if note else "")
         ),
         file_path=file,
         line_number=reference.line if reference.line_is_exact else reference.referrer_line,
-        suggested_fix=(f"Create '{reference.qualified}' in the schema tree, or correct the name."),
+        suggested_fix=(
+            f"Create '{reference.qualified}' in the schema tree, or correct the name."
+            + (f" Note that {note}." if note else "")
+        ),
     )
 
 
@@ -227,11 +233,104 @@ def probe_live(
     return LiveCatalogue(relations=relations, routines=routines)
 
 
+def _schemas(reference: Reference, search_path: Sequence[str]) -> list[str]:
+    return [schema for schema, _name in candidates_for(reference, search_path)]
+
+
+def split_by_extension(
+    candidates: Iterable[tuple[str | None, Reference]],
+    extensions: Sequence[BuiltExtension],
+    search_path: Sequence[str] = (),
+) -> tuple[list[tuple[str | None, Reference]], list[tuple[str | None, Reference]]]:
+    """``(maybe_extension, missing)``: which outstanding references *extensions* may answer.
+
+    A reference may be an extension's when a schema it could mean hosts one of
+    *extensions*. Schemas compare in the parser's spelling, as
+    :class:`BuildCatalogue` compares. Which extensions may loosen a verdict is
+    the caller's choice: with no server to ask, only those whose ``SCHEMA`` is
+    written, because where an unwritten one lands is not a fact the tree states.
+    """
+    hosts = {ext.schema for ext in extensions}
+    maybe: list[tuple[str | None, Reference]] = []
+    missing: list[tuple[str | None, Reference]] = []
+    for pair in candidates:
+        bucket = maybe if hosts.intersection(_schemas(pair[1], search_path)) else missing
+        bucket.append(pair)
+    return maybe, missing
+
+
+def _creates(extensions: Sequence[BuiltExtension]) -> str:
+    """``extensions ltree (f:1) and unaccent (f:2)``, CASCADE said where it was written."""
+    named = [
+        f"{ext.name} ({ext.where})" + (" (and what CASCADE installs)" if ext.cascade else "")
+        for ext in extensions
+    ]
+    listed = named[0] if len(named) == 1 else f"{', '.join(named[:-1])} and {named[-1]}"
+    return f"{'extension' if len(named) == 1 else 'extensions'} {listed}"
+
+
+def unchecked_reason(
+    unchecked: Sequence[tuple[str | None, Reference]],
+    extensions: Sequence[BuiltExtension],
+    why: str,
+    search_path: Sequence[str] = (),
+) -> str:
+    """The one ``degraded`` reason for every reference an extension may answer and none checked.
+
+    Grouped by schema, each reference under the first schema it could mean that
+    hosts one of *extensions*, so one run says one thing however many schemas.
+    """
+    counts: dict[str, int] = {}
+    for _file, reference in unchecked:
+        schema = next(s for s in _schemas(reference, search_path) if _hosted(s, extensions))
+        counts[schema] = counts.get(schema, 0) + 1
+    groups = [
+        f"{count} {'reference' if count == 1 else 'references'} into {schema}, where the build "
+        f"creates {_creates([e for e in extensions if e.schema == schema])}"
+        for schema, count in counts.items()
+    ]
+    verb = "was" if len(unchecked) == 1 else "were"
+    return f"{', and '.join(groups)}, {verb} not checked: {why}"
+
+
+def _hosted(schema: str, extensions: Sequence[BuiltExtension]) -> bool:
+    return any(ext.schema == schema for ext in extensions)
+
+
+def unwritten_note(
+    reference: Reference, unwritten: Sequence[BuiltExtension], search_path: Sequence[str] = ()
+) -> str:
+    """What a finding adds when an extension with no ``SCHEMA`` clause might hold the name.
+
+    The schema it lands in is the applying role's, so it never loosens a
+    verdict; the finding says which extensions they are and how to have them
+    asked. It names no schema to write: ``plpgsql`` belongs in ``pg_catalog``.
+    """
+    if not unwritten or DEFAULT_SCHEMA not in _schemas(reference, search_path):
+        return ""
+    named = ", ".join(f"{ext.name} ({ext.where})" for ext in unwritten)
+    return (
+        f"the build creates extension(s) {named} with no SCHEMA clause: write the schema each "
+        "is installed in (SCHEMA …), or configure scratch_url, so confiture can tell whether "
+        "one provides this"
+    )
+
+
 def reference_findings(
     candidates: Iterable[tuple[str | None, Reference]],
+    *,
+    unwritten: Sequence[BuiltExtension] = (),
+    search_path: Sequence[str] = (),
 ) -> list[LintViolation]:
-    """One ``build_003`` per unresolved name per referring object, in source order."""
-    return [_finding(file, reference) for file, reference in candidates]
+    """One ``build_003`` per unresolved name per referring object, in source order.
+
+    *unwritten* are the extensions the build creates with no ``SCHEMA`` clause
+    that no server was asked about; a finding they might answer says so.
+    """
+    return [
+        _finding(file, reference, unwritten_note(reference, unwritten, search_path))
+        for file, reference in candidates
+    ]
 
 
 #: Where a statement is in the build: its file's place in build order, and its line.

@@ -68,6 +68,13 @@ _SOFT_DELETE_RULES = {
 _LIVE_TIER_TIMEOUT_S = 3
 
 
+#: Why ``build_003`` could not ask what the build's extensions provide.
+_NO_SCRATCH_SERVER = (
+    "no scratch server is configured (--server-url, or scratch_url in the environment) "
+    "to say what they provide"
+)
+
+
 def _first_line(exc: Exception) -> str:
     """A driver's error, trimmed to the sentence a summary line can carry."""
     return str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
@@ -942,8 +949,47 @@ class SchemaLinter:
         )
         if candidates:
             candidates = self._after_live_tier(candidates, report)
-        for violation in reference_findings(candidates):
+        unwritten: list[Any] = []
+        if candidates:
+            candidates, unwritten = self._after_extension_tier(candidates, report)
+        for violation in reference_findings(
+            candidates, unwritten=unwritten, search_path=self.environment.lint.search_path
+        ):
             report.add_violation(violation)
+
+    def _after_extension_tier(
+        self, candidates: list[tuple[str | None, Any]], report: LintReport
+    ) -> tuple[list[tuple[str | None, Any]], list[Any]]:
+        """*candidates* minus what an extension the build creates may provide, and the unasked.
+
+        With no server to ask what an extension provides, a reference into a
+        schema the build installs one in is *unchecked*, not missing: one
+        ``degraded`` entry says so, naming the extensions and where each is
+        created. Only an extension whose ``SCHEMA`` is written counts, since a
+        fact that loosens a verdict matches only as written; the ones with no
+        ``SCHEMA`` clause come back, so a finding they might answer can say how
+        to have them asked.
+        """
+        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
+        from confiture.core.linting.extensions import built_extensions
+
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import RULE_ID, split_by_extension, unchecked_reason
+
+        extensions = built_extensions(self._files)
+        search_path = self.environment.lint.search_path
+        written = [ext for ext in extensions if ext.schema_written]
+        unwritten = [ext for ext in extensions if not ext.schema_written]
+        maybe, missing = split_by_extension(candidates, written, search_path)
+        if maybe:
+            report.degraded.append(
+                RuleStatus(
+                    code=RULE_ID,
+                    state="degraded",
+                    reason=unchecked_reason(maybe, written, _NO_SCRATCH_SERVER, search_path),
+                )
+            )
+        return missing, unwritten
 
     @staticmethod
     def _report_unread_bodies(scans: list[tuple[str | None, Any]], report: LintReport) -> None:
