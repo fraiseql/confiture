@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -80,9 +81,10 @@ def test_against_is_required_unless_listing_the_scope(in_tmp: Path) -> None:
     """A usage error, not a connection one: the flag is missing."""
     result = runner.invoke(app, ["seed", "drift", "--format", "json"])
 
-    assert result.exit_code == 2, result.output
-    assert "--against" in result.output
-    assert "Cannot reach" not in result.output
+    output = " ".join(strip_ansi(result.output).split())
+    assert result.exit_code == 2, output
+    assert "--against" in output
+    assert "Cannot reach" not in output
 
 
 def test_a_mistyped_url_is_refused_without_echoing_its_password(in_tmp: Path) -> None:
