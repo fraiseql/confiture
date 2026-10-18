@@ -398,7 +398,7 @@ def _newlines(sql: str) -> tuple[int, ...]:
     return tuple(positions)
 
 
-def _line_of(sql: str, location: int | None) -> int:
+def line_of(sql: str, location: int | None) -> int:
     """The 1-based line *location* falls on.
 
     A binary search over the text's newlines, not a count from the start: every
@@ -475,7 +475,7 @@ def _column(sql: str, node: Any) -> tuple[SchemaColumn, tuple[Constraint, ...]]:
     column = SchemaColumn(
         name=written,
         folded=node.colname,
-        line=_line_of(sql, getattr(node, "location", None)),
+        line=line_of(sql, getattr(node, "location", None)),
         type_text=_sql_type(type_node),
         type_key=canonical_type(ddl_type_name(type_node)),
         raw_sql_type=written_type(type_node),
@@ -676,7 +676,7 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         schema=schema,
         folded_name=rv.relname,
         folded_schema=rv.schemaname,
-        line=_line_of(sql, rv.location),
+        line=line_of(sql, rv.location),
         is_partition=stmt.partbound is not None,
         is_temporary=getattr(rv, "relpersistence", "p") == "t",
         offset=offset,
@@ -726,7 +726,7 @@ def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         kind,
         schema,
         name,
-        _line_of(sql, offset),
+        line_of(sql, offset),
         offset,
         signature=_signature(stmt.parameters),
         signature_key=_signature_key(stmt.parameters),
@@ -762,7 +762,7 @@ def _aggregate_from_define(sql: str, stmt: Any, offset: int) -> SchemaObject | N
         "aggregate",
         schema,
         name,
-        _line_of(sql, offset),
+        line_of(sql, offset),
         offset,
         signature=_signature(args[0] if args else None),
         signature_key=_signature_key(args[0] if args else None),
@@ -771,7 +771,7 @@ def _aggregate_from_define(sql: str, stmt: Any, offset: int) -> SchemaObject | N
 
 
 def _relation_object(sql: str, kind: str, rv: Any, offset: int) -> SchemaObject:
-    return _object(kind, rv.schemaname, rv.relname, _line_of(sql, rv.location), offset)
+    return _object(kind, rv.schemaname, rv.relname, line_of(sql, rv.location), offset)
 
 
 def _view_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
@@ -808,12 +808,12 @@ def _composite_type_from_create(sql: str, stmt: Any, offset: int) -> SchemaObjec
 def _enum_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     schema, name = split_names(stmt.typeName)
     labels = tuple(value.sval for value in stmt.vals or ())
-    return _object("type", schema, name, _line_of(sql, offset), offset, enum_values=labels)
+    return _object("type", schema, name, line_of(sql, offset), offset, enum_values=labels)
 
 
 def _domain_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     schema, name = split_names(stmt.domainname)
-    return _object("domain", schema, name, _line_of(sql, offset), offset)
+    return _object("domain", schema, name, line_of(sql, offset), offset)
 
 
 def _sequence_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
@@ -850,7 +850,7 @@ def object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     offset = statement_offset(sql, raw)
     obj = builder(sql, stmt, offset)
     if obj is not None:
-        obj.statement_line = _line_of(sql, offset)
+        obj.statement_line = line_of(sql, offset)
     return obj
 
 
@@ -867,7 +867,7 @@ def tviews_from_calls(sql: str, raw: Any) -> list[SchemaObject]:
     if not calls:
         return []
     offset = statement_offset(sql, raw)
-    line = _line_of(sql, offset)
+    line = line_of(sql, offset)
     found = []
     for call in calls:
         tview = _object("tview", call.schema, str(call.name), line, offset)
@@ -887,7 +887,7 @@ def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
     if type(stmt).__name__ != "CreateSchemaStmt" or not getattr(stmt, "schemaname", None):
         return None
     offset = statement_offset(sql, raw)
-    declared = _object("schema", None, stmt.schemaname, _line_of(sql, offset), offset)
+    declared = _object("schema", None, stmt.schemaname, line_of(sql, offset), offset)
     declared.statement_line = declared.line
     return declared
 
@@ -1213,7 +1213,7 @@ def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
         return
     target = found[0]
     index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
-    line = _line_of(parsed.text, offset - parsed.base)
+    line = line_of(parsed.text, offset - parsed.base)
     if_not_exists = bool(raw.stmt.if_not_exists)
     for holder in (
         _holders(inventory, target.folded_schema, identifier_identity(index.name), offset)

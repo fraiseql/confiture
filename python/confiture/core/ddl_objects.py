@@ -130,8 +130,9 @@ NOT_A_SCHEMA_OBJECT: dict[str, str] = {
         "identity is a (role, server) pair, and the role half is cluster-scoped"
     ),
     "CreatePLangStmt": (
-        "PostgreSQL parses CREATE LANGUAGE as CreateExtensionStmt, which is "
-        "tracked; this node is unreachable from a parse"
+        "only CREATE LANGUAGE … HANDLER … reaches this node, a procedural language "
+        "defined by hand; PostgreSQL's grammar turns the parameterless form into "
+        "CreateExtensionStmt, which is tracked"
     ),
 }
 
