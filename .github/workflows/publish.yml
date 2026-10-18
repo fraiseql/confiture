@@ -279,6 +279,9 @@ jobs:
     needs: [build-wheels, build-sdist]
 
     steps:
+    - uses: actions/checkout@v6
+      # The dependency-wheel check reads pyproject.toml and runs from scripts/.
+
     - name: Download all artifacts
       uses: actions/download-artifact@v8
       with:
@@ -321,6 +324,11 @@ jobs:
 
     - name: Set up uv
       uses: astral-sh/setup-uv@v7
+
+    - name: Every dependency a fresh install picks has a wheel on every platform
+      # A user's install takes each dependency's newest release, whatever uv.lock says:
+      # one released as an sdist only makes it compile C, and fails without a compiler.
+      run: python3 scripts/check_dependency_wheels.py --strict
 
     - name: Python 3.14 installs the wheel, never the sdist (#587)
       # A fresh venv and no cache: once anything has built the sdist, uv's cache

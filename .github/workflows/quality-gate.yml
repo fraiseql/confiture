@@ -456,6 +456,11 @@ jobs:
     - name: Build the wheel
       run: maturin build --release --interpreter python3.14 --out dist
 
+    - name: Every dependency a fresh install picks has a wheel
+      # A warning, not a failure: upstream uploads an sdist before its wheels, and
+      # Publish runs the same check with --strict before anything is uploaded.
+      run: python scripts/check_dependency_wheels.py --warn
+
     - name: A fresh venv installs it, never the sdist
       # No cache: an earlier source build in uv's cache would hide a missing wheel.
       run: |
