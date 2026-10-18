@@ -43,17 +43,41 @@ TARGETS: dict[str, str] = {
     "win_amd64": "x86_64-pc-windows-msvc",
 }
 
+#: The oldest system confiture's own wheel installs on (``manylinux_2_28`` image,
+#: maturin's ``macosx_11_0`` arm64 floor): a dependency wheel that needs a newer
+#: one does not install where confiture does, and its sdist compiles instead.
+FLOORS: dict[str, tuple[int, int]] = {"manylinux_x86_64": (2, 28), "macosx_arm64": (11, 0)}
+
+#: The fixed glibc each legacy manylinux tag stands for (PEP 600).
+_LEGACY_MANYLINUX: dict[str, tuple[int, int]] = {
+    "manylinux1": (2, 5),
+    "manylinux2010": (2, 12),
+    "manylinux2014": (2, 17),
+}
+
 _CPYTHON = re.compile(r"cp3(\d+)")
-_EXCLUSION = re.compile(r"^([A-Za-z0-9_.\-]+).*?!=\s*([0-9][^,;\s]*)")
+_MANYLINUX = re.compile(r"manylinux_(\d+)_(\d+)_x86_64")
+_MACOSX = re.compile(r"macosx_(\d+)_(\d+)_(?:arm64|universal2)")
+_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.\-]*)")
+_NOT_EQUAL = re.compile(r"!=\s*([0-9][^,;\s]*)")
 
 
 def _platform_fits(platform: str, target: str) -> bool:
+    """Whether a wheel's platform tag installs on *target*, at confiture's own floor."""
     if platform == "any":
         return True
     if target == "manylinux_x86_64":
-        return platform.startswith("manylinux") and platform.endswith("_x86_64")
+        version = (
+            _LEGACY_MANYLINUX.get(platform.removesuffix("_x86_64"))
+            if platform.endswith("_x86_64")
+            else None
+        )
+        if version is None and (match := _MANYLINUX.fullmatch(platform)):
+            version = (int(match.group(1)), int(match.group(2)))
+        return version is not None and version <= FLOORS[target]
     if target == "macosx_arm64":
-        return platform.startswith("macosx_") and platform.endswith(("_arm64", "_universal2"))
+        match = _MACOSX.fullmatch(platform)
+        return match is not None and (int(match.group(1)), int(match.group(2))) <= FLOORS[target]
     return platform == target
 
 
@@ -74,10 +98,13 @@ def fits(filename: str, target: str) -> bool:
     if not filename.endswith(".whl"):
         return False
     parts = filename[: -len(".whl")].split("-")
+    if len(parts) < 5:
+        return False
     python, abi, platforms = parts[-3], parts[-2], parts[-1]
-    return any(_python_fits(tag, abi) for tag in python.split(".")) and any(
-        _platform_fits(tag, target) for tag in platforms.split(".")
-    )
+    # A compressed tag set (PEP 425) stands for every combination of its parts.
+    return any(
+        _python_fits(py, one_abi) for py in python.split(".") for one_abi in abi.split(".")
+    ) and any(_platform_fits(tag, target) for tag in platforms.split("."))
 
 
 def missing(
@@ -97,12 +124,17 @@ def stale_exclusions(
     """An exclusion whose version now has every wheel: the reason for it is gone."""
     stale = []
     for requirement in requirements:
-        match = _EXCLUSION.match(requirement)
-        if match is None:
+        named = _NAME.match(requirement)
+        if named is None:
             continue
-        dist, version = match.group(1), match.group(2)
-        if not missing(dist, version, files_of((dist, version))):
-            stale.append(f"{dist}!={version}: {version} now has every wheel; drop the exclusion")
+        dist = named.group(1)
+        for version in _NOT_EQUAL.findall(requirement.split(";", 1)[0]):
+            if "*" in version:
+                continue  # a range, not one release to look up
+            if not missing(dist, version, files_of((dist, version))):
+                stale.append(
+                    f"{dist}!={version}: {version} now has every wheel; drop the exclusion"
+                )
     return stale
 
 
@@ -128,6 +160,8 @@ def _resolved(uv_platform: str) -> dict[str, str]:
             "--no-header",
             "--no-annotate",
             "--refresh",
+            # No --no-build: it would skip an sdist-only release and resolve an older one,
+            # hiding exactly the gap this looks for.
             "--quiet",
         ],
         check=True,
@@ -166,7 +200,14 @@ def main(argv: Sequence[str]) -> int:
     if not strict and "--warn" not in argv:
         print(__doc__)
         return 2
-    found = gaps()
+    try:
+        found = gaps()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        detail = (getattr(exc, "stderr", None) or str(exc)).strip()
+        print(
+            f"::{'error' if strict else 'warning'}::the dependency-wheel check could not run: {detail}"
+        )
+        return 1 if strict else 0
     for gap in found:
         print(f"::{'error' if strict else 'warning'}::{gap}")
     if not found:
