@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`confiture seed drift`** (#743): compare the reference rows the seed tree writes with what a live
+  database holds, so a seed change that ships without a migration stops reaching the rebuilt
+  environments only. Every table the seed tree writes is compared, a staging table through its
+  resolver. Rows are matched by a key the seed itself writes (never a surrogate PostgreSQL generates),
+  and a foreign key to a generated key is compared through the parent's stable key. The report lists
+  rows only the seed holds, rows only the live side holds, and rows whose columns differ. `--build`
+  builds the seed side from the tree on a scratch server (never `database_url`); `--list-scope` says
+  what would be compared without reading a database. The live side is read in a read-only transaction
+  with timeouts. Opt-outs (`seed_drift.tables`, `seed_drift.accepted` per `--against` environment)
+  each need a reason, and one that matches nothing is reported. Exit 0/1/2/3 as the registry defines
+  them: 2, not 3, is "could not compare", because 3 is a database that did not answer.
+  `docs/guides/seed-drift.md`.
+
 ### Changed
 
 - **Lockfiles refreshed** (#732): pglast 8.5 → 8.7, plus the routine upgrades. pglast 8.6/8.7's printer
@@ -28,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The seed reader names every table a statement writes** (#743). An `INSERT … SELECT`,
+  `INSERT … DEFAULT VALUES`, `UPDATE` or `MERGE` in a seed file now says which table it writes,
+  though its rows are not read. A data-modifying CTE (`WITH a AS (INSERT …) SELECT …`) is no longer
+  read as a plain `SELECT`: prep-seed level 1 reports its `INSERT` as `SEED_NOT_CHECKED`, a new
+  finding for a seed tree that has one. Those rows were never checked.
 - **`build_003` and the extensions the build creates** (#741). A `CREATE EXTENSION ltree
   SCHEMA public` in the tree creates `public.text2ltree`, and a `SECURITY DEFINER` function
   that pins its `search_path` must call it qualified. `build_003` used to report every such
