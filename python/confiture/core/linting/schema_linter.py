@@ -68,14 +68,28 @@ _SOFT_DELETE_RULES = {
 _LIVE_TIER_TIMEOUT_S = 3
 
 
-#: Why ``build_003`` could not ask what the build's extensions provide.
-_NO_SCRATCH_SERVER = (
-    "no scratch server is configured (--server-url, or scratch_url in the environment) "
-    "to say what they provide"
-)
+def _ask_scratch(
+    server: str,
+    extensions: Sequence[Any],
+    schemas: frozenset[str],
+    search_path: Sequence[str],
+    candidates: list[tuple[str | None, Any]],
+) -> Any:
+    """``build_003``'s scratch tier, looked up when it runs so a test may stand in for it."""
+    # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+    from confiture.core.linting import unresolved
+
+    return unresolved.scratch_names(
+        server,
+        extensions,
+        schemas,
+        candidates,
+        search_path,
+        connect_timeout=_LIVE_TIER_TIMEOUT_S,
+    )
 
 
-def _first_line(exc: Exception) -> str:
+def first_line(exc: Exception) -> str:
     """A driver's error, trimmed to the sentence a summary line can carry."""
     return str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
 
@@ -949,47 +963,57 @@ class SchemaLinter:
         )
         if candidates:
             candidates = self._after_live_tier(candidates, report)
-        unwritten: list[Any] = []
+        tier = None
         if candidates:
-            candidates, unwritten = self._after_extension_tier(candidates, report)
+            tier = self._after_extension_tier(candidates, report)
+            candidates = tier.missing
         for violation in reference_findings(
-            candidates, unwritten=unwritten, search_path=self.environment.lint.search_path
+            candidates,
+            unwritten=tier.unwritten if tier else (),
+            asked=tier.asked if tier else (),
+            search_path=self.environment.lint.search_path,
         ):
             report.add_violation(violation)
 
     def _after_extension_tier(
         self, candidates: list[tuple[str | None, Any]], report: LintReport
-    ) -> tuple[list[tuple[str | None, Any]], list[Any]]:
-        """*candidates* minus what an extension the build creates may provide, and the unasked.
+    ) -> Any:
+        """*candidates* minus what an extension the build creates provides, or may.
 
-        With no server to ask what an extension provides, a reference into a
-        schema the build installs one in is *unchecked*, not missing: one
-        ``degraded`` entry says so, naming the extensions and where each is
-        created. Only an extension whose ``SCHEMA`` is written counts, since a
-        fact that loosens a verdict matches only as written; the ones with no
-        ``SCHEMA`` clause come back, so a finding they might answer can say how
-        to have them asked.
+        With a scratch server (``--server-url``, else the environment's
+        ``scratch_url``, never its ``database_url``: a lint does not create a
+        database on the server it lints against unless told to), a scratch
+        database holding only the build's schemas and extensions answers. With
+        none, or when it cannot be built, a reference into a schema an
+        extension's written ``SCHEMA`` names is *unchecked*, not missing, and
+        one ``degraded`` entry says so.
         """
-        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
-        from confiture.core.linting.extensions import built_extensions
-
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
-        from confiture.core.linting.unresolved import RULE_ID, split_by_extension, unchecked_reason
+        from confiture.core.linting import unresolved
+
+        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
+        from confiture.core.linting.extensions import built_extensions, extension_schemas
 
         extensions = built_extensions(self._files)
         search_path = self.environment.lint.search_path
-        written = [ext for ext in extensions if ext.schema_written]
-        unwritten = [ext for ext in extensions if not ext.schema_written]
-        maybe, missing = split_by_extension(candidates, written, search_path)
-        if maybe:
-            report.degraded.append(
-                RuleStatus(
-                    code=RULE_ID,
-                    state="degraded",
-                    reason=unchecked_reason(maybe, written, _NO_SCRATCH_SERVER, search_path),
-                )
+        server = self.config.server_url or self.environment.scratch_url
+        ask = (
+            None
+            if server is None
+            else partial(
+                _ask_scratch,
+                server,
+                extensions,
+                extension_schemas(extensions, self._files),
+                search_path,
             )
-        return missing, unwritten
+        )
+        tier = unresolved.extension_tier(candidates, extensions, search_path, ask)
+        if tier.reason is not None:
+            report.degraded.append(
+                RuleStatus(code=unresolved.RULE_ID, state="degraded", reason=tier.reason)
+            )
+        return tier
 
     @staticmethod
     def _report_unread_bodies(scans: list[tuple[str | None, Any]], report: LintReport) -> None:
@@ -1058,7 +1082,7 @@ class SchemaLinter:
                 search_path=self.environment.lint.search_path,
             )
         except (psycopg.Error, OSError, ConfiturError) as exc:
-            self._skip_body_rules(report, bodies.BUILD_FAILED + _first_line(exc))
+            self._skip_body_rules(report, bodies.BUILD_FAILED + first_line(exc))
             return
         wanted = set(self._selected_body_rules())
         where = bodies.locations(self._files)
@@ -1123,7 +1147,7 @@ class SchemaLinter:
                     state="degraded",
                     reason=(
                         "no database answered, so an object created by a migration or owned "
-                        f"by an extension is reported as missing: {_first_line(exc)}"
+                        f"by an extension is reported as missing: {first_line(exc)}"
                     ),
                 )
             )

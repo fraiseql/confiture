@@ -226,7 +226,9 @@ class ExpectedSchemaDB:
                 self._create_pg_tviews()
             if self._search_path is not None:
                 self._set_search_path(self._search_path)
-            self._td.apply_schema(self._temp_url, schema_sql)
+            # An empty schema is a database to build on, and needs no `psql`.
+            if schema_sql:
+                self._td.apply_schema(self._temp_url, schema_sql)
         else:
             if self._base_sql:
                 self._td.apply_schema(self._temp_url, self._base_sql)

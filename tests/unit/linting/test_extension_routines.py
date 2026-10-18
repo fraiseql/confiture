@@ -10,14 +10,20 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+import psycopg
 import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.expected_db import ExpectedSchemaDB
+from confiture.core.linting import unresolved
 from confiture.core.linting.extensions import BuiltExtension
 from confiture.core.linting.references import RELATION, ROUTINE, Reference
-from confiture.core.linting.unresolved import split_by_extension
+from confiture.core.linting.schema_linter import SchemaLinter
+from confiture.core.linting.unresolved import LiveCatalogue, split_by_extension
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.temp_database import TempDatabase
+from confiture.exceptions import SchemaError
 
 runner = CliRunner()
 
@@ -375,3 +381,205 @@ def test_require_complete_refuses_a_run_that_could_not_check_an_extension(
 
     assert result.exit_code == 2, result.output
     assert "were not checked" in result.output
+
+
+# The scratch tier: which server it asks, and what it costs. No server is
+# reached from here; the integration tests ask a real one.
+
+#: A host the fake ``connect`` below answers for, so the pre-probe succeeds.
+_SCRATCH = "postgresql://scratcher:s3cret@scratch.invalid:5432/postgres"
+
+
+class _Answered:
+    """What the pre-probe's ``with psycopg.connect(...)`` gets: a connection it closes."""
+
+    def __enter__(self) -> _Answered:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def _connect_scratch_only(url: str, **_kwargs: object) -> _Answered:
+    if "scratch.invalid" not in url:
+        raise psycopg.OperationalError("connection refused")
+    return _Answered()
+
+
+@pytest.fixture
+def no_scratch_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Building a scratch database fails the test: the tier must not have run."""
+
+    def refuse(_self: object) -> str:
+        raise AssertionError("a scratch database was built")
+
+    monkeypatch.setattr(psycopg, "connect", _connect_scratch_only)
+    monkeypatch.setattr(TempDatabase, "__enter__", refuse)
+
+
+@pytest.mark.usefixtures("no_scratch_database")
+class TestNothingIsBuiltWithNothingToAsk:
+    def test_a_tree_with_no_extension(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"010_fn.sql": _CALLS_NOPE.format(target="public.nope")})
+
+        assert _locations(_payload("--server-url", _SCRATCH)) == ["app.f() -> public.nope"]
+
+    def test_references_outside_every_extension_schema(self, in_tmp: Path) -> None:
+        _project(
+            in_tmp,
+            {
+                "001_extensions.sql": "CREATE EXTENSION IF NOT EXISTS ltree SCHEMA public;\n",
+                "002_fn.sql": _CALLS_NOPE.format(target="app.nope"),
+            },
+        )
+
+        assert _locations(_payload("--server-url", _SCRATCH)) == ["app.f() -> app.nope"]
+
+    def test_the_live_tier_answered_everything(
+        self, in_tmp: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _project(in_tmp, ISSUE_741)
+        monkeypatch.setattr(
+            SchemaLinter,
+            "_probe",
+            lambda _self, _c, _p, _s: LiveCatalogue(
+                relations=frozenset(),
+                routines=frozenset({"public.text2ltree", "public.unaccent"}),
+            ),
+        )
+
+        payload = _payload("--server-url", _SCRATCH)
+
+        assert _locations(payload) == []
+        assert payload.get("degraded", []) == []
+
+    def test_no_scratch_server_configured(self, in_tmp: Path) -> None:
+        _project(in_tmp, ISSUE_741)
+
+        [entry] = _extension_entries(_payload())
+
+        assert "no scratch server is configured" in entry["reason"]
+
+
+def test_database_url_is_never_the_scratch_server(in_tmp: Path) -> None:
+    """A lint creates no database on the server it lints against, unless told to."""
+    _project(
+        in_tmp,
+        ISSUE_741,
+        env=f"database_url: {_SCRATCH}\ninclude_dirs:\n  - path: db/schema\n",
+    )
+    asked: list[str] = []
+
+    def scratch_names(server_url: str, *_args: object, **_kwargs: object) -> object:
+        asked.append(server_url)
+        raise AssertionError("asked a scratch server")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(unresolved, "scratch_names", scratch_names)
+        payload = _payload()
+
+    assert asked == []
+    assert "no scratch server is configured" in _extension_entries(payload)[0]["reason"]
+
+
+def test_scratch_url_in_the_environment_is_the_server(
+    in_tmp: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _project(in_tmp, ISSUE_741, env=_ENV + f"scratch_url: {_SCRATCH}\n")
+    asked: list[str] = []
+
+    def scratch_names(server_url: str, *_args: object, **_kwargs: object) -> object:
+        asked.append(server_url)
+        raise unresolved.ScratchUnavailable("stub")
+
+    monkeypatch.setattr(unresolved, "scratch_names", scratch_names)
+    _payload()
+
+    assert asked == [_SCRATCH]
+
+
+def test_server_url_wins_over_scratch_url(in_tmp: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _project(in_tmp, ISSUE_741, env=_ENV + "scratch_url: postgresql://elsewhere/postgres\n")
+    asked: list[str] = []
+
+    def scratch_names(server_url: str, *_args: object, **_kwargs: object) -> object:
+        asked.append(server_url)
+        raise unresolved.ScratchUnavailable("stub")
+
+    monkeypatch.setattr(unresolved, "scratch_names", scratch_names)
+    _payload("--server-url", _SCRATCH)
+
+    assert asked == [_SCRATCH]
+
+
+class TestEachFailureSaysWhatFailed:
+    def test_an_unreachable_server(self, in_tmp: Path) -> None:
+        _project(in_tmp, ISSUE_741)
+
+        [entry] = _extension_entries(
+            _payload("--server-url", "postgresql://u:hunter2@127.0.0.1:1/postgres")
+        )
+
+        assert "no scratch server answered at" in entry["reason"]
+        assert "127.0.0.1:1" in entry["reason"]
+        assert "hunter2" not in entry["reason"]
+        assert "2 references into public" in entry["reason"]
+
+    def test_a_server_that_refuses_the_scratch_database(
+        self, in_tmp: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def refuse(_self: object) -> str:
+            raise SchemaError("permission denied to create database")
+
+        monkeypatch.setattr(psycopg, "connect", _connect_scratch_only)
+        monkeypatch.setattr(TempDatabase, "__enter__", refuse)
+        _project(in_tmp, ISSUE_741)
+
+        [entry] = _extension_entries(_payload("--server-url", _SCRATCH))
+
+        assert "permission denied to create database" in entry["reason"]
+        assert "s3cret" not in entry["reason"]
+        assert _locations(_payload("--server-url", _SCRATCH)) == []
+
+
+def test_an_empty_schema_runs_no_psql(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The scratch tier builds nothing from text, so it needs no ``psql`` binary."""
+    applied: list[str] = []
+    monkeypatch.setattr(TempDatabase, "apply_schema", lambda _self, _url, sql: applied.append(sql))
+    db = ExpectedSchemaDB("postgresql://localhost/postgres").from_source(schema_sql="")
+    db._td = TempDatabase("postgresql://localhost/postgres")
+    db._temp_url = "postgresql://localhost/scratch"
+
+    db._build()
+
+    assert applied == []
+
+
+def test_a_live_no_is_not_final_when_the_build_creates_the_extension(
+    in_tmp: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The live database lacks ``public.text2ltree``: its migration has not run there yet."""
+    _project(in_tmp, ISSUE_741, env=_ENV + f"scratch_url: {_SCRATCH}\n")
+    monkeypatch.setattr(
+        SchemaLinter,
+        "_probe",
+        lambda _self, _c, _p, _s: LiveCatalogue(relations=frozenset(), routines=frozenset()),
+    )
+    asked: list[list[str]] = []
+
+    def scratch_names(_server: str, _exts: object, _schemas: object, candidates, *_a, **_k):
+        asked.append(sorted(ref.qualified for _file, ref in candidates))
+        return unresolved.ScratchAnswer(
+            unresolved.LiveCatalogue(
+                relations=frozenset(),
+                routines=frozenset({"public.text2ltree", "public.unaccent"}),
+            )
+        )
+
+    monkeypatch.setattr(unresolved, "scratch_names", scratch_names)
+
+    payload = _payload()
+
+    assert asked == [["public.text2ltree", "public.unaccent"]]
+    assert _locations(payload) == []
+    assert payload.get("degraded", []) == []
