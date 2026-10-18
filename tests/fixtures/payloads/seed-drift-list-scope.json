@@ -1,0 +1,57 @@
+{
+  "seed_side": {
+    "source": "database"
+  },
+  "against": null,
+  "compared": false,
+  "has_drift": false,
+  "complete": true,
+  "scope": [
+    {
+      "table": "catalog.tb_vendor",
+      "staging": "prep_seed.tb_vendor",
+      "key": [
+        "id"
+      ],
+      "key_basis": "unique",
+      "mode": "full",
+      "columns": [
+        "name",
+        "country_code"
+      ],
+      "uncompared": [],
+      "written_at": [
+        "db/seeds/prep/10_vendor.sql:1"
+      ]
+    },
+    {
+      "table": "catalog.tb_product",
+      "staging": "prep_seed.tb_product",
+      "key": [
+        "id"
+      ],
+      "key_basis": "unique",
+      "mode": "full",
+      "columns": [
+        "fk_vendor -> catalog.tb_vendor.id",
+        "name",
+        "price",
+        "status"
+      ],
+      "uncompared": [],
+      "written_at": [
+        "db/seeds/prep/20_product.sql:1"
+      ]
+    }
+  ],
+  "tables": [],
+  "not_compared": [],
+  "skipped": [],
+  "unused": [],
+  "ok": true,
+  "command": "seed drift",
+  "parser": {
+    "pglast": "8.7",
+    "pg_major": 18
+  }
+}

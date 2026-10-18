@@ -600,6 +600,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `function_coverage` | [FunctionCoverage](#functioncoverage) \| NoneType | - | Which schemas' functions the function-uniqueness check covers (``migrate validate --check-function-uniqueness``). |
 | `security_lint` | [SecurityLinting](#securitylinting) \| NoneType | - | The ``sec_002`` SECURITY DEFINER lint: enabled flag, schema scope, ignore globs and severity. |
 | `lint` | [LintSettings](#lintsettings) | (nested) | What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build. |
+| `seed_drift` | [SeedDriftSettings](#seeddriftsettings) | (nested) | How ``confiture seed drift`` compares the seeded rows of a seed-built database with a live one (keys, ``subset``/``skip`` tables, accepted differences). |
 
 #### `DirectoryConfig`
 
@@ -788,6 +789,34 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `search_path` | list[str] | `[]` | The schemas an unqualified *relation* in a body is looked for in, in order. Empty (the default) means an unqualified name is not judged at all: without knowing what resolves it, every ``now()`` becomes a finding. Unqualified *routine* calls are never judged even with this set — ``pg_catalog`` is on every search path and confiture cannot enumerate it. |
 | `status_words` | list[str] | `['TODO', 'FIXME', 'WIP', 'DRAFT']` | The words in a file or directory name that say the work is unfinished, matched case-insensitively against the underscore-separated parts of the name. The default is :data:`DEFAULT_STATUS_WORDS`; a project that writes ``_SPIKE`` says so here. |
 
+#### `SeedDriftSettings`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `tables` | dict[str, [SeedDriftTable](#seeddrifttable)] | `{}` | Per-table settings, keyed ``schema.table`` (``key``, ``mode``, ``skip``, ``reason``). |
+| `accepted` | dict[str, list[[SeedDriftAccepted](#seeddriftaccepted)]] | `{}` | Accepted row differences, keyed by the ``--against`` environment they are accepted for: a difference accepted in production is not one in staging. |
+| `max_rows` | int | `100000` | A live table with more rows than this (``pg_class.reltuples``) is not read whole; it is reported not compared, and ``mode: subset`` reads only the seed's keys. |
+| `statement_timeout` | str | `30s` | The live side's ``statement_timeout`` and ``lock_timeout``. |
+| `prep_seed_schema` | str | `prep_seed` | The schema staging tables are seeded into before a resolver moves their rows. |
+| `catalog_schema` | str | `catalog` | Where a staging table's rows land when no resolver or schema says otherwise. |
+
+#### `SeedDriftTable`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `key` | list[str] \| NoneType | - | The columns a row is matched by across the two databases, when the table has no key every seed statement writes (a pure join table whose surrogate keys differ per environment). |
+| `mode` | `full` \| `subset` | `full` | ``full`` (default) reports rows only the live database holds; ``subset`` does not, for a table the live database legitimately holds more of (the seed samples it). Seed-only and changed rows are reported either way. |
+| `skip` | bool | `false` | Leave the table out of the comparison, for ids generated per environment. |
+| `reason` | str \| NoneType | - | Why the table is ``subset`` or skipped; required for either. |
+
+#### `SeedDriftAccepted`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `table` | str | **required** | The table, ``schema.table`` as the seed writes it. |
+| `key` | list[str] | **required** | The row's key values, in key order. |
+| `reason` | str | **required** | Why this difference is accepted. |
+
 #### `ProjectConfig`
 
 | Field | Type | Default | Description |
@@ -969,6 +998,22 @@ lint:
     - FIXME
     - WIP
     - DRAFT
+seed_drift:
+  tables:
+    <name>:
+      key: null
+      mode: full
+      skip: false
+      reason: null
+  accepted:
+    <name>:
+      table: null
+      key: null
+      reason: null
+  max_rows: 100000
+  statement_timeout: 30s
+  prep_seed_schema: prep_seed
+  catalog_schema: catalog
 ```
 
 `db/project.yaml` — the facts true in every environment (optional):

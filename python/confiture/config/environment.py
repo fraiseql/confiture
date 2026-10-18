@@ -907,6 +907,78 @@ def _normalize_acls(data: dict[str, Any]) -> None:
 _PROJECT_FACTS = ("tenancy", "soft_delete", "translations")
 
 
+class SeedDriftTable(BaseModel):
+    """How ``confiture seed drift`` compares one seeded table (``seed_drift.tables.<schema.table>``).
+
+    Attributes:
+        key: The columns a row is matched by across the two databases, when the
+            table has no key every seed statement writes (a pure join table whose
+            surrogate keys differ per environment).
+        mode: ``full`` (default) reports rows only the live database holds; ``subset``
+            does not, for a table the live database legitimately holds more of (the
+            seed samples it). Seed-only and changed rows are reported either way.
+        skip: Leave the table out of the comparison, for ids generated per environment.
+        reason: Why the table is ``subset`` or skipped; required for either.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: list[str] | None = None
+    mode: Literal["full", "subset"] = "full"
+    skip: bool = False
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _an_opt_out_says_why(self) -> SeedDriftTable:
+        if (self.skip or self.mode == "subset") and not (self.reason or "").strip():
+            raise ValueError("a seed_drift table that is skipped or subset needs a reason")
+        return self
+
+
+class SeedDriftAccepted(BaseModel):
+    """One accepted difference between the seed and one live database.
+
+    Attributes:
+        table: The table, ``schema.table`` as the seed writes it.
+        key: The row's key values, in key order.
+        reason: Why this difference is accepted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    table: str
+    key: list[str]
+    reason: str = Field(min_length=1)
+
+
+class SeedDriftSettings(BaseModel):
+    """The ``seed_drift:`` block: how ``confiture seed drift`` compares seeded rows (#743).
+
+    Every table the seed tree writes is compared unless a ``tables`` entry says
+    otherwise, and every opt-out says why. An entry that matches nothing in a run
+    is itself reported, so an exception cannot outlive the table it was for.
+
+    Attributes:
+        tables: Per-table settings, keyed ``schema.table`` (``key``, ``mode``, ``skip``, ``reason``).
+        accepted: Accepted row differences, keyed by the ``--against`` environment
+            they are accepted for: a difference accepted in production is not one in staging.
+        max_rows: A live table with more rows than this (``pg_class.reltuples``) is not read
+            whole; it is reported not compared, and ``mode: subset`` reads only the seed's keys.
+        statement_timeout: The live side's ``statement_timeout`` and ``lock_timeout``.
+        prep_seed_schema: The schema staging tables are seeded into before a resolver moves their rows.
+        catalog_schema: Where a staging table's rows land when no resolver or schema says otherwise.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tables: dict[str, SeedDriftTable] = Field(default_factory=dict)
+    accepted: dict[str, list[SeedDriftAccepted]] = Field(default_factory=dict)
+    max_rows: int = Field(default=100_000, gt=0)
+    statement_timeout: str = "30s"
+    prep_seed_schema: str = "prep_seed"
+    catalog_schema: str = "catalog"
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -932,6 +1004,7 @@ class Environment(BaseModel):
         build: Build configuration options
         migration: Migration configuration options (includes tracking_table)
         seed: Seed data application configuration
+        seed_drift: How ``confiture seed drift`` compares the seeded rows of a seed-built database with a live one (keys, ``subset``/``skip`` tables, accepted differences).
     """
 
     # `database_url` may embed a password: pydantic must not echo rejected input
@@ -981,6 +1054,8 @@ class Environment(BaseModel):
     # Issue #246 — what ``build_003`` resolves references against when the
     # build inventory and a live database cannot answer.
     lint: LintSettings = Field(default_factory=LintSettings)
+    # Issue #743 — what ``confiture seed drift`` compares, and what it accepts.
+    seed_drift: SeedDriftSettings = Field(default_factory=SeedDriftSettings)
 
     @property
     def database(self) -> DatabaseConfig:

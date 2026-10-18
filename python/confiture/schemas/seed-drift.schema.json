@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/seed-drift.schema.json",
+  "title": "confiture seed drift --format json",
+  "description": "The seeded rows of a seed-built database compared with a live one (#743). Exit 0: no difference nothing explains; 1: drift, or an opt-out that matches nothing (unused); 2: a table in scope could not be compared (not_compared); 3: a database did not answer (the error envelope, CONFIG_006). With --list-scope, compared is false and only scope, not_compared, skipped and unused are filled.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "seed_side",
+    "against",
+    "compared",
+    "has_drift",
+    "complete",
+    "scope",
+    "tables",
+    "not_compared",
+    "skipped",
+    "unused"
+  ],
+  "properties": {
+    "seed_side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "database",
+            "built"
+          ],
+          "description": "database: --env's own database; built: a scratch database built from the tree and its seeds (--build)."
+        }
+      }
+    },
+    "against": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The live side: its environment name, or its URL with the password masked; null with --list-scope."
+    },
+    "compared": {
+      "type": "boolean",
+      "description": "false for --list-scope: what would be compared, and no comparison."
+    },
+    "has_drift": {
+      "type": "boolean",
+      "description": "A difference no setting explains, or a seed_drift entry that matches nothing."
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "Every table in scope was compared."
+    },
+    "scope": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ScopedTable"
+      },
+      "description": "Every table the seed tree writes that can be compared, in the order first written."
+    },
+    "tables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TableDrift"
+      }
+    },
+    "not_compared": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NotCompared"
+      },
+      "description": "Each table in scope that could not be compared, and why: the run is incomplete (exit 2)."
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "table",
+          "reason"
+        ],
+        "properties": {
+          "table": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Tables seed_drift.tables marks skip, with their reason."
+    },
+    "unused": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Each seed_drift entry (tables or accepted) that matched nothing in this run."
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "seed drift",
+      "description": "The envelope: the command that wrote this payload."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    }
+  },
+  "$defs": {
+    "ScopedTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "staging",
+        "key",
+        "key_basis",
+        "mode",
+        "columns",
+        "uncompared",
+        "written_at"
+      ],
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "staging": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The prep-seed staging table the seed writes, when a resolver moves its rows here."
+        },
+        "key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The fields a row is matched by. A foreign key to a key PostgreSQL generates reads `fk_x -> parent.key`: compared through the parent's stable key."
+        },
+        "key_basis": {
+          "enum": [
+            "declared",
+            "primary_key",
+            "unique"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "full",
+            "subset"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The compared fields: the columns the seed writes, the key aside."
+        },
+        "uncompared": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "column",
+              "reason"
+            ],
+            "properties": {
+              "column": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "written_at": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "file:line of each seed statement that writes the table."
+        }
+      }
+    },
+    "TableDrift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "key",
+        "key_basis",
+        "mode",
+        "seed_rows",
+        "live_rows",
+        "seed_only",
+        "live_only",
+        "changed",
+        "accepted"
+      ],
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "key_basis": {
+          "enum": [
+            "declared",
+            "primary_key",
+            "unique"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "full",
+            "subset"
+          ]
+        },
+        "seed_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "live_rows": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rows read from the live side: all of them, or in subset mode those under the seed's keys."
+        },
+        "seed_only": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "A row's key: each key field as PostgreSQL renders it as text, in key order."
+          },
+          "description": "Keys only the seed side holds: a seed change no migration shipped."
+        },
+        "live_only": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "A row's key: each key field as PostgreSQL renders it as text, in key order."
+          },
+          "description": "Keys only the live side holds; always empty in subset mode."
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "columns"
+            ],
+            "properties": {
+              "key": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "description": "A row's key: each key field as PostgreSQL renders it as text, in key order."
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "column",
+                    "seed",
+                    "live"
+                  ],
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "seed": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "live": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "description": "Keys both sides hold with different values: each differing column, as text."
+        },
+        "accepted": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "A row's key: each key field as PostgreSQL renders it as text, in key order."
+          },
+          "description": "Differences seed_drift.accepted names for this --against environment: moved out of the findings, kept visible."
+        }
+      }
+    },
+    "NotCompared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "reason",
+        "where"
+      ],
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "where": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "file:line, when the reason is a statement."
+        }
+      }
+    }
+  }
+}

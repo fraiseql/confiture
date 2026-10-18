@@ -1,0 +1,107 @@
+{
+  "seed_side": {
+    "source": "built"
+  },
+  "against": "postgresql://localhost/ex08_live",
+  "compared": true,
+  "has_drift": true,
+  "complete": true,
+  "scope": [
+    {
+      "table": "catalog.tb_vendor",
+      "staging": "prep_seed.tb_vendor",
+      "key": [
+        "id"
+      ],
+      "key_basis": "unique",
+      "mode": "full",
+      "columns": [
+        "name",
+        "country_code"
+      ],
+      "uncompared": [],
+      "written_at": [
+        "db/seeds/prep/10_vendor.sql:1"
+      ]
+    },
+    {
+      "table": "catalog.tb_product",
+      "staging": "prep_seed.tb_product",
+      "key": [
+        "id"
+      ],
+      "key_basis": "unique",
+      "mode": "full",
+      "columns": [
+        "fk_vendor -> catalog.tb_vendor.id",
+        "name",
+        "price",
+        "status"
+      ],
+      "uncompared": [],
+      "written_at": [
+        "db/seeds/prep/20_product.sql:1"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "table": "catalog.tb_vendor",
+      "key": [
+        "id"
+      ],
+      "key_basis": "unique",
+      "mode": "full",
+      "seed_rows": 4,
+      "live_rows": 5,
+      "seed_only": [],
+      "live_only": [
+        [
+          "00000000-0000-4000-8000-0000000000ff"
+        ]
+      ],
+      "changed": [
+        {
+          "key": [
+            "386ecbe0-6b65-46a4-8b81-48f6b38a088c"
+          ],
+          "columns": [
+            {
+              "column": "name",
+              "seed": "Tyrell Umbrella",
+              "live": "Tyrell Umbrella (renamed)"
+            }
+          ]
+        }
+      ],
+      "accepted": []
+    },
+    {
+      "table": "catalog.tb_product",
+      "key": [
+        "id"
+      ],
+      "key_basis": "unique",
+      "mode": "full",
+      "seed_rows": 12,
+      "live_rows": 11,
+      "seed_only": [
+        [
+          "18c26797-6142-4a7d-97be-31111a2a73ed"
+        ]
+      ],
+      "live_only": [],
+      "changed": [],
+      "accepted": []
+    }
+  ],
+  "not_compared": [],
+  "skipped": [],
+  "unused": [],
+  "ok": true,
+  "command": "seed drift",
+  "parser": {
+    "pglast": "8.7",
+    "pg_major": 18
+  }
+}

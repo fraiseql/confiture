@@ -576,10 +576,11 @@ confiture/
 │   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI
 │   │   ├── seed.py               # CLI commands for seed data validation
 │   │   ├── seed_copy.py          # ``confiture seed convert``: the COPY-format tool
+│   │   ├── seed_drift.py         # ``confiture seed drift``: compare the seeded rows of a seed-built datab…
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
 │   │   ├── commands/             # CLI command modules for Confiture (37 modules)
-│   │   └── formatters/           # (8 modules)
+│   │   └── formatters/           # (9 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
 │   │   ├── _env_vars.py          # Shared ``${VAR}`` expansion for Confiture YAML configuration
@@ -693,7 +694,7 @@ confiture/
 │   │   ├── linting/              # Rule Library System (47 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
-│   │   ├── seed/                 # Seed data management and optimization (28 modules)
+│   │   ├── seed/                 # Seed data management and optimization (31 modules)
 │   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (17 modules)
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models

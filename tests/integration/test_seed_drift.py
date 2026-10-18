@@ -1,0 +1,327 @@
+"""``confiture seed drift`` against real databases (#743).
+
+Two databases on the test server: one holds the schema and its seeds (the
+seed-built environment), the other the schema and only what a migration inserted
+(the migrate-only one). The rows differ the way the issue's table does: a row the
+seed adds that no migration shipped, a row only the live side holds, and one key
+whose identifier was renamed on one side. Everything else is equal, even though
+the live side's generated keys were handed out in another order and its server
+renders timestamps in another time zone.
+"""
+
+import json
+import os
+from collections.abc import Callable, Iterator
+from pathlib import Path
+
+import psycopg
+import pytest
+from typer.testing import CliRunner
+
+from confiture.cli.main import app
+from confiture.core.seed.drift import read_only
+from confiture.core.temp_database import TempDatabase
+
+runner = CliRunner()
+
+pytestmark = pytest.mark.integration
+
+DDL = """
+CREATE SCHEMA catalog;
+CREATE TABLE catalog.tb_unit (
+    pk_unit bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id uuid NOT NULL UNIQUE,
+    identifier text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE catalog.tb_conversion (
+    id uuid PRIMARY KEY,
+    fk_unit bigint NOT NULL REFERENCES catalog.tb_unit (pk_unit),
+    factor numeric(12, 4) NOT NULL,
+    valid_from timestamptz NOT NULL
+);
+"""
+
+A1, B2, C3 = (
+    "a1000000-0000-4000-8000-000000000001",
+    "b2000000-0000-4000-8000-000000000002",
+    "c3000000-0000-4000-8000-000000000003",
+)
+D4 = "d4000000-0000-4000-8000-000000000004"
+
+SEED = f"""
+INSERT INTO catalog.tb_unit (id, identifier) VALUES
+    ('{A1}', 'kilogram'),
+    ('{C3}', 'metre');
+INSERT INTO catalog.tb_conversion (id, fk_unit, factor, valid_from)
+    VALUES ('{D4}', 2, 1000, '2026-01-01 00:00:00+00');
+"""
+
+#: What migrations put in the migrate-only database: `meter`, not `metre`; `gram`,
+#: which the seed lacks; no `kilogram`. Its generated keys come in another order.
+MIGRATED = f"""
+INSERT INTO catalog.tb_unit (id, identifier) VALUES ('{C3}', 'meter'), ('{B2}', 'gram');
+INSERT INTO catalog.tb_conversion (id, fk_unit, factor, valid_from)
+    VALUES ('{D4}', 1, 1000.0000, '2026-01-01 09:00:00+09');
+"""
+
+
+def _apply(url: str, *sql: str) -> None:
+    with psycopg.connect(url, autocommit=True) as conn:
+        for text in sql:
+            conn.execute(text)
+
+
+@pytest.fixture
+def in_tmp(tmp_path: Path) -> Iterator[Path]:
+    old = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        os.chdir(old)
+
+
+@pytest.fixture
+def databases(fresh_database_factory: Callable[[str], str]) -> tuple[str, str]:
+    """``(seed-built, migrate-only)``: the second renders timestamps in Tokyo time."""
+    seeded = fresh_database_factory("confiture_seeddrift_seed")
+    live = fresh_database_factory("confiture_seeddrift_live")
+    _apply(seeded, DDL, SEED)
+    _apply(live, DDL, MIGRATED)
+    with psycopg.connect(live, autocommit=True) as conn:
+        name = conn.info.dbname
+        conn.execute(f"ALTER DATABASE \"{name}\" SET TimeZone TO 'Asia/Tokyo'")
+    return seeded, live
+
+
+def _project(root: Path, database_url: str, *, scratch_url: str = "", extra: str = "") -> None:
+    (root / "db" / "schema").mkdir(parents=True)
+    (root / "db" / "seeds").mkdir(parents=True)
+    (root / "db" / "environments").mkdir(parents=True)
+    (root / "db" / "schema" / "010_catalog.sql").write_text(DDL)
+    (root / "db" / "seeds" / "010_units.sql").write_text(SEED)
+    scratch = f"scratch_url: {scratch_url}\n" if scratch_url else ""
+    (root / "db" / "environments" / "local.yaml").write_text(
+        f"database_url: {database_url}\n{scratch}"
+        "include_dirs:\n  - path: db/schema\n  - path: db/seeds\n" + extra
+    )
+
+
+def _drift(*args: str) -> tuple[int, dict]:
+    result = runner.invoke(app, ["seed", "drift", "--format", "json", *args])
+    try:
+        return result.exit_code, json.loads(result.stdout)
+    except json.JSONDecodeError:
+        pytest.fail(result.output)
+
+
+def _table(payload: dict, name: str) -> dict:
+    return next(t for t in payload["tables"] if t["table"] == name)
+
+
+class TestTheIssueTable:
+    def test_seed_only_live_only_and_a_renamed_identifier(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _project(in_tmp, seeded)
+
+        code, payload = _drift("--against", live)
+
+        assert code == 1
+        units = _table(payload, "catalog.tb_unit")
+        assert units["seed_only"] == [[A1]]
+        assert units["live_only"] == [[B2]]
+        assert units["changed"] == [
+            {"key": [C3], "columns": [{"column": "identifier", "seed": "metre", "live": "meter"}]}
+        ]
+
+    def test_a_dereferenced_key_and_the_rendering_settings_hide_no_difference(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        """``fk_unit`` is 2 on one side and 1 on the other, the same metre; the times are one instant."""
+        seeded, live = databases
+        _project(in_tmp, seeded)
+
+        _code, payload = _drift("--against", live)
+
+        conversions = _table(payload, "catalog.tb_conversion")
+        assert (conversions["seed_only"], conversions["live_only"], conversions["changed"]) == (
+            [],
+            [],
+            [],
+        )
+
+    def test_built_seed_side_reports_the_same(
+        self, in_tmp: Path, databases: tuple[str, str], test_db_url: str
+    ) -> None:
+        _seeded, live = databases
+        _project(
+            in_tmp, "postgresql://127.0.0.1:1/confiture_no_such_server", scratch_url=test_db_url
+        )
+
+        code, payload = _drift("--against", live, "--build")
+
+        assert code == 1
+        assert payload["seed_side"] == {"source": "built"}
+        assert _table(payload, "catalog.tb_unit")["seed_only"] == [[A1]]
+
+
+class TestWhatIsNotAPass:
+    def test_a_table_missing_on_the_live_side_is_not_compared(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _apply(live, "DROP TABLE catalog.tb_conversion")
+        _apply(
+            live, "DELETE FROM catalog.tb_unit WHERE id <> '00000000-0000-0000-0000-000000000000'"
+        )
+        _apply(
+            live,
+            f"INSERT INTO catalog.tb_unit (id, identifier) VALUES ('{A1}', 'kilogram'), ('{C3}', 'metre')",
+        )
+        _project(in_tmp, seeded)
+
+        code, payload = _drift("--against", live)
+
+        assert code == 2
+        [entry] = payload["not_compared"]
+        assert entry["table"] == "catalog.tb_conversion"
+        assert "does not exist on the live side" in entry["reason"]
+
+    def test_a_seed_file_that_fails_to_build_is_named_and_the_scratch_dropped(
+        self,
+        in_tmp: Path,
+        databases: tuple[str, str],
+        test_db_url: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _seeded, live = databases
+        _project(
+            in_tmp, "postgresql://127.0.0.1:1/confiture_no_such_server", scratch_url=test_db_url
+        )
+        (in_tmp / "db" / "seeds" / "020_broken.sql").write_text(
+            "INSERT INTO catalog.tb_unit (id, identifier) VALUES ('not-a-uuid', 'x');\n"
+        )
+        built: list[str] = []
+        enter = TempDatabase.__enter__
+
+        def recording(self: TempDatabase) -> str:
+            url = enter(self)
+            built.append(url.rsplit("/", 1)[-1])
+            return url
+
+        monkeypatch.setattr(TempDatabase, "__enter__", recording)
+
+        code, payload = _drift("--against", live, "--build")
+
+        assert code == 2
+        [entry] = [e for e in payload["not_compared"] if e["table"] == "seed side"]
+        assert "020_broken.sql" in entry["reason"]
+        [name] = built
+        with psycopg.connect(test_db_url) as conn:
+            left = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone()
+        assert left is None
+
+    def test_an_unreachable_against_exits_3_with_its_password_masked(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, _live = databases
+        _project(in_tmp, seeded)
+
+        result = runner.invoke(
+            app,
+            [
+                "seed",
+                "drift",
+                "--against",
+                "postgresql://u:hunter2@127.0.0.1:1/confiture_no_such_server",
+                "--format",
+                "json",
+            ],
+        )
+
+        assert result.exit_code == 3, result.output
+        assert "hunter2" not in result.output
+
+
+class TestOptOuts:
+    def test_subset_reports_no_live_only_row(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _project(
+            in_tmp,
+            seeded,
+            extra="seed_drift:\n  tables:\n    catalog.tb_unit:\n"
+            "      mode: subset\n      reason: grows in production\n",
+        )
+
+        _code, payload = _drift("--against", live)
+
+        units = _table(payload, "catalog.tb_unit")
+        assert units["live_only"] == []
+        assert units["seed_only"] == [[A1]]
+
+    def test_an_accepted_difference_is_kept_visible_and_an_unused_one_is_a_finding(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _project(
+            in_tmp,
+            seeded,
+            extra=(
+                "seed_drift:\n  accepted:\n    production:\n"
+                f"      - {{table: catalog.tb_unit, key: ['{C3}'], reason: renamed on purpose}}\n"
+                f"      - {{table: catalog.tb_unit, key: ['{D4}'], reason: long gone}}\n"
+            ),
+        )
+        (in_tmp / "db" / "environments" / "production.yaml").write_text(
+            f"database_url: {live}\ninclude_dirs:\n  - path: db/schema\n"
+        )
+
+        code, payload = _drift("--against", "production")
+
+        units = _table(payload, "catalog.tb_unit")
+        assert units["accepted"] == [[C3]]
+        assert units["changed"] == []
+        assert payload["unused"] == [
+            f"seed_drift.accepted.production: catalog.tb_unit ['{D4}'] matches no difference"
+        ]
+        assert code == 1
+
+    def test_a_table_over_max_rows_is_not_read_whole(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _apply(live, "ANALYZE catalog.tb_unit")
+        _project(in_tmp, seeded, extra="seed_drift:\n  max_rows: 1\n")
+
+        code, payload = _drift("--against", live)
+
+        assert code in (1, 2)
+        assert any(
+            e["table"] == "catalog.tb_unit" and "mode: subset" in e["reason"]
+            for e in payload["not_compared"]
+        )
+
+
+def test_the_live_side_is_read_only(databases: tuple[str, str]) -> None:
+    _seeded, live = databases
+    with psycopg.connect(live) as conn, read_only(conn, "5s"):
+        assert conn.execute("SHOW transaction_read_only").fetchone() == ("on",)
+        with pytest.raises(psycopg.errors.ReadOnlySqlTransaction), conn.transaction():
+            conn.execute("DELETE FROM catalog.tb_unit")
+
+
+def test_list_scope_reads_no_database(in_tmp: Path) -> None:
+    _project(in_tmp, "postgresql://127.0.0.1:1/confiture_no_such_server")
+
+    code, payload = _drift("--list-scope")
+
+    assert code == 0
+    assert payload["compared"] is False
+    assert [t["table"] for t in payload["scope"]] == ["catalog.tb_unit", "catalog.tb_conversion"]
+    conversion = payload["scope"][1]
+    assert conversion["columns"] == ["fk_unit -> catalog.tb_unit.id", "factor", "valid_from"]

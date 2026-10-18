@@ -99,12 +99,17 @@ class Unread:
     """A statement level 1 does not check, the line it is on, and why.
 
     ``relation`` is the table it writes when it writes one: its rows are not
-    read, and the table is still one the file populates.
+    read, and the table is still one the file populates. ``inserts`` says
+    whether it adds rows (an ``UPDATE`` only changes them), and ``columns`` which
+    columns an inserting statement supplies: ``None`` for all of them (no column
+    list), ``()`` when it is not known.
     """
 
     line: int
     reason: str
     relation: RelationName | None = None
+    inserts: bool = False
+    columns: tuple[str, ...] | None = ()
 
 
 @dataclass(frozen=True)
@@ -203,10 +208,16 @@ def _insert(
     relation = stmt.relation
     target = RelationName(relation.schemaname, relation.relname)
     if select is None:
-        return Unread(parsed.line, "INSERT … DEFAULT VALUES writes no value to check", target)
+        return Unread(
+            parsed.line, "INSERT … DEFAULT VALUES writes no value to check", target, True, ()
+        )
     if not select.valuesLists:
         return Unread(
-            parsed.line, "an INSERT … SELECT: the values are computed at run time", target
+            parsed.line,
+            "an INSERT … SELECT: the values are computed at run time",
+            target,
+            True,
+            _insert_columns(stmt),
         )
     openings = _row_openings(toks, starts, relation.location, parsed.location + parsed.length)
     if len(openings) != len(select.valuesLists):
@@ -217,8 +228,14 @@ def _insert(
             zip(openings, select.valuesLists, strict=True), start=1
         )
     )
-    columns = tuple(target.name for target in stmt.cols) if stmt.cols else None
-    return SeedWrite(relation.schemaname, relation.relname, columns, rows, parsed.line, "insert")
+    return SeedWrite(
+        relation.schemaname, relation.relname, _insert_columns(stmt), rows, parsed.line, "insert"
+    )
+
+
+def _insert_columns(stmt: Any) -> tuple[str, ...] | None:
+    """The columns an ``INSERT`` names, or ``None`` when it names none (all, in order)."""
+    return tuple(target.name for target in stmt.cols) if stmt.cols else None
 
 
 #: The statements that write rows level 1 does not read, and how a message names each.
@@ -240,6 +257,8 @@ def _nested_writes(parsed: sql_lexer.ParsedStatement) -> list[Unread]:
             parsed.line,
             f"{_ROW_WRITERS[type(node).__name__]}: the rows it writes are not read",
             RelationName(node.relation.schemaname, node.relation.relname),
+            type(node).__name__ != "UpdateStmt",
+            _insert_columns(node) if type(node).__name__ == "InsertStmt" else (),
         )
         for node in walk_nodes(parsed.stmt)
         if node is not parsed.stmt
@@ -252,7 +271,7 @@ def _unread_statement(parsed: sql_lexer.ParsedStatement, node: str) -> Unread:
     """A top-level statement level 1 does not read, naming the table it writes, if any."""
     relation = getattr(parsed.stmt, "relation", None) if node in _ROW_WRITERS else None
     target = None if relation is None else RelationName(relation.schemaname, relation.relname)
-    return Unread(parsed.line, f"level 1 does not read a {node}", target)
+    return Unread(parsed.line, f"level 1 does not read a {node}", target, node == "MergeStmt")
 
 
 def _options(stmt: Any) -> dict[str, str]:
