@@ -35,17 +35,17 @@ def _server_url() -> str:
     return resolve_db_url("CONFITURE_TEST_DB_URL", DEFAULT_TEST_DB_URL)
 
 
-def _maintenance_url(server_url: str) -> str:
-    from confiture.core.temp_database import _maintenance_url
+def _admin_url(server_url: str) -> str:
+    from confiture.core.temp_database import maintenance_url
 
-    return _maintenance_url(server_url)
+    return maintenance_url(server_url)
 
 
 @pytest.fixture
 def server_url() -> str:
     url = _server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True):
+        with psycopg.connect(_admin_url(url), autocommit=True):
             pass
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")
@@ -56,7 +56,7 @@ def server_url() -> str:
 def fresh_target(server_url: str) -> Iterator[str]:
     """Create an empty target database; drop it afterwards."""
     target = "confiture_artifact_roundtrip"
-    maint = _maintenance_url(server_url)
+    maint = _admin_url(server_url)
     target_id = psycopg.sql.Identifier(target)
     with psycopg.connect(maint, autocommit=True) as conn:
         conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(target_id))

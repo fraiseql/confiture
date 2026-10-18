@@ -30,7 +30,7 @@ from psycopg import sql
 
 from confiture.core.linting import references
 from confiture.core.linting.rule_registry import BODY_CLASS_CODES
-from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.linting.schema_linter import LintViolation, RuleSeverity, first_line
 from confiture.core.sql_lexer import ParsedFile
 
 #: A body that will raise on its first call.
@@ -70,12 +70,6 @@ _NO_EXTENSION = (
     "carries it: install it (Debian/Ubuntu `postgresql-<major>-plpgsql-check`, "
     "or build https://github.com/okbob/plpgsql_check) and re-run"
 )
-
-
-def first_line(exc: BaseException) -> str:
-    """A driver's error, trimmed to the sentence a summary line can carry."""
-    text = str(exc).strip()
-    return text.splitlines()[0] if text else type(exc).__name__
 
 
 def unavailable(server_url: str) -> str | None:

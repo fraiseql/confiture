@@ -32,7 +32,7 @@ import psycopg.sql
 import pytest
 from tests.conftest import DEFAULT_TEST_DB_URL, fail_if_ledger_left, resolve_db_url
 
-from confiture.core.temp_database import _maintenance_url
+from confiture.core.temp_database import maintenance_url
 from confiture.core.test_db import TestDbProvisioner
 
 _RAM_TABLESPACE = "confiture_ram_it"
@@ -68,7 +68,7 @@ def _drop_dbs_in_tablespace(conn: psycopg.Connection, name: str) -> None:
 def _drop_tablespace(url: str, name: str) -> None:
     """Drop a tablespace and every database living in it (best-effort)."""
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True) as conn:
+        with psycopg.connect(maintenance_url(url), autocommit=True) as conn:
             _drop_dbs_in_tablespace(conn, name)
             conn.execute(
                 psycopg.sql.SQL("DROP TABLESPACE IF EXISTS {}").format(psycopg.sql.Identifier(name))
@@ -105,7 +105,7 @@ def _provision_tmpfs_tablespace(url: str, name: str, location: str) -> bool:
         Path(location).mkdir(mode=0o700, exist_ok=True, parents=True)
     except OSError:
         return False
-    with psycopg.connect(_maintenance_url(url), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(url), autocommit=True) as conn:
         _try_chown_to_pg(conn, location)
         try:
             conn.execute(
@@ -128,7 +128,7 @@ def ram_tablespace() -> Iterator[tuple[TestDbProvisioner, str, str]]:
     """
     url = _ram_server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True) as probe:
+        with psycopg.connect(maintenance_url(url), autocommit=True) as probe:
             superuser = _is_superuser(probe)
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")
@@ -155,7 +155,7 @@ def inplace_tablespace() -> Iterator[tuple[TestDbProvisioner, str]]:
     """
     url = _ram_server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True) as conn:
+        with psycopg.connect(maintenance_url(url), autocommit=True) as conn:
             if not _is_superuser(conn):
                 pytest.skip("in-place tablespace requires a superuser connection")
             _drop_tablespace(url, _INPLACE_TABLESPACE)
@@ -189,7 +189,7 @@ def ram_setup_env() -> Iterator[tuple[TestDbProvisioner, str, str, str]]:
     """
     url = _ram_server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True) as conn:
+        with psycopg.connect(maintenance_url(url), autocommit=True) as conn:
             if not _is_superuser(conn):
                 pytest.skip("ram-setup requires a superuser connection")
             datadir = conn.execute("SHOW data_directory").fetchone()[0]

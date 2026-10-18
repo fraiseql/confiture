@@ -71,18 +71,21 @@ _LIVE_TIER_TIMEOUT_S = 3
 def _ask_scratch(
     server: str,
     extensions: Sequence[Any],
-    schemas: frozenset[str],
+    schemas: Any,
     search_path: Sequence[str],
     candidates: list[tuple[str | None, Any]],
 ) -> Any:
-    """``build_003``'s scratch tier, looked up when it runs so a test may stand in for it."""
+    """``build_003``'s scratch tier, looked up when it runs so a test may stand in for it.
+
+    *schemas* is called only here: the schemas are read once a scratch is asked.
+    """
     # Reason: import cycle (unresolved imports LintViolation from this module at module level)
     from confiture.core.linting import unresolved
 
     return unresolved.scratch_names(
         server,
         extensions,
-        schemas,
+        schemas(),
         candidates,
         search_path,
         connect_timeout=_LIVE_TIER_TIMEOUT_S,
@@ -961,17 +964,22 @@ class SchemaLinter:
             ignore=self.environment.lint.ignore_objects,
             search_path=self.environment.lint.search_path,
         )
+        live_at = len(report.degraded)
         if candidates:
             candidates = self._after_live_tier(candidates, report)
         tier = None
         if candidates:
             tier = self._after_extension_tier(candidates, report)
             candidates = tier.missing
+            # The live tier's silence cost nothing when the scratch answered every name it left.
+            if len(report.degraded) > live_at and not candidates and tier.reason is None:
+                del report.degraded[live_at]
         for violation in reference_findings(
             candidates,
             unwritten=tier.unwritten if tier else (),
             asked=tier.asked if tier else (),
             search_path=self.environment.lint.search_path,
+            answered=bool(tier and tier.answered),
         ):
             report.add_violation(violation)
 
@@ -994,17 +1002,18 @@ class SchemaLinter:
         # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
         from confiture.core.linting.extensions import built_extensions, extension_schemas
 
-        extensions = built_extensions(self._files)
+        uncreated = self._inventory.uncreated
+        extensions = built_extensions(self._files, uncreated)
         search_path = self.environment.lint.search_path
         server = self.config.server_url or self.environment.scratch_url
         ask = (
             None
-            if server is None
+            if server is None or not extensions
             else partial(
                 _ask_scratch,
                 server,
                 extensions,
-                extension_schemas(extensions, self._files),
+                partial(extension_schemas, extensions, self._files, uncreated),
                 search_path,
             )
         )
@@ -1146,8 +1155,9 @@ class SchemaLinter:
                     code=RULE_ID,
                     state="degraded",
                     reason=(
-                        "no database answered, so an object created by a migration or owned "
-                        f"by an extension is reported as missing: {first_line(exc)}"
+                        "no database answered, so an object a migration created, or an "
+                        "extension outside the tree owns, is reported as missing: "
+                        f"{first_line(exc)}"
                     ),
                 )
             )

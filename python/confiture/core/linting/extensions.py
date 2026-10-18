@@ -20,9 +20,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from confiture.core.ddl_objects import DDLObject, declared_objects, object_of
+from confiture.core.ddl_objects import DDLObject, declared_objects, defined_kind, object_of
 from confiture.core.linting.inventory import line_of, statement_offset
-from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
 from confiture.core.sql_lexer import ParsedFile
 
 
@@ -75,26 +75,42 @@ def _built(parsed: ParsedFile, raw: Any, obj: DDLObject) -> BuiltExtension:
     )
 
 
-def built_extensions(files: Sequence[ParsedFile]) -> list[BuiltExtension]:
-    """Every extension the tree still creates once it is applied, in build order."""
+def built_extensions(
+    files: Sequence[ParsedFile], uncreated: frozenset[tuple[int, str]] | None = None
+) -> list[BuiltExtension]:
+    """Every extension the tree still creates once it is applied, in build order.
+
+    *uncreated* is the inventory's, when the caller holds one: without it
+    :func:`~confiture.core.ddl_objects.declared_objects` builds the inventory
+    again. A tree with no ``CREATE EXTENSION`` costs one look at each node.
+    """
+    creating = [
+        (parsed, raw)
+        for parsed in files
+        for raw in parsed.statements
+        if defined_kind(raw) == "extension"
+    ]
+    if not creating:
+        return []
     kept = [
         obj
-        for ref, bucket in declared_objects(files).objects.items()
+        for ref, bucket in declared_objects(files, uncreated).objects.items()
         if ref.kind == "extension"
         for obj in bucket
     ]
     found: list[BuiltExtension] = []
-    for parsed in files:
-        for raw in parsed.statements:
-            obj = object_of(parsed.text, raw)
-            if obj is not None and obj in kept:
-                kept.remove(obj)
-                found.append(_built(parsed, raw, obj))
+    for parsed, raw in creating:
+        obj = object_of(parsed.text, raw)
+        if obj is not None and obj in kept:
+            kept.remove(obj)
+            found.append(_built(parsed, raw, obj))
     return found
 
 
 def extension_schemas(
-    extensions: Sequence[BuiltExtension], files: Sequence[ParsedFile]
+    extensions: Sequence[BuiltExtension],
+    files: Sequence[ParsedFile],
+    uncreated: frozenset[tuple[int, str]] | None = None,
 ) -> frozenset[str]:
     """The schemas a scratch build must create before the extensions: names, not statements.
 
@@ -104,7 +120,10 @@ def extension_schemas(
     nothing to do with the extension. A schema the tree never creates is not
     named, so the scratch refuses the extension as the build would.
     """
-    created = {ref.name for ref in declared_objects(files).objects if ref.kind == "schema"}
-    return frozenset(
-        ext.schema for ext in extensions if ext.schema_written and ext.schema.lower() in created
-    )
+    written = {identifier_identity(e.schema): e.schema for e in extensions if e.schema_written}
+    if not written:
+        return frozenset()
+    created = {
+        ref.name for ref in declared_objects(files, uncreated).objects if ref.kind == "schema"
+    }
+    return frozenset(spelled for folded, spelled in written.items() if folded in created)
