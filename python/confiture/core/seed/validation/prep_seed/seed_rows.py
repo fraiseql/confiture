@@ -286,6 +286,11 @@ def _unread_statement(parsed: sql_lexer.ParsedStatement, node: str) -> Unread:
     )
 
 
+def _copy_columns(stmt: Any) -> tuple[str, ...] | None:
+    """The columns a ``COPY`` names, or ``None`` when it names none."""
+    return tuple(name.sval for name in stmt.attlist) if stmt.attlist else None
+
+
 def _options(stmt: Any) -> dict[str, str]:
     options: dict[str, str] = {}
     for opt in stmt.options or ():
@@ -470,7 +475,17 @@ def read_seed_statements(sql: str) -> SeedStatements:
             # A `COPY … FROM stdin` block is blanked before this parse: what is
             # left reads a file or a program, or writes rows out.
             reason = "a COPY that does not read its rows from the file level 1 is reading"
-            found.append((statement.location, Unread(statement.line, reason, statement="CopyStmt")))
+            source = getattr(statement.stmt, "relation", None)
+            target = None if source is None else RelationName(source.schemaname, source.relname)
+            unread = Unread(
+                statement.line,
+                reason,
+                target,
+                bool(statement.stmt.is_from) and target is not None,
+                _copy_columns(statement.stmt),
+                "CopyStmt",
+            )
+            found.append((statement.location, unread))
         elif node not in UNREAD_SEED_STATEMENTS:
             found.append((statement.location, _unread_statement(statement, node)))
         found.extend((statement.location, unread) for unread in _nested_writes(statement))

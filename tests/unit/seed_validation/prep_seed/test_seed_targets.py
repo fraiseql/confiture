@@ -83,3 +83,14 @@ def test_targets_lists_every_written_table_once_in_order() -> None:
 def test_a_select_calling_a_loader_is_a_named_limit() -> None:
     """A function that writes tables is invisible to a static reader; it is not in scope."""
     assert read_seed_statements("SELECT app.fn_load_units();\n").targets() == ()
+
+
+def test_a_copy_from_a_file_names_its_table() -> None:
+    read = read_seed_statements("COPY app.tb_a (k) FROM '/data/a.csv' WITH (FORMAT csv);\n")
+
+    [unread] = read.unread
+    assert (unread.relation, unread.inserts, unread.columns) == (
+        RelationName("app", "tb_a"),
+        True,
+        ("k",),
+    )

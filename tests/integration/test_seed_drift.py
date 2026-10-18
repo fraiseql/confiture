@@ -421,3 +421,80 @@ class TestWhatTheReleaseReviewFound:
         result = runner.invoke(app, ["seed", "drift", "--against", live, "--build"])
 
         assert result.exit_code == 3, result.output
+
+
+class TestWhatTheSecondPassFound:
+    def test_a_key_is_never_masked_and_subset_still_matches_it(
+        self, in_tmp: Path, fresh_database_factory: Callable[[str], str]
+    ) -> None:
+        """``token_kind`` reads as sensitive; it is the key, so it must stay comparable."""
+        ddl = "CREATE TABLE token_kind (token_kind text PRIMARY KEY, label text NOT NULL);\n"
+        seed = "INSERT INTO token_kind VALUES ('refresh', 'Refresh'), ('access', 'Access');\n"
+        seeded = fresh_database_factory("confiture_seeddrift_seed")
+        live = fresh_database_factory("confiture_seeddrift_live")
+        _apply(seeded, ddl, seed)
+        _apply(live, ddl, seed, "INSERT INTO token_kind VALUES ('device', 'Device')")
+        (in_tmp / "db" / "schema").mkdir(parents=True)
+        (in_tmp / "db" / "seeds").mkdir(parents=True)
+        (in_tmp / "db" / "environments").mkdir(parents=True)
+        (in_tmp / "db" / "schema" / "010.sql").write_text(ddl)
+        (in_tmp / "db" / "seeds" / "010.sql").write_text(seed)
+        (in_tmp / "db" / "environments" / "local.yaml").write_text(
+            f"database_url: {seeded}\ninclude_dirs:\n  - path: db/schema\n  - path: db/seeds\n"
+            "seed_drift:\n  tables:\n    public.token_kind:\n"
+            "      mode: subset\n      reason: grows in production\n"
+        )
+
+        code, payload = _drift("--against", live)
+
+        table = _table(payload, "token_kind")
+        assert (code, table["seed_only"], table["live_rows"]) == (0, [], 2)
+
+    def test_a_changed_sensitive_value_prints_neither_value_nor_a_digest(
+        self, in_tmp: Path, fresh_database_factory: Callable[[str], str]
+    ) -> None:
+        ddl = "CREATE TABLE app_user (login text PRIMARY KEY, api_token text NOT NULL);\n"
+        seeded = fresh_database_factory("confiture_seeddrift_seed")
+        live = fresh_database_factory("confiture_seeddrift_live")
+        _apply(seeded, ddl, "INSERT INTO app_user VALUES ('admin', 'dev-token')")
+        _apply(live, ddl, "INSERT INTO app_user VALUES ('admin', 'prod-live-token')")
+        (in_tmp / "db" / "schema").mkdir(parents=True)
+        (in_tmp / "db" / "seeds").mkdir(parents=True)
+        (in_tmp / "db" / "environments").mkdir(parents=True)
+        (in_tmp / "db" / "schema" / "010.sql").write_text(ddl)
+        (in_tmp / "db" / "seeds" / "010.sql").write_text(
+            "INSERT INTO app_user VALUES ('admin', 'dev-token');\n"
+        )
+        (in_tmp / "db" / "environments" / "local.yaml").write_text(
+            f"database_url: {seeded}\ninclude_dirs:\n  - path: db/schema\n  - path: db/seeds\n"
+        )
+
+        _code, payload = _drift("--against", live)
+
+        [changed] = _table(payload, "app_user")["changed"]
+        assert changed == {
+            "key": ["admin"],
+            "columns": [{"column": "api_token", "seed": "<redacted>", "live": "<redacted>"}],
+        }
+
+    def test_an_accepted_entry_for_a_table_outside_the_scope_is_unused(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _project(
+            in_tmp,
+            seeded,
+            extra=(
+                "seed_drift:\n  accepted:\n    production:\n"
+                "      - {table: catalog.tb_gone, key: ['x'], reason: renamed table}\n"
+            ),
+        )
+        (in_tmp / "db" / "environments" / "production.yaml").write_text(
+            f"database_url: {live}\ninclude_dirs:\n  - path: db/schema\n"
+        )
+
+        _code, payload = _drift("--against", "production")
+
+        assert payload["unused"] == [
+            "seed_drift.accepted.production: catalog.tb_gone ['x'] matches no difference"
+        ]

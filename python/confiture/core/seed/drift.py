@@ -9,6 +9,8 @@ tree's seed files and reads the rows.
 """
 
 import hashlib
+import hmac
+import os
 import re
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
@@ -226,11 +228,18 @@ def _relation(name: RelationName) -> Template:
     return relation(*name.identity)
 
 
-def _redacted(value: str | None) -> str | None:
-    """A sensitive value as a digest: two equal values stay equal, neither is printed."""
+#: What a report shows for a sensitive value: never the value, never a digest of it.
+REDACTED = "<redacted>"
+
+#: A key for this process only, so the digests a comparison uses mean nothing outside it.
+_SALT = os.urandom(32)
+
+
+def _digest(value: str | None) -> str | None:
+    """A sensitive value as a salted digest: equal values stay equal, and none can be printed back."""
     if value is None:
         return None
-    return "redacted:" + hashlib.sha256(value.encode()).hexdigest()[:12]
+    return hmac.new(_SALT, value.encode(), hashlib.sha256).hexdigest()
 
 
 def _sensitive(field: Field) -> bool:
@@ -279,8 +288,10 @@ class DuplicateKeysError(ValueError):
 def _rows(conn: Any, table: ScopedTable, keys: Sequence[Key] | None = None) -> dict[Key, Key]:
     """``{key: values}`` of *table*, every row or, with *keys*, only the rows under those keys.
 
-    A sensitive column (by its name) is read as a digest, so its value never
-    leaves the query; a NULL key part matches a NULL one.
+    A sensitive compared column (by its name) is kept as a salted digest only, so
+    equal values compare equal and no report can print one; a key is never
+    masked, because it is how a reader finds the row. A NULL key part matches a
+    NULL one.
 
     Raises:
         DuplicateKeysError: two rows share a key.
@@ -305,16 +316,15 @@ def _rows(conn: Any, table: ScopedTable, keys: Sequence[Key] | None = None) -> d
             t"WHERE {matched:q})"
         )
     width = len(table.key)
-    fields = (*table.key, *table.columns)
     rows: dict[Key, Key] = {}
     for raw in conn.execute(query).fetchall():
-        shown = tuple(
-            _redacted(v) if _sensitive(f) else v for f, v in zip(fields, raw, strict=True)
-        )
-        key = shown[:width]
+        key = tuple(raw[:width])
         if key in rows:
             raise DuplicateKeysError(f"two rows share the key ({', '.join(map(str, key))})")
-        rows[key] = shown[width:]
+        rows[key] = tuple(
+            _digest(v) if _sensitive(f) else v
+            for f, v in zip(table.columns, raw[width:], strict=True)
+        )
     return rows
 
 
@@ -340,11 +350,14 @@ def read_only(conn: Any, statement_timeout: str, lock_timeout: str = "5s") -> Ge
 
 def _diff(table: ScopedTable, seed: dict[Key, Key], live: dict[Key, Key]) -> TableDrift:
     names = [field_name(f) for f in table.columns]
+    hidden = [_sensitive(f) for f in table.columns]
     changed = tuple(
         ChangedRow(
             key,
             tuple(
-                (name, a, b) for name, a, b in zip(names, values, live[key], strict=True) if a != b
+                (name, REDACTED, REDACTED) if secret else (name, a, b)
+                for name, a, b, secret in zip(names, values, live[key], hidden, strict=True)
+                if a != b
             ),
         )
         for key, values in seed.items()
@@ -445,6 +458,7 @@ def compare(
     """
     accepted = settings.accepted.get(against_env or "", []) if against_env else []
     compared: set[tuple[str, str]] = set()
+    in_scope = {table.relation.identity for table in scope.tables}
     by_table: dict[tuple[str, str], set[Key]] = {}
     for entry in accepted:
         identity = config_identity(entry.table)
@@ -472,7 +486,8 @@ def compare(
         *(
             f"seed_drift.accepted.{against_env}: {entry.table} {list(entry.key)} matches no difference"
             for entry in accepted
-            if config_identity(entry.table) in compared
+            # An entry for a table in scope that was not compared this run cannot match.
+            if config_identity(entry.table) not in in_scope - compared
             and (config_identity(entry.table), tuple(entry.key)) not in used
         ),
     ]

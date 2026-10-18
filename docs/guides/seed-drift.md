@@ -104,9 +104,11 @@ Each table reports three things:
 - **changed**: a key both sides hold with different values, column by column. This catches a
   rename (`identifier: metre → meter`), a key reused for a different row, and a changed label or flag.
 
-A column whose name says it holds a credential or personal data (`password_hash`, `api_token`,
-`email`; the words `sec_003` reads names by) is never printed: it is read as a digest
-(`redacted:3f2a…`), so a difference still shows, and the value never leaves the database. In `subset`
+A compared column whose name says it holds a credential or personal data (`password_hash`,
+`api_token`, `email`; the words `sec_003` reads names by) is never printed. It is compared through
+a digest salted for that run alone, so a difference still shows, as `<redacted> → <redacted>`, and
+no report holds the value or anything it could be recovered from. A key is never masked: it is how
+you find the row, so key a table by a column that is not a secret. In `subset`
 mode, "Live rows" counts the rows under the seed's keys only.
 
 ## Opt-outs
