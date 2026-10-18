@@ -11,6 +11,7 @@ import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 from typer.testing import CliRunner
@@ -294,10 +295,13 @@ class TestEachFailureSaysWhatFailed:
             },
         )
         password = "pw-that-must-not-print"
-        server = test_db_url.replace("://", f"://confiture_nobody:{password}@", 1)
-        if "@" in test_db_url:
-            pytest.skip("the test server's URL already carries credentials")
+        parsed = urlsplit(test_db_url)
+        host = parsed.netloc.rsplit("@", 1)[-1]
+        user = parsed.username or "confiture_nobody"
+        server = urlunsplit(parsed._replace(netloc=f"{user}:{password}@{host}"))
 
         payload = _payload(server)
+
+        assert payload.get("degraded")
 
         assert all(password not in d["reason"] for d in payload.get("degraded", []))
