@@ -143,7 +143,7 @@ class TestKeys:
         [entry] = scope.not_compared
         assert entry.table == "app.tb_k"
         assert "no stable key" in entry.reason
-        assert "seed_drift.tables" in entry.reason
+        assert "seed_drift:" in entry.reason and "app.tb_k: {key: [<column>]}" in entry.reason
 
     def test_only_an_identity_primary_key_is_not_compared(self) -> None:
         ddl = "CREATE TABLE app.tb_k (pk_k bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, x text);\n"
@@ -274,5 +274,105 @@ class TestOptOuts:
         )
 
         assert scope.unused == (
-            "seed_drift.tables.catalog.tb_gone matches no table the seed writes",
+            "seed_drift.tables.catalog.tb_gone matches no table the seed writes: remove it",
         )
+
+
+class TestWhatTheReleaseReviewFound:
+    """Each a shape a reviewer built against the first cut, and what it got wrong."""
+
+    def test_a_positional_insert_maps_values_onto_every_column(self) -> None:
+        """``VALUES (DEFAULT, …)`` leaves the identity to PostgreSQL: it is no key."""
+        ddl = (
+            "CREATE TABLE app.t (id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,"
+            " code text NOT NULL UNIQUE, label text);\n"
+        )
+        scope = _scope(ddl, {"s.sql": "INSERT INTO app.t VALUES (DEFAULT, 'c', 'l');\n"})
+
+        table = _table(scope, "app.t")
+        assert (table.key, table.key_basis) == ((Field("code"),), "unique")
+        assert table.columns == (Field("label"),)
+
+    def test_a_seed_insert_select_cannot_prove_its_key_is_not_computed(self) -> None:
+        ddl = "CREATE TABLE app.t (id uuid PRIMARY KEY, code text);\n"
+        seeds = {"s.sql": "INSERT INTO app.t (id, code) SELECT gen_random_uuid(), 'x';\n"}
+
+        scope = _scope(ddl, seeds)
+
+        assert [e.table for e in scope.not_compared] == ["app.t"]
+
+    def test_a_column_one_statement_leaves_to_its_default_is_not_compared(self) -> None:
+        ddl = "CREATE TABLE app.t (id uuid DEFAULT gen_random_uuid(), code text NOT NULL UNIQUE);\n"
+        seeds = {
+            "s.sql": "INSERT INTO app.t (id, code) VALUES ('a', 'x');\n"
+            "INSERT INTO app.t (code) VALUES ('y');\n"
+        }
+
+        table = _table(_scope(ddl, seeds), "app.t")
+
+        assert table.columns == ()
+        assert [column for column, _why in table.uncompared] == ["id"]
+
+    def test_a_do_block_makes_the_scope_incomplete(self) -> None:
+        ddl = "CREATE TABLE app.t (code text PRIMARY KEY);\n"
+        seeds = {"s.sql": "DO $$ BEGIN INSERT INTO app.t VALUES ('a'); END $$;\n"}
+
+        [entry] = _scope(ddl, seeds).not_compared
+
+        assert (entry.table, entry.where) == ("seed", "s.sql:1")
+        assert "a DO block may write rows" in entry.reason
+
+    def test_a_ddl_statement_in_a_seed_file_writes_no_row(self) -> None:
+        """A staging table's DDL the path rule files as a seed is not a hidden writer."""
+        ddl = "CREATE TABLE app.t (code text PRIMARY KEY);\n"
+        seeds = {"s.sql": "CREATE TABLE app.u (k int);\nINSERT INTO app.t VALUES ('a');\n"}
+
+        assert _scope(ddl, seeds).not_compared == ()
+
+    def test_no_seeded_table_is_never_a_pass(self) -> None:
+        [entry] = _scope("CREATE TABLE app.t (k int);\n", {}).not_compared
+
+        assert "nothing was compared" in entry.reason
+
+    def test_a_binary_copy_keeps_its_table_in_scope(self) -> None:
+        ddl = "CREATE TABLE app.t (code text PRIMARY KEY);\n"
+        seeds = {"s.sql": "COPY app.t (code) FROM stdin WITH (FORMAT binary);\n\\.\n"}
+
+        scope = _scope(ddl, seeds)
+
+        assert [e.table for e in scope.not_compared] == ["app.t"]
+
+    def test_a_staging_keyed_entry_sets_the_mode(self) -> None:
+        scope = _scope(
+            TestStagingResolution.DDL,
+            {"s.sql": "INSERT INTO prep_seed.tb_unit VALUES ('a', 'kilogram');\n"},
+            tables={"prep_seed.tb_unit": {"mode": "subset", "reason": "grows in production"}},
+        )
+
+        assert _table(scope, "catalog.tb_unit").mode == "subset"
+        assert scope.unused == ()
+
+    def test_a_composite_foreign_key_into_generated_keys_is_not_compared(self) -> None:
+        ddl = """
+CREATE TABLE app.p (pk bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, code text UNIQUE NOT NULL);
+CREATE TABLE app.j (fk_a bigint REFERENCES app.p (pk), fk_b bigint REFERENCES app.p (pk),
+    PRIMARY KEY (fk_a, fk_b));
+CREATE TABLE app.c (code text PRIMARY KEY, fk_a bigint, fk_b bigint,
+    FOREIGN KEY (fk_a, fk_b) REFERENCES app.j (fk_a, fk_b));
+"""
+        seeds = {
+            "s.sql": "INSERT INTO app.p (code) VALUES ('x');\n"
+            "INSERT INTO app.j VALUES (1, 1);\n"
+            "INSERT INTO app.c VALUES ('c', 1, 1);\n"
+        }
+
+        table = _table(_scope(ddl, seeds), "app.c")
+
+        assert table.columns == ()
+        assert {column for column, _why in table.uncompared} == {"fk_a", "fk_b"}
+
+    def test_money_is_not_compared(self) -> None:
+        ddl = "CREATE TABLE app.t (code text PRIMARY KEY, price money);\n"
+        scope = _scope(ddl, {"s.sql": "INSERT INTO app.t VALUES ('a', 1);\n"})
+
+        assert [c for c, _why in _table(scope, "app.t").uncompared] == ["price"]

@@ -34,11 +34,16 @@ confiture seed drift --env dev --against postgresql://readonly@prod-replica/app 
 |------|---------|
 | 0 | No difference that nothing explains |
 | 1 | Drift, or a `seed_drift` entry that matches nothing |
-| 2 | A table in scope could not be compared (`not_compared`): the run is incomplete |
-| 3 | A database did not answer (`CONFIG_006`) |
+| 2 | A table in scope could not be compared (`not_compared`): the run is incomplete. This wins over 1 |
+| 3 | A database did not answer (`CONFIG_006`): `--against`, `--env`'s, or the scratch server |
+| 5 | Configuration: `--build` with no scratch server, an unknown environment, an invalid `seed_drift` block |
 
-"Not checked" never reads as a pass. A table missing on one side, a table with no stable key, and
-a seed side that could not be built each exit 2 and say why.
+"Not checked" never reads as a pass. A table missing on one side, a table with no stable key, a
+seed side that could not be built, a seed statement that may write rows confiture cannot see, and a
+run that found no seeded table at all each exit 2 and say why. `--list-scope` exits 2 too when a
+table in scope could not be compared.
+
+`--output <file>` writes the JSON report to the file whatever `--format` prints.
 
 ## The two seed sides
 
@@ -56,12 +61,19 @@ The default side assumes that environment ran its resolvers too.
 
 ## What is compared
 
+**Seed files.** The seed files in the environment's `include_dirs` are the ones `confiture build`
+treats as seeds: any file under a directory whose name holds `seed` or `seeds` as a word
+(`db/seeds/`, `30_seed_backend/`, `10-seeds/`). With `--seeds-dir`, that directory's files follow
+them, as `confiture seed apply` adds them.
+
 **Scope.** Every table a seed file writes: `INSERT … VALUES`, `COPY … FROM stdin`, and the
 statements whose rows confiture does not read statically (`INSERT … SELECT`, a data-modifying CTE,
 `MERGE`). A prep-seed staging table is replaced by the table its resolver moves the rows into. A
 seed file PostgreSQL's parser rejects, or a staging table whose target is ambiguous, is listed as
 not compared. A seed that writes through a function (`SELECT app.fn_load()`) writes tables no
-static reader sees, so those tables are not in scope.
+static reader sees, so those tables are not in scope. A `DO` block, a `CALL`, or a `COPY` that reads a
+file or a program may write rows the reader cannot name, so a run that meets one says it is
+incomplete.
 
 **The key.** Rows are matched by a key **the seed itself writes**: every statement that adds the
 table's rows supplies it, and no seed row computes it. A surrogate key PostgreSQL generates (an
@@ -75,8 +87,10 @@ databases, so it can never match a row across them. In order:
 
 A table with none is not compared, and the message says which key to declare.
 
-**The values.** The columns the seed writes, apart from the key, compared as PostgreSQL renders
-each one as text. Both sides pin `TimeZone`, `DateStyle`, `IntervalStyle`, `extra_float_digits`
+**The values.** The columns every statement adding rows writes, apart from the key, compared as
+PostgreSQL renders each one as text. A column only some statements write may hold its default in a
+row, so it is not compared, and neither is `money`, which renders in each server's
+`lc_monetary`. Both sides pin `TimeZone`, `DateStyle`, `IntervalStyle`, `extra_float_digits`
 and `bytea_output`, so `2026-01-01 09:00+09` and `2026-01-01 00:00+00` are one value. A column a
 seed row computes (`now()`) differs per database by construction and is not compared. A foreign
 key to a key PostgreSQL generates (`fk_unit bigint → tb_unit.pk_unit`) is compared **through the
@@ -89,6 +103,11 @@ Each table reports three things:
 - **live only**: a key only the live side holds, i.e. a stale seed (not reported in `subset` mode);
 - **changed**: a key both sides hold with different values, column by column. This catches a
   rename (`identifier: metre → meter`), a key reused for a different row, and a changed label or flag.
+
+A column whose name says it holds a credential or personal data (`password_hash`, `api_token`,
+`email`; the words `sec_003` reads names by) is never printed: it is read as a digest
+(`redacted:3f2a…`), so a difference still shows, and the value never leaves the database. In `subset`
+mode, "Live rows" counts the rows under the seed's keys only.
 
 ## Opt-outs
 
@@ -107,12 +126,16 @@ seed_drift:
   accepted:                                         # keyed by the --against environment
     production:
       - {table: catalog.tb_unit, key: [c3a1…], reason: "renamed in production on purpose"}
-  max_rows: 100000          # a live table above this (pg_class.reltuples) is not read whole
-  statement_timeout: 30s    # the live side's statement_timeout and lock_timeout
+  max_rows: 100000          # a live table with more rows than this is not read whole
+  statement_timeout: 30s    # how long one statement may run, on either side
+  lock_timeout: 5s          # how long a read may wait for a lock (short: never queue behind a migration)
 ```
 
 A difference accepted for production is not accepted for staging. A `--against` URL has no
-accepted entries; name an environment to use them.
+accepted entries; name an environment to use them. An accepted entry names the table compared
+(a staging table's final table) and the key as the report prints it, `null` for a NULL part. An
+accepted entry for a table that was not compared in this run is not reported as unused. Both
+timeouts must be positive: `0` would turn PostgreSQL's limit off.
 
 `seed_drift` refuses an unknown key inside the block. A misspelt block name at the top level
 (`seed_drfit:`) is ignored, because environment files allow keys confiture does not read.
@@ -120,10 +143,15 @@ accepted entries; name an environment to use them.
 ## Production safety
 
 The live side is read in one `READ ONLY` transaction with `statement_timeout` and `lock_timeout`
-set, and it is rolled back. Only the key and compared columns are selected. Nothing is ever
+set and `search_path` pinned to `pg_catalog` (every relation is named with its schema), and it is
+rolled back. Only the key and compared columns are selected. Nothing is ever
 written to `--against`. `--against <environment>` opens that environment's `ssh_tunnel`, and every
 URL in a message has its password masked. A table larger than `max_rows` is not scanned: it is
 reported not compared, with `mode: subset` named as the remedy, which reads only the seed's keys.
+The bound is a count capped at `max_rows + 1`, not the planner's estimate, which a partitioned or
+never-analysed table does not have. `--against` takes a PostgreSQL URL (`postgresql://…`) or an
+environment name; anything else is refused without being printed back, since a mistyped URL
+carries its password.
 
 ## In CI
 

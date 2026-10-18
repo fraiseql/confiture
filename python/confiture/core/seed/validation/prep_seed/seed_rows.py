@@ -110,6 +110,9 @@ class Unread:
     relation: RelationName | None = None
     inserts: bool = False
     columns: tuple[str, ...] | None = ()
+    #: The statement's parse node (``DoStmt``, ``CopyStmt``, …), for a reader that asks
+    #: whether a statement it cannot read may write rows.
+    statement: str = ""
 
 
 @dataclass(frozen=True)
@@ -209,7 +212,12 @@ def _insert(
     target = RelationName(relation.schemaname, relation.relname)
     if select is None:
         return Unread(
-            parsed.line, "INSERT … DEFAULT VALUES writes no value to check", target, True, ()
+            parsed.line,
+            "INSERT … DEFAULT VALUES writes no value to check",
+            target,
+            True,
+            (),
+            "InsertStmt",
         )
     if not select.valuesLists:
         return Unread(
@@ -218,6 +226,7 @@ def _insert(
             target,
             True,
             _insert_columns(stmt),
+            "InsertStmt",
         )
     openings = _row_openings(toks, starts, relation.location, parsed.location + parsed.length)
     if len(openings) != len(select.valuesLists):
@@ -259,6 +268,7 @@ def _nested_writes(parsed: sql_lexer.ParsedStatement) -> list[Unread]:
             RelationName(node.relation.schemaname, node.relation.relname),
             type(node).__name__ != "UpdateStmt",
             _insert_columns(node) if type(node).__name__ == "InsertStmt" else (),
+            type(node).__name__,
         )
         for node in walk_nodes(parsed.stmt)
         if node is not parsed.stmt
@@ -271,7 +281,9 @@ def _unread_statement(parsed: sql_lexer.ParsedStatement, node: str) -> Unread:
     """A top-level statement level 1 does not read, naming the table it writes, if any."""
     relation = getattr(parsed.stmt, "relation", None) if node in _ROW_WRITERS else None
     target = None if relation is None else RelationName(relation.schemaname, relation.relname)
-    return Unread(parsed.line, f"level 1 does not read a {node}", target, node == "MergeStmt")
+    return Unread(
+        parsed.line, f"level 1 does not read a {node}", target, node == "MergeStmt", (), node
+    )
 
 
 def _options(stmt: Any) -> dict[str, str]:
@@ -298,7 +310,14 @@ def _copy(lines: _Lines, block: sql_lexer.CopyBlock) -> SeedWrite | Unread:
     if fmt == "csv":
         return _csv_copy(stmt, block, columns, line=line, first=first)
     if fmt != "text":
-        return Unread(line, f"a COPY in {fmt} format: level 1 decodes the text and csv formats")
+        return Unread(
+            line,
+            f"a COPY in {fmt} format: level 1 decodes the text and csv formats",
+            RelationName(relation.schemaname, relation.relname),
+            True,
+            columns,
+            "CopyStmt",
+        )
     texts = block.data.split("\n")[:-1] if block.data else []
     delimiter = options.get("delimiter", "\t")
     null = options.get("null", "\\N")
@@ -315,7 +334,15 @@ def _csv_copy(
     """A CSV ``COPY``'s rows, decoded by :func:`copy_csv_rows` with the statement's options."""
     options = _csv_options(stmt, columns)
     if isinstance(options, str):
-        return Unread(line, options)
+        relation = stmt.relation
+        return Unread(
+            line,
+            options,
+            RelationName(relation.schemaname, relation.relname),
+            True,
+            columns,
+            "CopyStmt",
+        )
     try:
         decoded = copy_csv_rows(block.data, options)
     except ValueError as exc:
@@ -443,7 +470,7 @@ def read_seed_statements(sql: str) -> SeedStatements:
             # A `COPY … FROM stdin` block is blanked before this parse: what is
             # left reads a file or a program, or writes rows out.
             reason = "a COPY that does not read its rows from the file level 1 is reading"
-            found.append((statement.location, Unread(statement.line, reason)))
+            found.append((statement.location, Unread(statement.line, reason, statement="CopyStmt")))
         elif node not in UNREAD_SEED_STATEMENTS:
             found.append((statement.location, _unread_statement(statement, node)))
         found.extend((statement.location, unread) for unread in _nested_writes(statement))

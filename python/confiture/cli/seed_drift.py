@@ -10,14 +10,17 @@ from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.options import env_option, format_option, output_option, scratch_url_option
 from confiture.core.seed.drift import SeedDriftReport, run, scope_for
 from confiture.error_codes import FINDINGS, NOT_RUN, SUCCESS
-from confiture.exceptions import ConfigurationError
 
 
 def exit_code(report: SeedDriftReport) -> int:
-    """1 for a difference nothing explains, else 2 when a table was not compared, else 0."""
-    if report.has_drift:
-        return FINDINGS
-    return SUCCESS if report.complete else NOT_RUN
+    """2 when a table in scope was not compared, else 1 for drift, else 0.
+
+    ``NOT_RUN`` wins over ``FINDINGS``, as the registry says: an incomplete
+    comparison is not a clean one, whatever it found.
+    """
+    if not report.complete:
+        return NOT_RUN
+    return FINDINGS if report.has_drift else SUCCESS
 
 
 @cli_boundary
@@ -55,7 +58,9 @@ def drift(
         help="Print what would be compared (tables, keys, columns) and stop; reads no database",
     ),
     format_output: str = format_option("table", "json"),
-    output_file: Path | None = output_option(help="Write the JSON report to this file"),
+    output_file: Path | None = output_option(
+        help="Write the JSON report to this file (whatever --format prints)"
+    ),
 ) -> None:
     """Compare the reference rows the seed tree writes with what a live database holds.
 
@@ -63,21 +68,26 @@ def drift(
     migrate-only one gets only the rows a migration inserts. Every table the seed
     tree writes is compared, matched by a key the seed itself writes: rows only
     the seed side holds, rows only the live side holds, and rows whose columns
-    differ. Exit 0: no difference nothing explains; 1: drift; 2: a table could not
-    be compared; 3: a database did not answer.
+    differ. Exit 0: no difference nothing explains; 1: drift, or a seed_drift entry
+    that matches nothing; 2: a table could not be compared (this wins over 1); 3: a
+    database did not answer; 5: configuration (no scratch server for --build, an
+    unknown environment). Guide: docs/guides/seed-drift.md.
     """
     if list_scope:
         report = scope_for(env, seeds_dir=seeds_dir, build=build)
     elif against is None:
-        raise ConfigurationError(
-            "seed drift needs --against: the live database to compare with",
-            error_code="CONFIG_001",
-            resolution_hint="Pass --against <environment or URL>, or --list-scope",
+        raise typer.BadParameter(
+            "the live database to compare with: an environment name or a PostgreSQL URL "
+            "(or --list-scope, to see what would be compared without a database)",
+            param_hint="--against",
         )
     else:
         report = run(env, against, seeds_dir=seeds_dir, build=build, scratch_url=scratch_url)
-    if is_json(format_output):
+    if output_file is not None:
         emit(report.to_dict(), output_file)
+    if is_json(format_output):
+        if output_file is None:
+            emit(report.to_dict())
     else:
         print_report(report, console)
     raise typer.Exit(exit_code(report))

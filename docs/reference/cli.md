@@ -3931,7 +3931,7 @@ confiture seed drift [OPTIONS]
 | `--seeds-dir` | - | path | - | A directory `confiture seed apply` applies: its files count as seeds, after the seed files in the environment's include_dirs |
 | `--list-scope` | - | Flag | off | Print what would be compared (tables, keys, columns) and stop; reads no database |
 | `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
-| `--output` | `-o` | path | - | Write the JSON report to this file |
+| `--output` | `-o` | path | - | Write the JSON report to this file (whatever --format prints) |
 
 <!-- END GENERATED: cli confiture seed drift -->
 

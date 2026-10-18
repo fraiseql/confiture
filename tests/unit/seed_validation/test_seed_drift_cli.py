@@ -68,12 +68,48 @@ class TestExitCodes:
     def test_a_table_not_compared(self) -> None:
         assert exit_code(_report(not_compared=(NotCompared("app.t", "why"),))) == NOT_RUN
 
+    def test_an_incomplete_run_is_not_run_even_with_drift(self) -> None:
+        """``NOT_RUN`` wins over ``FINDINGS``, as the registry says."""
+        drifted = TableDrift("app.t", ("k",), "primary_key", "full", 1, 0, seed_only=(("a",),))
+        report = _report(tables=(drifted,), not_compared=(NotCompared("app.u", "why"),))
+
+        assert exit_code(report) == NOT_RUN
+
 
 def test_against_is_required_unless_listing_the_scope(in_tmp: Path) -> None:
+    """A usage error, not a connection one: the flag is missing."""
     result = runner.invoke(app, ["seed", "drift", "--format", "json"])
 
+    assert result.exit_code == 2, result.output
+    assert "--against" in result.output
+    assert "Cannot reach" not in result.output
+
+
+def test_a_mistyped_url_is_refused_without_echoing_its_password(in_tmp: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "seed",
+            "drift",
+            "--against",
+            "postgresql+psycopg://app:SQLASECRET@db.internal/prod",
+            "--format",
+            "json",
+        ],
+    )
+
     assert result.exit_code == 5, result.output
-    assert json.loads(result.stdout)["error"]["code"] == "CONFIG_001"
+    assert "SQLASECRET" not in result.output
+    assert json.loads(result.stdout)["error"]["code"] == "CONFIG_003"
+
+
+def test_output_writes_the_json_whatever_the_format(in_tmp: Path) -> None:
+    out = in_tmp / "report.json"
+
+    result = runner.invoke(app, ["seed", "drift", "--list-scope", "--output", str(out)])
+
+    assert result.exit_code == 2, result.output  # nothing seeded: nothing compared
+    assert json.loads(out.read_text())["compared"] is False
 
 
 def test_against_an_environment_opens_it_with_its_ssh_tunnel(

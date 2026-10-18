@@ -95,12 +95,32 @@ class SeedScope:
     unused: tuple[str, ...] = ()
 
 
+#: Statements the seed reader cannot read that may still write rows, into tables no
+#: static reader can name: a run that holds one cannot claim its scope is whole.
+_HIDDEN_WRITERS: dict[str, str] = {
+    "DoStmt": "a DO block",
+    "CallStmt": "a CALL",
+    "CopyStmt": "a COPY that reads a file or a program",
+    "ExecuteStmt": "an EXECUTE of a prepared statement",
+}
+
+
 @dataclass
 class _Insert:
-    """A statement that adds rows to a table: what it writes, and the rows a seed file spells."""
+    """A statement that adds rows to a table: what it writes, and the rows a seed file spells.
+
+    ``columns`` is ``None`` when the statement names none: an ``INSERT`` then
+    supplies every column in table order, a ``COPY`` every column but the
+    generated ones. ``trusted`` is false for a statement whose values cannot be
+    read (an ``INSERT … SELECT`` in a seed file), so a key it writes may be
+    computed at run time; a resolver copying the staging rows is trusted, since
+    the seed wrote those values.
+    """
 
     columns: tuple[str, ...] | None
     rows: tuple[SeedRow, ...] = ()
+    form: Literal["insert", "copy"] = "insert"
+    trusted: bool = True
 
 
 @dataclass
@@ -152,24 +172,42 @@ def _targets(
     for label, read in statements:
         for write in read.writes:
             target = targets.setdefault(write.relation.identity, _Target(write.relation))
-            target.inserts.append(_Insert(write.columns, write.rows))
+            target.inserts.append(_Insert(write.columns, write.rows, write.form))
             target.written_at.append(_where(label, write.line))
         for unread in read.unread:
             if unread.relation is None:
                 continue
             target = targets.setdefault(unread.relation.identity, _Target(unread.relation))
             if unread.inserts:
-                target.inserts.append(_Insert(unread.columns))
+                form: Literal["insert", "copy"] = (
+                    "copy" if unread.statement == "CopyStmt" else "insert"
+                )
+                target.inserts.append(_Insert(unread.columns, (), form, trusted=False))
             target.written_at.append(_where(label, unread.line))
     return targets
+
+
+def _hidden(statements: Iterable[tuple[str | None, SeedStatements]]) -> list[NotCompared]:
+    """A statement that may write rows into tables the reader cannot name, one entry each."""
+    return [
+        NotCompared(
+            "seed",
+            f"{_HIDDEN_WRITERS[unread.statement]} may write rows into tables the seed reader "
+            "cannot see, so the scope may be incomplete",
+            _where(label, unread.line),
+        )
+        for label, read in statements
+        for unread in read.unread
+        if unread.relation is None and unread.statement in _HIDDEN_WRITERS
+    ]
 
 
 def _resolved(
     targets: dict[tuple[str, str], _Target], read: SchemaRead, settings: SeedDriftSettings
 ) -> tuple[dict[tuple[str, str], _Target], list[NotCompared]]:
     """Each staging target replaced by its final table, with the resolver's ``INSERT``s."""
-    prep = settings.prep_seed_schema.lower()
-    if not any(identity[0].lower() == prep for identity in targets):
+    prep = identifier_identity(settings.prep_seed_schema)
+    if not any(identity[0] == prep for identity in targets):
         return targets, []
     resolution = read_resolution(
         read, catalog_schema=settings.catalog_schema, prep_seed_schema=settings.prep_seed_schema
@@ -177,7 +215,7 @@ def _resolved(
     out: dict[tuple[str, str], _Target] = {}
     refused: list[NotCompared] = []
     for identity, target in targets.items():
-        if identity[0].lower() != prep:
+        if identity[0] != prep:
             out.setdefault(identity, _Target(target.relation)).inserts.extend(target.inserts)
             out[identity].written_at.extend(target.written_at)
             continue
@@ -209,18 +247,28 @@ def _resolved(
 
 
 def _writable(column: Column) -> bool:
-    """Whether an ``INSERT`` naming no columns supplies this one."""
+    """Whether a statement can supply this column's value at all."""
     return column.generated is None and column.identity != "always"
 
 
 def _written_columns(table: Table, insert: _Insert) -> tuple[str, ...]:
-    if insert.columns is None:
-        return tuple(c.folded for c in table.columns if _writable(c))
-    return insert.columns
+    """The columns *insert* supplies, in the order its values are written.
+
+    With no column list an ``INSERT`` supplies every column in table order, as
+    many as each row has values (a ``DEFAULT`` among them supplies nothing, and
+    is read as computed); a ``COPY`` supplies every column but the generated ones.
+    """
+    if insert.columns is not None:
+        return insert.columns
+    if insert.form == "copy":
+        return tuple(c.folded for c in table.columns if c.generated is None)
+    names = tuple(c.folded for c in table.columns)
+    widths = {len(row.values) for row in insert.rows}
+    return names[: max(widths)] if widths else names
 
 
 def _computed(table: Table, inserts: Sequence[_Insert]) -> dict[str, str]:
-    """Each column a seed row writes as a computed value, with the node that computes it."""
+    """Each column a seed row writes as a computed value (a call, ``DEFAULT``), and the node."""
     found: dict[str, str] = {}
     for insert in inserts:
         names = _written_columns(table, insert)
@@ -231,13 +279,27 @@ def _computed(table: Table, inserts: Sequence[_Insert]) -> dict[str, str]:
     return found
 
 
-def _stable(columns: Sequence[str], inserts: Sequence[_Insert], computed: dict[str, str]) -> bool:
-    """Whether every statement adding rows writes *columns*, and no seed row computes one."""
+def _every_insert_writes(table: Table, columns: Sequence[str], inserts: Sequence[_Insert]) -> bool:
+    return bool(inserts) and all(
+        set(columns) <= set(_written_columns(table, insert)) for insert in inserts
+    )
+
+
+def _stable(
+    table: Table, columns: Sequence[str], inserts: Sequence[_Insert], computed: dict[str, str]
+) -> bool:
+    """Whether every statement adding rows writes *columns* with a value it spells.
+
+    A column PostgreSQL fills, one a seed row computes, and one an unreadable
+    ``INSERT … SELECT`` writes can differ per database, so none is a key.
+    """
     return (
-        bool(inserts)
-        and all(insert.columns is None or set(columns) <= set(insert.columns) for insert in inserts)
+        _every_insert_writes(table, columns, inserts)
+        and all(insert.trusted for insert in inserts)
         and not any(column in computed for column in columns)
-        and all(insert.columns != () for insert in inserts)
+        and all(
+            (column := table.column(name)) is not None and _writable(column) for name in columns
+        )
     )
 
 
@@ -258,19 +320,21 @@ def _base_key(
 ) -> tuple[tuple[str, ...], KeyBasis] | str:
     """The key, before any foreign key in it is dereferenced, or why there is none."""
     if declared is not None:
-        missing = [c for c in declared if table.column(c) is None]
+        folded = tuple(identifier_identity(name) for name in declared)
+        missing = [c for c in folded if table.column(c) is None]
         if missing:
             return f"the declared key names columns the table does not have: {', '.join(missing)}"
-        return tuple(declared), "declared"
+        return folded, "declared"
     pk = primary_key(table)
-    if pk and _stable(pk, target.inserts, computed):
+    if pk and _stable(table, pk, target.inserts, computed):
         return pk, "primary_key"
     for cols in _unique_candidates(table):
-        if _stable(cols, target.inserts, computed):
+        if _stable(table, cols, target.inserts, computed):
             return cols, "unique"
     return (
-        "no stable key: no primary or unique key that every statement adding its rows writes; "
-        f"declare one as seed_drift.tables.{table.relation.qualified}.key"
+        "no stable key: no primary or unique key that every statement adding its rows writes "
+        "with a value it spells; declare one in the environment as\n"
+        f"  seed_drift:\n    tables:\n      {table.relation.qualified}: {{key: [<column>]}}"
     )
 
 
@@ -286,6 +350,31 @@ def _generated_reference(table: Table, column: str, tables: dict[tuple[str, str]
     return None
 
 
+def _composite_reference(table: Table, column: str, tables: dict[tuple[str, str], Table]) -> str:
+    """Why *column* cannot be compared through a composite foreign key, or ``""``.
+
+    A multi-column key into columns that PostgreSQL generates, or that are
+    themselves such references, holds per-database numbers; it is not
+    dereferenced, so it is not compared rather than compared wrongly.
+    """
+    for fk in table.constraints_of("foreign_key"):
+        if column not in fk.columns or len(fk.columns) == 1 or fk.ref_table is None:
+            continue
+        parent = tables.get(fk.ref_table.identity)
+        if parent is None:
+            continue
+        for name in fk.ref_columns:
+            referenced = parent.column(name)
+            if (referenced is not None and referenced.value_source.filled_by_postgresql) or (
+                _generated_reference(parent, name, tables) is not None
+            ):
+                return (
+                    f"part of a composite foreign key to {fk.ref_table.qualified}, whose "
+                    "columns hold keys PostgreSQL generates; it is not dereferenced"
+                )
+    return ""
+
+
 def _field(
     table: Table,
     column: str,
@@ -293,6 +382,9 @@ def _field(
     keys: dict[tuple[str, str], tuple[str, ...]],
 ) -> Field | str:
     """*column* as compared, or why it cannot be: a generated parent key with no stable key."""
+    composite = _composite_reference(table, column, tables)
+    if composite:
+        return composite
     fk = _generated_reference(table, column, tables)
     if fk is None:
         return Field(column)
@@ -320,6 +412,14 @@ def _compared(
         name = column.folded
         if name in key or name not in written or not _writable(column):
             continue
+        if not _every_insert_writes(table, (name,), target.inserts):
+            uncompared.append(
+                (name, "not every statement adding rows writes it, so a row may hold its default")
+            )
+            continue
+        if (column.type_key or "") == "money":
+            uncompared.append((name, "money renders in each server's lc_monetary"))
+            continue
         if name in computed:
             uncompared.append(
                 (name, f"a seed row computes it ({computed[name]}), so it differs per database")
@@ -342,6 +442,7 @@ def seed_scope(
     schema tree they are applied on, read once (``schema_sources.read_schema``).
     """
     statements, not_compared = _statements(seed_files)
+    not_compared.extend(_hidden(statements))
     targets, refused = _resolved(_targets(statements), read, settings)
     not_compared.extend(refused)
     tables = {t.relation.identity: t for t in read.catalogued.tables.values()}
@@ -353,6 +454,7 @@ def seed_scope(
     used: set[tuple[str, str]] = set()
     skipped: list[tuple[str, str]] = []
     bases: dict[tuple[str, str], tuple[tuple[str, ...], KeyBasis, dict[str, str]]] = {}
+    modes: dict[tuple[str, str], Literal["full", "subset"]] = {}
     for identity, target in targets.items():
         entry = config.get(identity) or (
             config.get(target.staging.identity) if target.staging else None
@@ -378,6 +480,7 @@ def seed_scope(
             not_compared.append(NotCompared(target.relation.qualified, base, None))
             continue
         bases[identity] = (base[0], base[1], computed)
+        modes[identity] = entry[1].mode if entry else "full"
     keys = {
         identity: key
         for identity, (key, _basis, _computed_cols) in bases.items()
@@ -394,7 +497,6 @@ def seed_scope(
             )
             continue
         columns, uncompared = _compared(table, target, key, computed, tables, keys)
-        entry = config.get(identity)
         scoped.append(
             ScopedTable(
                 relation=target.relation,
@@ -402,14 +504,22 @@ def seed_scope(
                 key_basis=basis,
                 columns=columns,
                 uncompared=uncompared,
-                mode=entry[1].mode if entry else "full",
+                mode=modes[identity],
                 written_at=tuple(target.written_at),
                 staging=target.staging,
             )
         )
     unused = tuple(
-        f"seed_drift.tables.{written} matches no table the seed writes"
+        f"seed_drift.tables.{written} matches no table the seed writes: remove it"
         for written in settings.tables
         if config_identity(written) not in used
     )
+    if not scoped and not skipped and not not_compared:
+        not_compared.append(
+            NotCompared(
+                "seed",
+                "the seed tree writes no table, so nothing was compared: check --env, and "
+                "--seeds-dir for seed files outside include_dirs",
+            )
+        )
     return SeedScope(tuple(scoped), tuple(not_compared), tuple(skipped), unused)

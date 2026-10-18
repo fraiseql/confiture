@@ -8,6 +8,8 @@ until a reference row is missing in production. This module compares the two:
 tree's seed files and reads the rows.
 """
 
+import hashlib
+import re
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -23,6 +25,8 @@ from confiture.core import live_catalog
 from confiture.core.builder import SchemaBuilder
 from confiture.core.connection import open_connection
 from confiture.core.linting.inventory import label_for
+from confiture.core.linting.schema_linter import first_line
+from confiture.core.linting.seed_secrets import secret_kind
 from confiture.core.schema_model import RelationName
 from confiture.core.schema_read import SchemaRead
 from confiture.core.schema_sources import read_schema
@@ -38,8 +42,13 @@ from confiture.core.seed.drift_scope import (
 from confiture.core.seed.seeded_database import seeded_database
 from confiture.core.seed.validation.prep_seed.level_5_execution import Level5ExecutionValidator
 from confiture.core.seed.validation.prep_seed.resolvers import read_resolution
+from confiture.core.temp_database import maintenance_url
 from confiture.exceptions import ConfigurationError, SchemaError, SeedError
+from confiture.sql_text import relation
 from confiture.url_redaction import redact_url
+
+#: What an environment's name may be: the stem of a file in ``db/environments/``.
+_ENVIRONMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 #: A row's key: each key field as PostgreSQL renders it as text.
 Key = tuple[str | None, ...]
@@ -67,7 +76,11 @@ def seed_files(
     _schema, seeds = SchemaBuilder(env=env, project_dir=project_dir).categorize_sql_files()
     if seeds_dir is None:
         return seeds
-    return [*seeds, *SeedApplier(seeds_dir=seeds_dir, env=env).find_seed_files()]
+    # A --seeds-dir inside include_dirs would apply its files twice.
+    listed = {path.resolve(): path for path in seeds}
+    for path in SeedApplier(seeds_dir=seeds_dir, env=env).find_seed_files():
+        listed.setdefault(path.resolve(), path)
+    return list(listed.values())
 
 
 def scope_for(
@@ -210,7 +223,19 @@ def field_name(field: Field) -> str:
 
 
 def _relation(name: RelationName) -> Template:
-    return t"{name.schema:i}.{name.name:i}" if name.schema else t"{name.name:i}"
+    return relation(*name.identity)
+
+
+def _redacted(value: str | None) -> str | None:
+    """A sensitive value as a digest: two equal values stay equal, neither is printed."""
+    if value is None:
+        return None
+    return "redacted:" + hashlib.sha256(value.encode()).hexdigest()[:12]
+
+
+def _sensitive(field: Field) -> bool:
+    """Whether the column's name says it holds a credential or personal data (as ``sec_003`` reads names)."""
+    return secret_kind(field.column) is not None
 
 
 def _expression(field: Field) -> Template:
@@ -247,8 +272,19 @@ def _missing(conn: Any, table: ScopedTable) -> str | None:
     return None
 
 
+class DuplicateKeysError(ValueError):
+    """Rows of one table that share a key: the key does not identify a row there."""
+
+
 def _rows(conn: Any, table: ScopedTable, keys: Sequence[Key] | None = None) -> dict[Key, Key]:
-    """``{key: values}`` of *table*, every row or, with *keys*, only the rows under those keys."""
+    """``{key: values}`` of *table*, every row or, with *keys*, only the rows under those keys.
+
+    A sensitive column (by its name) is read as a digest, so its value never
+    leaves the query; a NULL key part matches a NULL one.
+
+    Raises:
+        DuplicateKeysError: two rows share a key.
+    """
     keyed = [_expression(f) for f in table.key]
     selected = pgsql.SQL(", ").join([*keyed, *(_expression(f) for f in table.columns)])
     query = t"SELECT {selected:q} FROM {_relation(table.relation):q} t"
@@ -258,18 +294,46 @@ def _rows(conn: Any, table: ScopedTable, keys: Sequence[Key] | None = None) -> d
         arrays = pgsql.SQL(", ").join(
             t"{[k[i] for k in keys]}::text[]" for i in range(len(table.key))
         )
-        row = pgsql.SQL(", ").join(keyed)
-        query = t"{query:q} WHERE ({row:q}) IN (SELECT * FROM unnest({arrays:q}))"
+        columns = [f"k{i}" for i in range(len(keyed))]
+        matched = pgsql.SQL(" AND ").join(
+            t"{expression:q} IS NOT DISTINCT FROM k.{column:i}"
+            for column, expression in zip(columns, keyed, strict=True)
+        )
+        names = pgsql.SQL(", ").join(t"{column:i}" for column in columns)
+        query = (
+            t"{query:q} WHERE EXISTS (SELECT 1 FROM unnest({arrays:q}) AS k ({names:q}) "
+            t"WHERE {matched:q})"
+        )
     width = len(table.key)
-    return {tuple(r[:width]): tuple(r[width:]) for r in conn.execute(query).fetchall()}
+    fields = (*table.key, *table.columns)
+    rows: dict[Key, Key] = {}
+    for raw in conn.execute(query).fetchall():
+        shown = tuple(
+            _redacted(v) if _sensitive(f) else v for f, v in zip(fields, raw, strict=True)
+        )
+        key = shown[:width]
+        if key in rows:
+            raise DuplicateKeysError(f"two rows share the key ({', '.join(map(str, key))})")
+        rows[key] = shown[width:]
+    return rows
 
 
 @contextmanager
-def read_only(conn: Any, timeout: str) -> Generator[Any]:
-    """*conn* in one read-only transaction, rolled back, with the rendering settings pinned."""
+def read_only(conn: Any, statement_timeout: str, lock_timeout: str = "5s") -> Generator[Any]:
+    """*conn* in one read-only transaction, rolled back, with the rendering settings pinned.
+
+    ``search_path`` is ``pg_catalog`` alone, so every name the queries use is the
+    one they qualify, and a value whose text depends on the path renders alike.
+    """
     with conn.transaction(force_rollback=True):
         conn.execute(t"SET TRANSACTION READ ONLY")
-        for name, value in (*RENDERING, ("statement_timeout", timeout), ("lock_timeout", timeout)):
+        settings = (
+            *RENDERING,
+            ("search_path", "pg_catalog"),
+            ("statement_timeout", statement_timeout),
+            ("lock_timeout", lock_timeout),
+        )
+        for name, value in settings:
             conn.execute(t"SELECT set_config({name}, {value}, true)")
         yield conn
 
@@ -318,32 +382,50 @@ def _accept(drift: TableDrift, accepted: set[Key]) -> TableDrift:
     )
 
 
-def _compare_table(
+def _over(conn: Any, table: ScopedTable, limit: int) -> bool:
+    """Whether *table* holds more than *limit* rows: counted, at most ``limit + 1`` of them.
+
+    A planner estimate is no guard: a partitioned parent and a table never
+    analysed have none, and those are the tables a whole read must not hit.
+    """
+    probe = (
+        t"SELECT count(*) FROM (SELECT 1 FROM {_relation(table.relation):q} LIMIT {limit + 1}) s"
+    )
+    (count,) = conn.execute(probe).fetchone()
+    return count > limit
+
+
+def _read_table(
     table: ScopedTable, seed_conn: Any, live_conn: Any, settings: SeedDriftSettings
 ) -> TableDrift | NotCompared:
-    """One table on both sides, each read under a savepoint so a failure costs that table only."""
     for side, conn in (("seed", seed_conn), ("live", live_conn)):
         missing = _missing(conn, table)
         if missing is not None:
             return NotCompared(table.relation.qualified, f"{missing} on the {side} side")
-    if table.mode == "full":
-        schema, name = table.relation.identity
-        estimate = live_catalog.estimated_rows(live_conn, schema, name)
-        if estimate is not None and estimate > settings.max_rows:
-            return NotCompared(
-                table.relation.qualified,
-                f"the live side holds about {estimate} rows, more than seed_drift.max_rows "
-                f"({settings.max_rows}); compare it with mode: subset, which reads the seed's keys only",
-            )
-    try:
-        with seed_conn.transaction():
-            seed = _rows(seed_conn, table)
-        with live_conn.transaction():
-            live = _rows(live_conn, table, list(seed) if table.mode == "subset" else None)
-    except psycopg.Error as exc:
-        first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-        return NotCompared(table.relation.qualified, f"reading it failed: {first}")
+    if table.mode == "full" and _over(live_conn, table, settings.max_rows):
+        return NotCompared(
+            table.relation.qualified,
+            f"the live side holds more than seed_drift.max_rows ({settings.max_rows}) rows; "
+            "compare it with mode: subset, which reads the seed's keys only",
+        )
+    seed = _rows(seed_conn, table)
+    live = _rows(live_conn, table, list(seed) if table.mode == "subset" else None)
     return _diff(table, seed, live)
+
+
+def _compare_table(
+    table: ScopedTable, seed_conn: Any, live_conn: Any, settings: SeedDriftSettings
+) -> TableDrift | NotCompared:
+    """One table on both sides, under a savepoint on each, so a failure costs that table only."""
+    try:
+        with seed_conn.transaction(), live_conn.transaction():
+            return _read_table(table, seed_conn, live_conn, settings)
+    except psycopg.Error as exc:
+        return NotCompared(table.relation.qualified, f"reading it failed: {first_line(exc)}")
+    except DuplicateKeysError as exc:
+        return NotCompared(
+            table.relation.qualified, f"{exc}, so the key does not identify a row: declare one"
+        )
 
 
 def compare(
@@ -362,6 +444,7 @@ def compare(
     ``seed_drift.accepted``; a URL has no accepted differences.
     """
     accepted = settings.accepted.get(against_env or "", []) if against_env else []
+    compared: set[tuple[str, str]] = set()
     by_table: dict[tuple[str, str], set[Key]] = {}
     for entry in accepted:
         identity = config_identity(entry.table)
@@ -371,14 +454,15 @@ def compare(
     not_compared = list(scope.not_compared)
     used: set[tuple[tuple[str, str], Key]] = set()
     with (
-        read_only(seed_conn, settings.statement_timeout),
-        read_only(live_conn, settings.statement_timeout),
+        read_only(seed_conn, settings.statement_timeout, settings.lock_timeout),
+        read_only(live_conn, settings.statement_timeout, settings.lock_timeout),
     ):
         for table in scope.tables:
             result = _compare_table(table, seed_conn, live_conn, settings)
             if isinstance(result, NotCompared):
                 not_compared.append(result)
                 continue
+            compared.add(table.relation.identity)
             keys = by_table.get(table.relation.identity, set())
             result = _accept(result, keys)
             used.update((table.relation.identity, k) for k in result.accepted)
@@ -388,7 +472,8 @@ def compare(
         *(
             f"seed_drift.accepted.{against_env}: {entry.table} {list(entry.key)} matches no difference"
             for entry in accepted
-            if (config_identity(entry.table), tuple(entry.key)) not in used
+            if config_identity(entry.table) in compared
+            and (config_identity(entry.table), tuple(entry.key)) not in used
         ),
     ]
     return SeedDriftReport(
@@ -412,6 +497,15 @@ def against_target(spec: str, project_dir: Path | None = None) -> tuple[Any, str
     """
     if spec.startswith(("postgres://", "postgresql://")):
         return spec, redact_url(spec), None
+    if not _ENVIRONMENT_NAME.fullmatch(spec):
+        # Not echoed: a mistyped URL carries its password.
+        raise ConfigurationError(
+            "--against is neither a PostgreSQL URL nor an environment name",
+            error_code="CONFIG_003",
+            resolution_hint=(
+                "Pass postgresql://user@host/db, or the name of a file in db/environments/"
+            ),
+        )
     return Environment.load(spec, project_dir=project_dir), spec, spec
 
 
@@ -458,6 +552,23 @@ def built_side(
         yield conn
 
 
+def _probe_scratch(server_url: str) -> None:
+    """The scratch server answers, or ``CONFIG_006``: an unreachable server is exit 3, not a build failure."""
+    try:
+        with psycopg.connect(maintenance_url(server_url), connect_timeout=_PROBE_TIMEOUT_S):
+            pass
+    except psycopg.Error as exc:
+        raise ConfigurationError(
+            f"No scratch server answered at {redact_url(server_url)}: {first_line(exc)}",
+            error_code="CONFIG_006",
+            resolution_hint="Check --scratch-url, or the environment's scratch_url",
+        ) from exc
+
+
+#: How long the scratch server may take to answer the probe.
+_PROBE_TIMEOUT_S = 5
+
+
 def run(
     env: str,
     against: str,
@@ -498,6 +609,8 @@ def run(
             resolution_hint="Pass --scratch-url, or set scratch_url in the environment",
         )
     target, label, against_env = against_target(against, project_dir)
+    if build:
+        _probe_scratch(server or "")
     side: Literal["database", "built"] = "built" if build else "database"
     with open_connection(target) as live_conn:
         try:

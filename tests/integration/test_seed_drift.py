@@ -42,27 +42,27 @@ CREATE TABLE catalog.tb_conversion (
 );
 """
 
-A1, B2, C3 = (
+KILOGRAM, GRAM, METRE = (
     "a1000000-0000-4000-8000-000000000001",
     "b2000000-0000-4000-8000-000000000002",
     "c3000000-0000-4000-8000-000000000003",
 )
-D4 = "d4000000-0000-4000-8000-000000000004"
+CONVERSION = "d4000000-0000-4000-8000-000000000004"
 
 SEED = f"""
 INSERT INTO catalog.tb_unit (id, identifier) VALUES
-    ('{A1}', 'kilogram'),
-    ('{C3}', 'metre');
+    ('{KILOGRAM}', 'kilogram'),
+    ('{METRE}', 'metre');
 INSERT INTO catalog.tb_conversion (id, fk_unit, factor, valid_from)
-    VALUES ('{D4}', 2, 1000, '2026-01-01 00:00:00+00');
+    VALUES ('{CONVERSION}', 2, 1000, '2026-01-01 00:00:00+00');
 """
 
 #: What migrations put in the migrate-only database: `meter`, not `metre`; `gram`,
 #: which the seed lacks; no `kilogram`. Its generated keys come in another order.
 MIGRATED = f"""
-INSERT INTO catalog.tb_unit (id, identifier) VALUES ('{C3}', 'meter'), ('{B2}', 'gram');
+INSERT INTO catalog.tb_unit (id, identifier) VALUES ('{METRE}', 'meter'), ('{GRAM}', 'gram');
 INSERT INTO catalog.tb_conversion (id, fk_unit, factor, valid_from)
-    VALUES ('{D4}', 1, 1000.0000, '2026-01-01 09:00:00+09');
+    VALUES ('{CONVERSION}', 1, 1000.0000, '2026-01-01 09:00:00+09');
 """
 
 
@@ -131,10 +131,13 @@ class TestTheIssueTable:
 
         assert code == 1
         units = _table(payload, "catalog.tb_unit")
-        assert units["seed_only"] == [[A1]]
-        assert units["live_only"] == [[B2]]
+        assert units["seed_only"] == [[KILOGRAM]]
+        assert units["live_only"] == [[GRAM]]
         assert units["changed"] == [
-            {"key": [C3], "columns": [{"column": "identifier", "seed": "metre", "live": "meter"}]}
+            {
+                "key": [METRE],
+                "columns": [{"column": "identifier", "seed": "metre", "live": "meter"}],
+            }
         ]
 
     def test_a_dereferenced_key_and_the_rendering_settings_hide_no_difference(
@@ -165,7 +168,7 @@ class TestTheIssueTable:
 
         assert code == 1
         assert payload["seed_side"] == {"source": "built"}
-        assert _table(payload, "catalog.tb_unit")["seed_only"] == [[A1]]
+        assert _table(payload, "catalog.tb_unit")["seed_only"] == [[KILOGRAM]]
 
 
 class TestWhatIsNotAPass:
@@ -179,7 +182,7 @@ class TestWhatIsNotAPass:
         )
         _apply(
             live,
-            f"INSERT INTO catalog.tb_unit (id, identifier) VALUES ('{A1}', 'kilogram'), ('{C3}', 'metre')",
+            f"INSERT INTO catalog.tb_unit (id, identifier) VALUES ('{KILOGRAM}', 'kilogram'), ('{METRE}', 'metre')",
         )
         _project(in_tmp, seeded)
 
@@ -262,7 +265,7 @@ class TestOptOuts:
 
         units = _table(payload, "catalog.tb_unit")
         assert units["live_only"] == []
-        assert units["seed_only"] == [[A1]]
+        assert units["seed_only"] == [[KILOGRAM]]
 
     def test_an_accepted_difference_is_kept_visible_and_an_unused_one_is_a_finding(
         self, in_tmp: Path, databases: tuple[str, str]
@@ -273,8 +276,8 @@ class TestOptOuts:
             seeded,
             extra=(
                 "seed_drift:\n  accepted:\n    production:\n"
-                f"      - {{table: catalog.tb_unit, key: ['{C3}'], reason: renamed on purpose}}\n"
-                f"      - {{table: catalog.tb_unit, key: ['{D4}'], reason: long gone}}\n"
+                f"      - {{table: catalog.tb_unit, key: ['{METRE}'], reason: renamed on purpose}}\n"
+                f"      - {{table: catalog.tb_unit, key: ['{CONVERSION}'], reason: long gone}}\n"
             ),
         )
         (in_tmp / "db" / "environments" / "production.yaml").write_text(
@@ -284,10 +287,10 @@ class TestOptOuts:
         code, payload = _drift("--against", "production")
 
         units = _table(payload, "catalog.tb_unit")
-        assert units["accepted"] == [[C3]]
+        assert units["accepted"] == [[METRE]]
         assert units["changed"] == []
         assert payload["unused"] == [
-            f"seed_drift.accepted.production: catalog.tb_unit ['{D4}'] matches no difference"
+            f"seed_drift.accepted.production: catalog.tb_unit ['{CONVERSION}'] matches no difference"
         ]
         assert code == 1
 
@@ -325,3 +328,96 @@ def test_list_scope_reads_no_database(in_tmp: Path) -> None:
     assert [t["table"] for t in payload["scope"]] == ["catalog.tb_unit", "catalog.tb_conversion"]
     conversion = payload["scope"][1]
     assert conversion["columns"] == ["fk_unit -> catalog.tb_unit.id", "factor", "valid_from"]
+
+
+class TestWhatTheReleaseReviewFound:
+    """Each a shape a reviewer built against the first cut, and what it got wrong."""
+
+    def test_a_sensitive_column_is_compared_as_a_digest_and_never_printed(
+        self, in_tmp: Path, fresh_database_factory: Callable[[str], str]
+    ) -> None:
+        ddl = "CREATE TABLE app_user (login text PRIMARY KEY, api_token text NOT NULL);\n"
+        seeded = fresh_database_factory("confiture_seeddrift_seed")
+        live = fresh_database_factory("confiture_seeddrift_live")
+        _apply(seeded, ddl, "INSERT INTO app_user VALUES ('admin', 'dev-token');")
+        _apply(live, ddl, "INSERT INTO app_user VALUES ('admin', 'prod-live-token');")
+        (in_tmp / "db" / "schema").mkdir(parents=True)
+        (in_tmp / "db" / "seeds").mkdir(parents=True)
+        (in_tmp / "db" / "environments").mkdir(parents=True)
+        (in_tmp / "db" / "schema" / "010.sql").write_text(ddl)
+        (in_tmp / "db" / "seeds" / "010.sql").write_text(
+            "INSERT INTO app_user VALUES ('admin', 'dev-token');\n"
+        )
+        (in_tmp / "db" / "environments" / "local.yaml").write_text(
+            f"database_url: {seeded}\ninclude_dirs:\n  - path: db/schema\n  - path: db/seeds\n"
+        )
+
+        result = runner.invoke(app, ["seed", "drift", "--against", live])
+
+        assert result.exit_code == 1, result.output
+        assert "api_token" in result.output
+        assert "prod-live-token" not in result.output
+        assert "dev-token" not in result.output
+
+    def test_an_unanalysed_table_over_max_rows_is_not_read_whole(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        """A planner estimate is -1 before the first ANALYZE: the bound is a count."""
+        seeded, live = databases
+        _project(in_tmp, seeded, extra="seed_drift:\n  max_rows: 1\n")
+
+        code, payload = _drift("--against", live)
+
+        assert code == 2
+        [entry] = payload["not_compared"]
+        assert entry["table"] == "catalog.tb_unit"  # 2 live rows; tb_conversion holds 1
+        assert "mode: subset" in entry["reason"]
+
+    def test_duplicate_live_keys_are_not_compared(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _apply(
+            live,
+            "ALTER TABLE catalog.tb_conversion DROP CONSTRAINT tb_conversion_pkey",
+            f"INSERT INTO catalog.tb_conversion SELECT * FROM catalog.tb_conversion "
+            f"WHERE id = '{CONVERSION}'",
+        )
+        _project(in_tmp, seeded)
+
+        code, payload = _drift("--against", live)
+
+        assert code == 2
+        [entry] = [e for e in payload["not_compared"] if e["table"] == "catalog.tb_conversion"]
+        assert "share the key" in entry["reason"]
+
+    def test_the_live_search_path_cannot_redirect_a_read(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        seeded, live = databases
+        _apply(
+            live,
+            "CREATE SCHEMA shadow",
+            "CREATE TABLE shadow.tb_unit (id uuid)",
+            f'ALTER ROLE CURRENT_USER IN DATABASE "{live.rsplit("/", 1)[-1]}" '
+            "SET search_path = shadow, catalog, public",
+        )
+        _project(in_tmp, seeded)
+
+        _code, payload = _drift("--against", live)
+
+        assert _table(payload, "catalog.tb_unit")["live_rows"] == 2
+
+    def test_an_unreachable_scratch_server_exits_3(
+        self, in_tmp: Path, databases: tuple[str, str]
+    ) -> None:
+        _seeded, live = databases
+        _project(
+            in_tmp,
+            "postgresql://127.0.0.1:1/confiture_no_such_server",
+            scratch_url="postgresql://127.0.0.1:1/confiture_no_such_server",
+        )
+
+        result = runner.invoke(app, ["seed", "drift", "--against", live, "--build"])
+
+        assert result.exit_code == 3, result.output

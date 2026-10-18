@@ -42,10 +42,12 @@ def _table_findings(out: Printer, drift: TableDrift) -> None:
     _keys(out, "seed only:", drift.seed_only)
     _keys(out, "live only:", drift.live_only)
     for row in drift.changed[:SHOWN]:
-        changes = "; ".join(f"{name}: {seed!r} → {live!r}" for name, seed, live in row.columns)
-        out.print(t"    changed:   {_key(row.key)}: {changes}")
+        out.print(t"    changed:   {_key(row.key)}")
+        for name, seed, live in row.columns:
+            out.print(t"      {name}: {seed!r} → {live!r}")
     if len(drift.changed) > SHOWN:
         out.print(t"    … and {len(drift.changed) - SHOWN} more changed")
+    _keys(out, "accepted:", drift.accepted)
 
 
 def _left_out(report: SeedDriftReport, out: Printer) -> None:
@@ -55,7 +57,7 @@ def _left_out(report: SeedDriftReport, out: Printer) -> None:
     for name, reason in report.skipped:
         out.print(t"[dim]skipped[/dim] {name}: {reason}")
     for unused in report.unused:
-        out.print(t"[yellow]unused[/yellow] {unused}")
+        out.print(t"[yellow]⚠[/yellow] {unused}")
 
 
 def print_report(report: SeedDriftReport, out: Printer) -> None:
@@ -67,10 +69,11 @@ def print_report(report: SeedDriftReport, out: Printer) -> None:
     out.print(t"Seed side: {report.seed_side}; live side: {report.against}")
     table = Table("Table", "Seed rows", "Live rows", "Seed only", "Live only", "Changed")
     for drift in report.tables:
+        live = f"{drift.live_rows} (seed keys)" if drift.mode == "subset" else str(drift.live_rows)
         table.add_row(
             t"{drift.table}",
             t"{drift.seed_rows}",
-            t"{drift.live_rows}",
+            t"{live}",
             t"{len(drift.seed_only)}",
             t"{len(drift.live_only)}",
             t"{len(drift.changed)}",
@@ -81,11 +84,15 @@ def print_report(report: SeedDriftReport, out: Printer) -> None:
             _table_findings(out, drift)
     _left_out(report, out)
     drifted = sum(1 for d in report.tables if d.drifted)
-    if report.has_drift:
-        out.print(t"[red]❌ {drifted} of {len(report.tables)} tables drifted[/red]")
-    elif not report.complete:
+    missing = len(report.not_compared)
+    if not report.tables and missing:
+        out.print(t"[yellow]⚠ nothing was compared; {missing} not compared (see above)[/yellow]")
+    elif report.has_drift:
         out.print(
-            t"[yellow]⚠ no drift in what was compared; {len(report.not_compared)} not compared[/yellow]"
+            t"[red]❌ {drifted} of {len(report.tables)} compared tables drifted; "
+            t"{missing} not compared[/red]"
         )
+    elif missing:
+        out.print(t"[yellow]⚠ no drift in what was compared; {missing} not compared[/yellow]")
     else:
         out.print(t"[green]✅ the live side holds every seeded row, as seeded[/green]")

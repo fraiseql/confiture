@@ -33,6 +33,7 @@ from confiture.core.linting.translations import TranslationTable, translation_sh
 from confiture.core.schema_identity import identifier_identity
 from confiture.core.schema_model import RelationName
 from confiture.core.sql_lexer import ParsedFile
+from confiture.sql_text import relation
 
 
 @dataclass(frozen=True)
@@ -190,7 +191,7 @@ def _locale_table(config: TranslationsConfig) -> RelationName:
 
 
 def _relation(name: RelationName) -> Template:
-    return t"{name.schema:i}.{name.name:i}" if name.schema else t"{name.name:i}"
+    return relation(*name.identity)
 
 
 def _spelled(name: RelationName) -> str:

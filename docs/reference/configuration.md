@@ -583,7 +583,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 |---|---|---|---|
 | `name` | str | `` | Environment name (e.g., "local", "production") |
 | `database_url` | str | **required** | PostgreSQL connection URL |
-| `scratch_url` | str \| NoneType | - | A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide; ``null`` reports their references as unchecked. |
+| `scratch_url` | str \| NoneType | - | A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide (``null`` reports their references as unchecked), and ``confiture seed drift --build`` builds the seed side there. |
 | `include_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories to include when building schema (supports both string and dict formats) |
 | `superuser_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash. |
 | `superuser_post_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories routed to the post-schema superuser phase in build_split() |
@@ -796,7 +796,8 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `tables` | dict[str, [SeedDriftTable](#seeddrifttable)] | `{}` | Per-table settings, keyed ``schema.table`` (``key``, ``mode``, ``skip``, ``reason``). |
 | `accepted` | dict[str, list[[SeedDriftAccepted](#seeddriftaccepted)]] | `{}` | Accepted row differences, keyed by the ``--against`` environment they are accepted for: a difference accepted in production is not one in staging. |
 | `max_rows` | int | `100000` | A live table with more rows than this (``pg_class.reltuples``) is not read whole; it is reported not compared, and ``mode: subset`` reads only the seed's keys. |
-| `statement_timeout` | str | `30s` | The live side's ``statement_timeout`` and ``lock_timeout``. |
+| `statement_timeout` | str | `30s` | The longest one statement may run on either side (a positive duration: ``30s``, ``500ms``, ``2min``). |
+| `lock_timeout` | str | `5s` | The longest a read may wait for a lock on either side, kept short so a migration's lock is not queued behind. |
 | `prep_seed_schema` | str | `prep_seed` | The schema staging tables are seeded into before a resolver moves their rows. |
 | `catalog_schema` | str | `catalog` | Where a staging table's rows land when no resolver or schema says otherwise. |
 
@@ -813,8 +814,8 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `table` | str | **required** | The table, ``schema.table`` as the seed writes it. |
-| `key` | list[str] | **required** | The row's key values, in key order. |
+| `table` | str | **required** | The table compared, ``schema.table`` (a staging table's final table). |
+| `key` | list[str \| NoneType] | **required** | The row's key values, in key order, as the report prints them; ``null`` for a NULL part. |
 | `reason` | str | **required** | Why this difference is accepted. |
 
 #### `ProjectConfig`
@@ -1012,6 +1013,7 @@ seed_drift:
       reason: null
   max_rows: 100000
   statement_timeout: 30s
+  lock_timeout: 5s
   prep_seed_schema: prep_seed
   catalog_schema: catalog
 ```

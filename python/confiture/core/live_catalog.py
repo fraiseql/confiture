@@ -828,10 +828,6 @@ SELECT EXISTS (
 
 _SCHEMA_EXISTS = "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = %s)"
 
-_ESTIMATED_ROWS = """
-SELECT c.reltuples::bigint FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = %s AND c.relname = %s
-"""
 
 _COLUMNS_OF = f"""
 SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
@@ -911,16 +907,6 @@ def relation_exists(
 ) -> bool:
     """Whether *schema.name* exists as one of the ``relkind`` letters *kinds*."""
     return bool(_scalar(conn, _RELATION_EXISTS, (schema, name, list(kinds))))
-
-
-def estimated_rows(conn: psycopg.Connection, schema: str, name: str) -> int | None:
-    """PostgreSQL's estimate of how many rows *schema.name* holds; ``None`` when it has none.
-
-    ``pg_class.reltuples``, which the planner keeps: a guess, not a count, and
-    ``-1`` for a table never vacuumed or analysed, read here as no estimate.
-    """
-    estimate = _scalar(conn, _ESTIMATED_ROWS, (schema, name))
-    return None if estimate is None or estimate < 0 else int(estimate)
 
 
 def schema_exists(conn: psycopg.Connection, schema: str) -> bool:
