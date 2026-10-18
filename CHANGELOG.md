@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Lockfiles refreshed** (#732): pglast 8.5 → 8.7, plus the routine upgrades. pglast 8.6/8.7's printer
+  writes fewer redundant parentheses, so a generated migration can spell an expression differently with
+  the same meaning. `(data -> 'a') ->> 'b'` is now `data -> 'a' ->> 'b'`, and the parentheses a `COLLATE`
+  needs are kept. Both spellings parse to the same tree. The FraiseQL desired-state fixture
+  (`tests/fixtures/desired_state/expected_migration.up.sql`) changed on that one line.
+- **CI names a dependency that has no wheel** (`scripts/check_dependency_wheels.py`). A fresh install
+  takes each dependency's newest release whatever `uv.lock` pins. pglast 8.7 went up as an sdist only
+  on 2026-10-18, so for some hours an install compiled C, and failed without a compiler. Pull requests
+  now get a warning naming the dependency, the version and the platform, and Publish refuses to upload.
 ### Fixed
 
 - **`build_003` and the extensions the build creates** (#741). A `CREATE EXTENSION ltree
@@ -31,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the new `degraded` entry), where such a run used to exit by `--fail-on`.
 - A `--baseline` that recorded these findings lists them under `fixed`;
   `--write-baseline` drops them.
+||||||| 7b3ca352
 
 ## [1.38.0] - 2026-10-17
 

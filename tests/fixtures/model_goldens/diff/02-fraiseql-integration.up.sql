@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS tv_comment (
     id UUID NOT NULL,
     data JSONB NOT NULL,
     post_id UUID GENERATED ALWAYS AS (CAST(data ->> 'postId' AS uuid)) STORED,
-    author_id UUID GENERATED ALWAYS AS (CAST((data -> 'author') ->> 'id' AS uuid)) STORED,
+    author_id UUID GENERATED ALWAYS AS (CAST(data -> 'author' ->> 'id' AS uuid)) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id)
 );

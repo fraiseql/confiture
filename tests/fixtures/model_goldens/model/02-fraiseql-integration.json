@@ -1654,7 +1654,7 @@
           "default_kind": null,
           "file": "db/schema/10_tables/generated.sql",
           "folded": "author_id",
-          "generated": "CAST((data -> 'author') ->> 'id' AS uuid)",
+          "generated": "CAST(data -> 'author' ->> 'id' AS uuid)",
           "generated_kind": "stored",
           "identity": null,
           "line": 189,
