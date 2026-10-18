@@ -15,7 +15,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FLOOR = (3, 14)
-PGLAST_FLOOR = "pglast>=8.5"
+PGLAST_FLOOR = "pglast>=8.7"
 
 #: Where a CPython is named for a job, a venv or a wheel.
 _NAMED_INTERPRETER = re.compile(

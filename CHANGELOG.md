@@ -25,29 +25,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds the seed side from the tree on a scratch server (never `database_url`); `--list-scope` says
   what would be compared without reading a database. The live side is read in a read-only transaction
   with timeouts. Opt-outs (`seed_drift.tables`, `seed_drift.accepted` per `--against` environment)
-  each need a reason, and one that matches nothing is reported. Exit 0/1/2/3 as the registry defines
-  them: 2, not 3, is "could not compare", because 3 is a database that did not answer.
-  `docs/guides/seed-drift.md`.
+  each need a reason, and one that matches nothing is reported. A column whose name says it holds a
+  credential or personal data is compared as a digest and never printed. Exit 0/1/2/3/5 as the
+  registry defines them: 2, not 3, is "could not compare" (and wins over 1, drift), because 3 is a
+  database that did not answer. `docs/guides/seed-drift.md`.
 
 ### Changed
 
-- **Lockfiles refreshed** (#732): pglast 8.5 → 8.7, plus the routine upgrades. pglast 8.6/8.7's printer
-  writes fewer redundant parentheses, so a generated migration can spell an expression differently with
-  the same meaning. `(data -> 'a') ->> 'b'` is now `data -> 'a' ->> 'b'`, and the parentheses a `COLLATE`
-  needs are kept. Both spellings parse to the same tree. The FraiseQL desired-state fixture
-  (`tests/fixtures/desired_state/expected_migration.up.sql`) changed on that one line.
-- **CI names a dependency that has no wheel** (`scripts/check_dependency_wheels.py`). A fresh install
+- **pglast ≥ 8.7** (#732; the lockfiles are refreshed too). pglast 8.6/8.7's printer writes fewer
+  redundant parentheses: `(data -> 'a') ->> 'b'` is now `data -> 'a' ->> 'b'`, and the parentheses a
+  `COLLATE` needs are kept. Both spellings parse to the same tree and PostgreSQL stores them alike. A
+  migration generated before and after the upgrade can therefore differ in spelling, not in meaning,
+  and so can `schema dump-model`'s wire; every payload's `parser` key now reads `8.7`. The floor is
+  8.7 so that every install writes the same bytes.
+- **Release CI names a dependency that has no wheel** (`scripts/check_dependency_wheels.py`). A fresh install
   takes each dependency's newest release whatever `uv.lock` pins. pglast 8.7 went up as an sdist only
   on 2026-10-18, so for some hours an install compiled C, and failed without a compiler. Pull requests
-  now get a warning naming the dependency, the version and the platform, and Publish refuses to upload.
+  now get a warning naming the dependency, the version and the platform (at the oldest glibc and macOS
+  confiture's own wheels support), and Publish refuses to upload.
 
 ### Fixed
 
 - **The seed reader names every table a statement writes** (#743). An `INSERT … SELECT`,
   `INSERT … DEFAULT VALUES`, `UPDATE` or `MERGE` in a seed file now says which table it writes,
   though its rows are not read. A data-modifying CTE (`WITH a AS (INSERT …) SELECT …`) is no longer
-  read as a plain `SELECT`: prep-seed level 1 reports its `INSERT` as `SEED_NOT_CHECKED`, a new
-  finding for a seed tree that has one. Those rows were never checked.
+  read as a plain `SELECT`: prep-seed level 1 reports its `INSERT` as `SEED_NOT_CHECKED` (severity
+  info, so no exit changes), a new finding for a seed tree that has one. Those rows were never checked.
 - **`build_003` and the extensions the build creates** (#741). A `CREATE EXTENSION ltree
   SCHEMA public` in the tree creates `public.text2ltree`, and a `SECURITY DEFINER` function
   that pins its `search_path` must call it qualified. `build_003` used to report every such
@@ -60,7 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and says how to clear it. A parameterless `CREATE LANGUAGE` counts as the extension
   PostgreSQL makes of it. `docs/reference/lint-rules.md` § "An extension the build creates".
 - `--require-complete` now exits 2 on a run that cannot check an extension's references
-  (the new `degraded` entry), where such a run used to exit by `--fail-on`.
+  (the new `degraded` entry), where such a run used to exit by `--fail-on`. A run whose live
+  database did not answer, but whose scratch server answered every name left, is complete.
 - A `--baseline` that recorded these findings lists them under `fixed`;
   `--write-baseline` drops them.
 

@@ -99,7 +99,7 @@ pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
-pglast = ">=8.5"          # PostgreSQL's own C parser (libpg_query) — the one parser
+pglast = ">=8.7"          # PostgreSQL's own C parser (libpg_query) — the one parser
 
 [project.optional-dependencies]
 ast = []                  # empty alias: an older `fraiseql-confiture[ast]` still resolves
@@ -488,10 +488,11 @@ a fourth resolver.
 
 #### pglast: one major
 
-Confiture depends on **`pglast>=8.5`, uncapped**: one major, which `uv.lock` pins. 8.5 is
-the first pglast whose libpg_query serialises a trigger body as valid JSON (#272), with a
-cp314 wheel on every platform confiture ships, and 8 embeds PostgreSQL 18's grammar, so
-18's constraint attributes are readable.
+Confiture depends on **`pglast>=8.7`, uncapped**: one major, which `uv.lock` pins. 8.7 is
+the printer that spells the expressions the model's wire and the goldens hold, so every
+install writes the same bytes; 8.5 was the first pglast whose libpg_query serialises a
+trigger body as valid JSON (#272), and 8 embeds PostgreSQL 18's grammar, so 18's
+constraint attributes are readable.
 
 **Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18 inserted a
 member into `AlterTableType`, so pglast 8 renumbered everything after it: a literal
