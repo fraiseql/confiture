@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   takes each dependency's newest release whatever `uv.lock` pins. pglast 8.7 went up as an sdist only
   on 2026-10-18, so for some hours an install compiled C, and failed without a compiler. Pull requests
   now get a warning naming the dependency, the version and the platform, and Publish refuses to upload.
+
 ### Fixed
 
 - **`build_003` and the extensions the build creates** (#741). A `CREATE EXTENSION ltree
@@ -42,7 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the new `degraded` entry), where such a run used to exit by `--fail-on`.
 - A `--baseline` that recorded these findings lists them under `fixed`;
   `--write-baseline` drops them.
-||||||| 7b3ca352
 
 ## [1.38.0] - 2026-10-17
 
