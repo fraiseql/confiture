@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-10-19
+
 ### Added
 
 - **`confiture seed drift`** (#743): compare the reference rows the seed tree writes with what a live
