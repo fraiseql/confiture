@@ -68,7 +68,28 @@ _SOFT_DELETE_RULES = {
 _LIVE_TIER_TIMEOUT_S = 3
 
 
-def _first_line(exc: Exception) -> str:
+def _ask_scratch(
+    server: str,
+    extensions: Sequence[Any],
+    schemas: frozenset[str],
+    search_path: Sequence[str],
+    candidates: list[tuple[str | None, Any]],
+) -> Any:
+    """``build_003``'s scratch tier, looked up when it runs so a test may stand in for it."""
+    # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+    from confiture.core.linting import unresolved
+
+    return unresolved.scratch_names(
+        server,
+        extensions,
+        schemas,
+        candidates,
+        search_path,
+        connect_timeout=_LIVE_TIER_TIMEOUT_S,
+    )
+
+
+def first_line(exc: Exception) -> str:
     """A driver's error, trimmed to the sentence a summary line can carry."""
     return str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
 
@@ -942,8 +963,57 @@ class SchemaLinter:
         )
         if candidates:
             candidates = self._after_live_tier(candidates, report)
-        for violation in reference_findings(candidates):
+        tier = None
+        if candidates:
+            tier = self._after_extension_tier(candidates, report)
+            candidates = tier.missing
+        for violation in reference_findings(
+            candidates,
+            unwritten=tier.unwritten if tier else (),
+            asked=tier.asked if tier else (),
+            search_path=self.environment.lint.search_path,
+        ):
             report.add_violation(violation)
+
+    def _after_extension_tier(
+        self, candidates: list[tuple[str | None, Any]], report: LintReport
+    ) -> Any:
+        """*candidates* minus what an extension the build creates provides, or may.
+
+        With a scratch server (``--server-url``, else the environment's
+        ``scratch_url``, never its ``database_url``: a lint does not create a
+        database on the server it lints against unless told to), a scratch
+        database holding only the build's schemas and extensions answers. With
+        none, or when it cannot be built, a reference into a schema an
+        extension's written ``SCHEMA`` names is *unchecked*, not missing, and
+        one ``degraded`` entry says so.
+        """
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting import unresolved
+
+        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
+        from confiture.core.linting.extensions import built_extensions, extension_schemas
+
+        extensions = built_extensions(self._files)
+        search_path = self.environment.lint.search_path
+        server = self.config.server_url or self.environment.scratch_url
+        ask = (
+            None
+            if server is None
+            else partial(
+                _ask_scratch,
+                server,
+                extensions,
+                extension_schemas(extensions, self._files),
+                search_path,
+            )
+        )
+        tier = unresolved.extension_tier(candidates, extensions, search_path, ask)
+        if tier.reason is not None:
+            report.degraded.append(
+                RuleStatus(code=unresolved.RULE_ID, state="degraded", reason=tier.reason)
+            )
+        return tier
 
     @staticmethod
     def _report_unread_bodies(scans: list[tuple[str | None, Any]], report: LintReport) -> None:
@@ -1012,7 +1082,7 @@ class SchemaLinter:
                 search_path=self.environment.lint.search_path,
             )
         except (psycopg.Error, OSError, ConfiturError) as exc:
-            self._skip_body_rules(report, bodies.BUILD_FAILED + _first_line(exc))
+            self._skip_body_rules(report, bodies.BUILD_FAILED + first_line(exc))
             return
         wanted = set(self._selected_body_rules())
         where = bodies.locations(self._files)
@@ -1077,7 +1147,7 @@ class SchemaLinter:
                     state="degraded",
                     reason=(
                         "no database answered, so an object created by a migration or owned "
-                        f"by an extension is reported as missing: {_first_line(exc)}"
+                        f"by an extension is reported as missing: {first_line(exc)}"
                     ),
                 )
             )

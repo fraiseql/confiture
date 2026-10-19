@@ -583,7 +583,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 |---|---|---|---|
 | `name` | str | `` | Environment name (e.g., "local", "production") |
 | `database_url` | str | **required** | PostgreSQL connection URL |
-| `scratch_url` | str \| NoneType | - | A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. |
+| `scratch_url` | str \| NoneType | - | A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide; ``null`` reports their references as unchecked. |
 | `include_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories to include when building schema (supports both string and dict formats) |
 | `superuser_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash. |
 | `superuser_post_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories routed to the post-schema superuser phase in build_split() |
@@ -784,7 +784,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `ignore_objects` | list[str] | `[]` | ``fnmatch`` globs over ``schema.name``. A reference matching one is never reported as unresolved — the escape hatch for an object created outside the DDL tree (``public.gen_random_uuid``, ``pg_stat_statements*``). |
+| `ignore_objects` | list[str] | `[]` | ``fnmatch`` globs over ``schema.name``. A reference matching one is never reported as unresolved — the escape hatch for an object created outside the DDL tree (``public.gen_random_uuid`` from an extension the platform installs, ``pg_stat_statements*``). |
 | `search_path` | list[str] | `[]` | The schemas an unqualified *relation* in a body is looked for in, in order. Empty (the default) means an unqualified name is not judged at all: without knowing what resolves it, every ``now()`` becomes a finding. Unqualified *routine* calls are never judged even with this set — ``pg_catalog`` is on every search path and confiture cannot enumerate it. |
 | `status_words` | list[str] | `['TODO', 'FIXME', 'WIP', 'DRAFT']` | The words in a file or directory name that say the work is unfinished, matched case-insensitively against the underscore-separated parts of the name. The default is :data:`DEFAULT_STATUS_WORDS`; a project that writes ``_SPIKE`` says so here. |
 

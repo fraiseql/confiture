@@ -26,6 +26,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on 2026-10-18, so for some hours an install compiled C, and failed without a compiler. Pull requests
   now get a warning naming the dependency, the version and the platform, and Publish refuses to upload.
 
+### Fixed
+
+- **`build_003` and the extensions the build creates** (#741). A `CREATE EXTENSION ltree
+  SCHEMA public` in the tree creates `public.text2ltree`, and a `SECURITY DEFINER` function
+  that pins its `search_path` must call it qualified. `build_003` used to report every such
+  call as "no file in the build creates it". Now, with a scratch server (`--server-url`, else
+  the environment's `scratch_url`, never its `database_url`), a throwaway database holding
+  only the build's extensions says what they provide: a real routine resolves, and a typo is
+  still a finding. With no scratch server, those references are one `degraded` entry
+  naming each extension and its `file:line`, not findings. Only an extension with a written
+  `SCHEMA` clause counts then; a finding that one with no `SCHEMA` clause might answer stays,
+  and says how to clear it. A parameterless `CREATE LANGUAGE` counts as the extension
+  PostgreSQL makes of it. `docs/reference/lint-rules.md` § "An extension the build creates".
+- `--require-complete` now exits 2 on a run that cannot check an extension's references
+  (the new `degraded` entry), where such a run used to exit by `--fail-on`.
+- A `--baseline` that recorded these findings lists them under `fixed`;
+  `--write-baseline` drops them.
+
 ## [1.38.0] - 2026-10-17
 
 ### Added

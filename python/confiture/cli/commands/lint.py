@@ -139,10 +139,12 @@ ServerUrlOpt = Annotated[
     str | None,
     typer.Option(
         "--server-url",
-        help="Writable PostgreSQL server the body family builds its scratch "
-        "database on. Only the server is used: a throwaway database is created "
-        "beside the configured one and dropped again. Defaults to the "
-        "environment's own database_url.",
+        help="Writable PostgreSQL server a scratch database is built on. Only the "
+        "server is used: a throwaway database is created beside the configured one "
+        "and dropped again. The body family builds the schema there (default: the "
+        "environment's database_url); build_003 builds the tree's extensions there "
+        "to learn what they provide (default: the environment's scratch_url, never "
+        "its database_url).",
     ),
 ]
 CheckTenantIsolationOpt = Annotated[

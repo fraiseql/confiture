@@ -490,13 +490,14 @@ What the rule deliberately does **not** report:
   search path and confiture cannot enumerate it. Without that rule, every
   `now()` and `count()` would be a finding.
 
-#### Three tiers answer a reference
+#### Four tiers answer a reference, in this order
 
 | Tier | What answers | When |
 |------|--------------|------|
 | a | the build inventory | always |
-| b | a live database — `to_regclass` for relations, `pg_proc` for routines | when `--env`'s `database_url` accepts a connection, and only for names tier (a) could not answer |
-| c | `lint.ignore_objects` in the environment YAML | always |
+| c | `lint.ignore_objects` in the environment YAML | always, in the same pass as (a) |
+| b | a live database — `to_regclass` for relations, `pg_proc` for routines | when `--env`'s `database_url` accepts a connection, and only for names (a) and (c) left |
+| d | the build's own extensions, asked of a scratch database | when a name (b) left is in a schema where the build runs `CREATE EXTENSION`, and a scratch server is configured |
 
 Tier (b) is what makes the rule usable on a real project: an object created by
 a migration, or owned by an extension, is real and is absent from the DDL tree.
@@ -514,8 +515,9 @@ by a migration or owned by an extension is reported as missing: connection faile
 Read `n unresolved references` from a degraded run as an upper bound, not a
 count of bugs.
 
-Tier (c) is for a project with no reachable database. It is `fnmatch` over
-`schema.name`:
+Tier (c) is for objects created *outside* the tree, by a migration, the
+platform, or a sibling service, in a project with no reachable database. It
+is `fnmatch` over `schema.name`:
 
 ```yaml
 # db/environments/local.yaml
@@ -527,6 +529,93 @@ lint:
     - app
     - public
 ```
+
+#### An extension the build creates
+
+A `CREATE EXTENSION` in the tree creates routines no file spells out. A
+`SECURITY DEFINER` function pins its `search_path`, so it must call them
+qualified, and those are exactly the calls tier (a) cannot answer:
+
+```sql
+-- db/schema/001_extensions.sql
+CREATE EXTENSION IF NOT EXISTS ltree SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
+
+-- db/schema/002_fn.sql
+CREATE FUNCTION app.label(p_name TEXT) RETURNS public.ltree
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+    RETURN public.text2ltree(public.unaccent('public.unaccent'::regdictionary, p_name));
+END;
+$$;
+```
+
+Which routines an extension creates is in its install script, on the server,
+so tier (d) asks PostgreSQL. It builds a throwaway database on the **scratch
+server**: `--server-url`, else the environment's `scratch_url`, and **never**
+the environment's `database_url`, because a lint does not create a database on
+the server it lints against unless told to. That database holds only the
+schemas the extensions are installed in (created by name, so a tree's
+`AUTHORIZATION <role>` is not replayed) and the tree's `CREATE EXTENSION`
+statements, each run on its own, in build order. It is asked the same question
+as tier (b), then dropped. A name it holds resolves. A name it lacks is a
+finding that says the scratch was asked:
+
+```text
+⚠️ build_003: Function 'app.label(text)' references routine 'public.text2ltre',
+   and no file in the build creates it (not provided by extension(s) ltree, unaccent in public)
+```
+
+Nothing is built unless such a name is outstanding. A clean tree, a tree with no
+`CREATE EXTENSION`, or a run whose live database already answered builds no
+scratch.
+
+**With no scratch server**, or when it cannot be built, a name in a schema an
+extension's **written** `SCHEMA` clause names is *unchecked*, not missing. The
+whole run reports one `degraded` entry, which names each extension and the
+line it is created on:
+
+```text
+build_003 ran on less than the whole schema: 2 references into public, where the
+build creates extensions ltree (db/schema/001_extensions.sql:1) and unaccent
+(db/schema/001_extensions.sql:2), were not checked: no scratch server is configured
+(--server-url, or scratch_url in the environment) to say what they provide
+```
+
+When the scratch could not create one extension (the server does not offer it,
+a `VERSION` it has not got, a schema the tree never creates), PostgreSQL's own
+error line is the reason. Only names in that extension's schema stay unchecked,
+and the other extensions are still asked. `--require-complete` treats every one
+of these entries as a run that did not finish (exit 2).
+
+**An extension with no `SCHEMA` clause** lands wherever the applying role's
+`search_path` puts it, so the tree does not say where it is. Without a scratch
+server, such an extension never turns a finding into "unchecked": confiture only
+loosens a verdict on what the tree writes. The finding stays, and says how to
+clear it:
+
+```text
+⚠️ build_003: Function 'app.fn_id()' references routine 'public.gen_random_uuid',
+   and no file in the build creates it; the build creates extension(s) pgcrypto
+   (db/schema/001_extensions.sql:1) with no SCHEMA clause: write the schema each is
+   installed in (SCHEMA …), or configure scratch_url, so confiture can tell whether
+   one provides this
+```
+
+With a scratch server, every extension is asked, `SCHEMA` written or not.
+
+Two caveats:
+
+- Without a `SCHEMA` clause, an extension is routed to `public`, the default
+  schema, when tier (d) decides which names to ask about.
+- The scratch is asked about qualified names, and the build's own `SET
+  search_path` is not replayed. So an extension with no `SCHEMA` clause is read
+  where the scratch server's default `search_path` puts it, which is not
+  necessarily where the build put it.
+
+A parameterless `CREATE LANGUAGE plpgsql` counts too: PostgreSQL's grammar turns
+it into `CREATE EXTENSION plpgsql`, and runs it as one. Only `CREATE LANGUAGE …
+HANDLER …` defines a language by hand.
 
 #### Adopting it on a schema that already trips it
 

@@ -34,12 +34,16 @@ database (``tests/integration/test_forward_reference_oracle.py``), not assumed.
 """
 
 from bisect import bisect_left
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from fnmatch import fnmatch
+from string.templatelib import Template
 from typing import Any
 
+import psycopg
+
 from confiture.core import live_catalog
+from confiture.core.linting.extensions import BuiltExtension
 from confiture.core.linting.inventory import KIND_KEYWORD, SchemaObject
 from confiture.core.linting.references import (
     AT_CREATE_IF_CHECKED,
@@ -49,7 +53,10 @@ from confiture.core.linting.references import (
     Reference,
     ReferenceScan,
 )
-from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.linting.schema_linter import LintViolation, RuleSeverity, first_line
+from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.exceptions import ConfiturError
+from confiture.url_redaction import redact_url
 
 RULE_ID = "build_003"
 FORWARD_RULE_ID = "build_004"
@@ -139,7 +146,9 @@ def _noun(reference: Reference) -> str:
     return "relation" if reference.kind == RELATION else "routine"
 
 
-def _finding(file: str | None, reference: Reference) -> LintViolation:
+def _finding(
+    file: str | None, reference: Reference, note: str = "", provided: str = ""
+) -> LintViolation:
     referrer_noun = KIND_KEYWORD.get(reference.referrer_kind, reference.referrer_kind).capitalize()
     return LintViolation(
         rule_id=RULE_ID,
@@ -150,11 +159,16 @@ def _finding(file: str | None, reference: Reference) -> LintViolation:
         message=(
             f"{referrer_noun} '{reference.referrer}' references "
             f"{_noun(reference)} '{reference.qualified}', and no file in the build creates it"
+            + provided
             + ("" if reference.line_is_exact else INEXACT_LINE)
+            + (f"; {note}" if note else "")
         ),
         file_path=file,
         line_number=reference.line if reference.line_is_exact else reference.referrer_line,
-        suggested_fix=(f"Create '{reference.qualified}' in the schema tree, or correct the name."),
+        suggested_fix=(
+            f"Create '{reference.qualified}' in the schema tree, or correct the name."
+            + (f" Note that {note}." if note else "")
+        ),
     )
 
 
@@ -227,11 +241,302 @@ def probe_live(
     return LiveCatalogue(relations=relations, routines=routines)
 
 
+def _schemas(reference: Reference, search_path: Sequence[str]) -> list[str]:
+    return [schema for schema, _name in candidates_for(reference, search_path)]
+
+
+def split_by_extension(
+    candidates: Iterable[tuple[str | None, Reference]],
+    extensions: Sequence[BuiltExtension],
+    search_path: Sequence[str] = (),
+) -> tuple[list[tuple[str | None, Reference]], list[tuple[str | None, Reference]]]:
+    """``(maybe_extension, missing)``: which outstanding references *extensions* may answer.
+
+    A reference may be an extension's when a schema it could mean hosts one of
+    *extensions*. Schemas compare in the parser's spelling, as
+    :class:`BuildCatalogue` compares. Which extensions may loosen a verdict is
+    the caller's choice: with no server to ask, only those whose ``SCHEMA`` is
+    written, because where an unwritten one lands is not a fact the tree states.
+    """
+    hosts = {ext.schema for ext in extensions}
+    maybe: list[tuple[str | None, Reference]] = []
+    missing: list[tuple[str | None, Reference]] = []
+    for pair in candidates:
+        bucket = maybe if hosts.intersection(_schemas(pair[1], search_path)) else missing
+        bucket.append(pair)
+    return maybe, missing
+
+
+def _creates(extensions: Sequence[BuiltExtension]) -> str:
+    """``extensions ltree (f:1) and unaccent (f:2)``, CASCADE said where it was written."""
+    named = [
+        f"{ext.name} ({ext.where})" + (" (and what CASCADE installs)" if ext.cascade else "")
+        for ext in extensions
+    ]
+    listed = named[0] if len(named) == 1 else f"{', '.join(named[:-1])} and {named[-1]}"
+    return f"{'extension' if len(named) == 1 else 'extensions'} {listed}"
+
+
+def unchecked_reason(
+    unchecked: Sequence[tuple[str | None, Reference]],
+    extensions: Sequence[BuiltExtension],
+    why: str,
+    search_path: Sequence[str] = (),
+) -> str:
+    """The one ``degraded`` reason for every reference an extension may answer and none checked.
+
+    Grouped by schema, each reference under the first schema it could mean that
+    hosts one of *extensions*, so one run says one thing however many schemas.
+    """
+    counts: dict[str, int] = {}
+    for _file, reference in unchecked:
+        schema = next(s for s in _schemas(reference, search_path) if _hosted(s, extensions))
+        counts[schema] = counts.get(schema, 0) + 1
+    groups = [
+        f"{count} {'reference' if count == 1 else 'references'} into {schema}, where the build "
+        f"creates {_creates([e for e in extensions if e.schema == schema])}"
+        for schema, count in counts.items()
+    ]
+    verb = "was" if len(unchecked) == 1 else "were"
+    return f"{', and '.join(groups)}, {verb} not checked: {why}"
+
+
+def _hosted(schema: str, extensions: Sequence[BuiltExtension]) -> bool:
+    return any(ext.schema == schema for ext in extensions)
+
+
+def unwritten_note(
+    reference: Reference, unwritten: Sequence[BuiltExtension], search_path: Sequence[str] = ()
+) -> str:
+    """What a finding adds when an extension with no ``SCHEMA`` clause might hold the name.
+
+    The schema it lands in is the applying role's, so it never loosens a
+    verdict; the finding says which extensions they are and how to have them
+    asked. It names no schema to write: ``plpgsql`` belongs in ``pg_catalog``.
+    """
+    if not unwritten or DEFAULT_SCHEMA not in _schemas(reference, search_path):
+        return ""
+    named = ", ".join(f"{ext.name} ({ext.where})" for ext in unwritten)
+    return (
+        f"the build creates extension(s) {named} with no SCHEMA clause: write the schema each "
+        "is installed in (SCHEMA …), or configure scratch_url, so confiture can tell whether "
+        "one provides this"
+    )
+
+
+def _not_provided(
+    reference: Reference, asked: Sequence[BuiltExtension], search_path: Sequence[str]
+) -> str:
+    """``(not provided by extension(s) ltree, unaccent in public)``: the scratch was asked."""
+    schemas = _schemas(reference, search_path)
+    here = [ext for ext in asked if ext.schema in schemas]
+    if not here:
+        return ""
+    where = ", ".join(dict.fromkeys(ext.schema for ext in here))
+    return f" (not provided by extension(s) {', '.join(e.name for e in here)} in {where})"
+
+
 def reference_findings(
     candidates: Iterable[tuple[str | None, Reference]],
+    *,
+    unwritten: Sequence[BuiltExtension] = (),
+    asked: Sequence[BuiltExtension] = (),
+    search_path: Sequence[str] = (),
 ) -> list[LintViolation]:
-    """One ``build_003`` per unresolved name per referring object, in source order."""
-    return [_finding(file, reference) for file, reference in candidates]
+    """One ``build_003`` per unresolved name per referring object, in source order.
+
+    *unwritten* are the extensions the build creates with no ``SCHEMA`` clause
+    that no server answered for; a finding they might answer says so. *asked*
+    are the extensions a scratch database created; a finding in their schema
+    says the scratch was asked, and they do not provide it.
+    """
+    return [
+        _finding(
+            file,
+            reference,
+            unwritten_note(reference, unwritten, search_path),
+            _not_provided(reference, asked, search_path),
+        )
+        for file, reference in candidates
+    ]
+
+
+#: Why the extension tier could not ask what the build's extensions provide.
+NO_SCRATCH_SERVER = (
+    "no scratch server is configured (--server-url, or scratch_url in the environment) "
+    "to say what they provide"
+)
+
+
+class ScratchUnavailable(ConfiturError):
+    """No scratch database could be built to ask; the message is the reason, credentials masked."""
+
+
+@dataclass(frozen=True)
+class ScratchAnswer:
+    """What a scratch database holding the build's extensions says.
+
+    ``failed`` maps each extension the scratch could not create to PostgreSQL's
+    first error line: its references are not answered by ``catalogue``.
+    """
+
+    catalogue: LiveCatalogue
+    failed: Mapping[str, str] = field(default_factory=dict)
+
+
+def scratch_names(
+    server_url: str,
+    extensions: Sequence[BuiltExtension],
+    schemas: Iterable[str],
+    candidates: Iterable[tuple[str | None, Reference]],
+    search_path: Sequence[str] = (),
+    *,
+    connect_timeout: int,
+) -> ScratchAnswer:
+    """Build a scratch database holding only *schemas* and *extensions*, and ask it.
+
+    The schemas are created by name, and each extension's own statement runs
+    on its own, in build order, so one that fails costs only its own
+    references. The question is :func:`probe_live`'s: no catalog SQL here.
+
+    Raises:
+        ScratchUnavailable: the server did not answer within *connect_timeout*
+            seconds, or would not create the scratch database.
+    """
+    # Reason: CLI start-up: the scratch lifecycle reads the builder, and is wanted only when an extension's reference is outstanding
+    from confiture.core.expected_db import ExpectedSchemaDB
+
+    masked = redact_url(server_url)
+    try:
+        # `TempDatabase` connects with no timeout: a server that is not there must cost seconds.
+        with psycopg.connect(server_url, connect_timeout=connect_timeout):
+            pass
+    except (psycopg.Error, OSError) as exc:
+        raise ScratchUnavailable(
+            f"no scratch server answered at {masked}: {first_line(exc)}"
+        ) from exc
+    try:
+        with ExpectedSchemaDB(server_url).from_source(schema_sql="") as connection:
+            for schema in sorted(schemas):
+                connection.execute(t"CREATE SCHEMA IF NOT EXISTS {schema:i}")
+            failed: dict[str, str] = {}
+            for ext in extensions:
+                try:
+                    connection.execute(Template(ext.create_sql))
+                except psycopg.Error as exc:
+                    failed[ext.name] = first_line(exc)
+            return ScratchAnswer(probe_live(connection, candidates, search_path), failed)
+    except (psycopg.Error, OSError, ConfiturError) as exc:
+        raise ScratchUnavailable(
+            f"could not build a scratch database on {masked}: {first_line(exc)}"
+        ) from exc
+
+
+@dataclass(frozen=True)
+class ExtensionTier:
+    """What the extension tier leaves: findings, who was asked, and what it could not check."""
+
+    missing: list[tuple[str | None, Reference]]
+    asked: tuple[BuiltExtension, ...] = ()
+    unwritten: tuple[BuiltExtension, ...] = ()
+    reason: str | None = None
+
+
+#: Asks a scratch database about the references it is handed, or raises ScratchUnavailable.
+Ask = Callable[[list[tuple[str | None, Reference]]], ScratchAnswer]
+
+
+def extension_tier(
+    candidates: list[tuple[str | None, Reference]],
+    extensions: Sequence[BuiltExtension],
+    search_path: Sequence[str],
+    ask: Ask | None,
+) -> ExtensionTier:
+    """The references still unresolved once the build's extensions have been accounted for.
+
+    With *ask* (a scratch server is configured), every extension is asked,
+    ``SCHEMA`` written or not, and a reference only reaches the scratch when one
+    of its schemas hosts an extension. Without it, or when the scratch cannot be
+    built, only an extension whose ``SCHEMA`` is written makes a reference
+    unchecked rather than missing.
+    """
+    unwritten = tuple(ext for ext in extensions if not ext.schema_written)
+    why = NO_SCRATCH_SERVER
+    if ask is not None:
+        maybe, _missing = split_by_extension(candidates, extensions, search_path)
+        if not maybe:
+            return ExtensionTier(candidates, unwritten=unwritten)
+        try:
+            answer = ask(maybe)
+        except ScratchUnavailable as exc:
+            why = str(exc)
+        else:
+            return _answered(candidates, maybe, extensions, answer, search_path)
+    written = [ext for ext in extensions if ext.schema_written]
+    unchecked, _missing = split_by_extension(candidates, written, search_path)
+    return ExtensionTier(
+        _without(candidates, unchecked),
+        unwritten=unwritten,
+        reason=unchecked_reason(unchecked, written, why, search_path) if unchecked else None,
+    )
+
+
+def _without(
+    candidates: list[tuple[str | None, Reference]], gone: Iterable[tuple[str | None, Reference]]
+) -> list[tuple[str | None, Reference]]:
+    dropped = {id(pair) for pair in gone}
+    return [pair for pair in candidates if id(pair) not in dropped]
+
+
+def _answered(
+    candidates: list[tuple[str | None, Reference]],
+    maybe: list[tuple[str | None, Reference]],
+    extensions: Sequence[BuiltExtension],
+    answer: ScratchAnswer,
+    search_path: Sequence[str],
+) -> ExtensionTier:
+    """A scratch answered: a name it holds resolves, and one it lacks is a finding.
+
+    Unless an extension whose ``SCHEMA`` is written, in a schema the name could
+    mean, failed to install: then the scratch never had the chance to hold it,
+    and it is unchecked. One with no ``SCHEMA`` clause that failed never
+    loosens a verdict: its references stay findings, carrying the hint.
+    """
+    failed = [ext for ext in extensions if ext.name in answer.failed]
+    unchecked: list[tuple[str | None, Reference]] = []
+    resolved: list[tuple[str | None, Reference]] = []
+    for pair in maybe:
+        schemas = _schemas(pair[1], search_path)
+        if answer.catalogue.holds(pair[1], search_path):
+            resolved.append(pair)
+        elif any(ext.schema_written and ext.schema in schemas for ext in failed):
+            unchecked.append(pair)
+    hosting = {s for _f, ref in maybe for s in _schemas(ref, search_path)}
+    named = [ext for ext in failed if ext.schema in hosting]
+    return ExtensionTier(
+        _without(candidates, [*resolved, *unchecked]),
+        asked=tuple(ext for ext in extensions if ext.name not in answer.failed),
+        unwritten=tuple(ext for ext in failed if not ext.schema_written),
+        reason=_failure_reason(unchecked, named, answer.failed, search_path),
+    )
+
+
+def _failure_reason(
+    unchecked: Sequence[tuple[str | None, Reference]],
+    failed: Sequence[BuiltExtension],
+    errors: Mapping[str, str],
+    search_path: Sequence[str],
+) -> str | None:
+    """The degraded reason when the scratch could not create an extension, verbatim."""
+    if not failed:
+        return None
+    why = "the scratch server could not create " + "; ".join(
+        f"{ext.name} ({ext.where}): {errors[ext.name]}" for ext in failed
+    )
+    written = [ext for ext in failed if ext.schema_written]
+    if unchecked:
+        return unchecked_reason(unchecked, written, why, search_path)
+    return f"{why}, so a reference it might provide is reported as missing"
 
 
 #: Where a statement is in the build: its file's place in build order, and its line.

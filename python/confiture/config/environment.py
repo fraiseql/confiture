@@ -638,16 +638,19 @@ class LintSettings(BaseModel):
 
     ``build_003`` subtracts the objects a body references from the objects the
     build creates, and the build is not the only thing that creates objects: a
-    migration does, and so does an extension. A live database answers for both
-    when one is reachable; ``ignore_objects`` and ``search_path`` are what a
-    project uses when none is. ``status_words`` belongs to ``tree_008``, which
-    reads names rather than SQL.
+    migration does, and so does an extension installed outside the tree. A live
+    database answers for both when one is reachable; ``ignore_objects`` and
+    ``search_path`` are what a project uses when none is. An extension the
+    build itself creates (``CREATE EXTENSION`` in the tree) is answered by a
+    scratch database on ``scratch_url``, and needs no entry here.
+    ``status_words`` belongs to ``tree_008``, which reads names rather than SQL.
 
     Attributes:
         ignore_objects: ``fnmatch`` globs over ``schema.name``. A reference
             matching one is never reported as unresolved — the escape hatch
             for an object created outside the DDL tree
-            (``public.gen_random_uuid``, ``pg_stat_statements*``).
+            (``public.gen_random_uuid`` from an extension the platform installs,
+            ``pg_stat_statements*``).
         search_path: The schemas an unqualified *relation* in a body is looked
             for in, in order. Empty (the default) means an unqualified name is
             not judged at all: without knowing what resolves it, every
@@ -922,7 +925,7 @@ class Environment(BaseModel):
         lint: What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build.
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
-        scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally.
+        scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide; ``null`` reports their references as unchecked.
         include_dirs: Directories to include when building schema (supports both string and dict formats)
         superuser_post_dirs: Directories routed to the post-schema superuser phase in build_split()
         exclude_dirs: Directories to exclude from schema build
