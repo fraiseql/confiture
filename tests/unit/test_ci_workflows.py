@@ -419,6 +419,20 @@ class TestReleaseWheels:
         """The wheels are version-specific; the flag only hid a missing one."""
         assert "PYO3_USE_ABI3_FORWARD_COMPATIBILITY" not in (WORKFLOWS / "publish.yml").read_text()
 
+    def test_a_dependency_without_a_wheel_is_named_before_each_fresh_install(self) -> None:
+        """A pull request warns (upstream uploads its sdist first); Publish refuses."""
+        for workflow, job, mode in (
+            ("quality-gate.yml", "wheel-python-314", "--warn"),
+            ("publish.yml", "validate", "--strict"),
+        ):
+            runs = [step.get("run", "") for step in _steps(workflow, job)]
+            check = next(
+                i for i, run in enumerate(runs) if "scripts/check_dependency_wheels.py" in run
+            )
+            install = next(i for i, run in enumerate(runs) if "uv venv --python 3.14" in run)
+            assert mode in runs[check], workflow
+            assert check < install, workflow
+
     def test_the_newest_is_installed_from_its_wheel_on_every_pull_request(self) -> None:
         script = _run_scripts(_steps("quality-gate.yml", "wheel-python-314"))
         assert "--only-binary fraiseql-confiture" in script and "--no-cache" in script

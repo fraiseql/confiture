@@ -94,7 +94,7 @@
     "ok": true,
     "command": "diff",
     "parser": {
-      "pglast": "8.5",
+      "pglast": "8.7",
       "pg_major": 18
     }
   }
