@@ -312,8 +312,8 @@ def test_an_extension_with_no_schema_clause_keeps_the_finding_and_says_how_to_cl
     assert finding["location"] == "app.fn_id() -> public.gen_random_uuid"
     assert "no file in the build creates it" in finding["message"]
     assert "pgcrypto (db/schema/001_extensions.sql:1) with no SCHEMA clause" in finding["message"]
-    assert "configure scratch_url" in finding["message"]
-    assert "with no SCHEMA clause" in finding["suggested_fix"]
+    assert "--server-url, or scratch_url" in finding["message"]
+    assert finding["suggested_fix"].startswith("If an extension provides it:")
     assert _extension_entries(payload) == []
 
 
@@ -583,3 +583,18 @@ def test_a_live_no_is_not_final_when_the_build_creates_the_extension(
     assert asked == [["public.text2ltree", "public.unaccent"]]
     assert _locations(payload) == []
     assert payload.get("degraded", []) == []
+
+
+def test_a_tree_with_no_extension_never_folds_the_tree_again(
+    in_tmp: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One unresolved name must not cost a second pass over every statement (release review)."""
+    from confiture.core.linting import extensions
+
+    def refuse(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("declared_objects ran for a tree with no CREATE EXTENSION")
+
+    monkeypatch.setattr(extensions, "declared_objects", refuse)
+    _project(in_tmp, {"010_fn.sql": _CALLS_NOPE.format(target="public.nope")})
+
+    assert _locations(_payload("--server-url", _SCRATCH)) == ["app.f() -> public.nope"]

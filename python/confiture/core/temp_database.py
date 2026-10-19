@@ -38,7 +38,7 @@ def _rebuild_with_path(server_url: str, path: str) -> str:
     return rebuilt
 
 
-def _maintenance_url(server_url: str) -> str:
+def maintenance_url(server_url: str) -> str:
     """Replace the database component of *server_url* with ``postgres``.
 
     The maintenance DB is used to issue ``CREATE DATABASE`` / ``DROP DATABASE``
@@ -106,7 +106,7 @@ class TempDatabase:
     def __init__(self, server_url: str) -> None:
         self._server_url = server_url
         self._db_name = f"confiture_tmp_{uuid.uuid4().hex[:8]}"
-        self._maintenance_url = _maintenance_url(server_url)
+        self._maintenance_url = maintenance_url(server_url)
         self._maintenance_conn: psycopg.Connection | None = None
 
     def __enter__(self) -> str:

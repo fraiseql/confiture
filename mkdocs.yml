@@ -125,6 +125,7 @@ nav:
       - 'Restoring a backup with confiture restore': guides/restore.md
       - 'Schema Linting': guides/schema-linting.md
       - 'Security-Definer Search-Path Lint (sec002)': guides/security-definer-lint.md
+      - 'Seed Drift': guides/seed-drift.md
       - 'Seed Loading Strategy Decision Tree': guides/seed-loading-decision-tree.md
       - 'Seed Data Validation Guide': guides/seed-validation.md
       - 'Sequential Seed File Execution': guides/sequential-seed-execution.md

@@ -490,7 +490,10 @@ What the rule deliberately does **not** report:
   search path and confiture cannot enumerate it. Without that rule, every
   `now()` and `count()` would be a finding.
 
-#### Four tiers answer a reference, in this order
+#### Four tiers answer a reference
+
+They run in the order of the table: (a) and (c) in one pass, then (b) for what
+they left, then (d) for what (b) left.
 
 | Tier | What answers | When |
 |------|--------------|------|
@@ -508,9 +511,13 @@ something is outstanding, so a clean tree connects to nothing.
 the JSON payload's `degraded` array:
 
 ```text
-build_003 ran without the live tier: no database answered, so an object created
-by a migration or owned by an extension is reported as missing: connection failed …
+build_003 ran on less than the whole schema: no database answered, so an object a
+migration created, or an extension outside the tree owns, is reported as missing:
+connection failed …
 ```
+
+When tier (d) then answers every name tier (b) left, that entry is dropped: the
+live database's silence cost nothing, and `--require-complete` does not fail on it.
 
 Read `n unresolved references` from a degraded run as an upper bound, not a
 count of bugs.
@@ -582,6 +589,10 @@ build creates extensions ltree (db/schema/001_extensions.sql:1) and unaccent
 (--server-url, or scratch_url in the environment) to say what they provide
 ```
 
+A written `SCHEMA` on any extension makes every reference into that schema
+unchecked, whichever extension might provide it: without a server, confiture cannot
+tell which one does.
+
 When the scratch could not create one extension (the server does not offer it,
 a `VERSION` it has not got, a schema the tree never creates), PostgreSQL's own
 error line is the reason. Only names in that extension's schema stay unchecked,
@@ -598,8 +609,8 @@ clear it:
 ⚠️ build_003: Function 'app.fn_id()' references routine 'public.gen_random_uuid',
    and no file in the build creates it; the build creates extension(s) pgcrypto
    (db/schema/001_extensions.sql:1) with no SCHEMA clause: write the schema each is
-   installed in (SCHEMA …), or configure scratch_url, so confiture can tell whether
-   one provides this
+   installed in (SCHEMA …), or give a scratch server (--server-url, or scratch_url),
+   so confiture can tell whether one provides this
 ```
 
 With a scratch server, every extension is asked, `SCHEMA` written or not.

@@ -133,6 +133,29 @@ class TestTheScratchAnswers:
         payload = _payload(test_db_url)
 
         assert _findings(payload) == []
+        # Nothing was left for a live database to answer, so its silence cost nothing.
+        assert payload.get("degraded", []) == []
+
+    def test_only_the_server_of_the_scratch_url_is_used(
+        self, in_tmp: Path, test_db_url: str
+    ) -> None:
+        """A scratch URL naming a database that does not exist names a server that does."""
+        _project(
+            in_tmp,
+            {
+                "001_extensions.sql": _EXTENSIONS,
+                "002_fn.sql": _caller(
+                    "RETURN public.text2ltree(public.unaccent("
+                    "'public.unaccent'::regdictionary, p_name));",
+                    returns="public.ltree",
+                ),
+            },
+        )
+        server = test_db_url.rsplit("/", 1)[0] + "/confiture_no_such_database"
+
+        payload = _payload(server)
+
+        assert _findings(payload) == []
         assert _extension_reasons(payload) == []
 
 

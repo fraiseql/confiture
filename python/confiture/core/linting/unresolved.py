@@ -55,6 +55,7 @@ from confiture.core.linting.references import (
 )
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity, first_line
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.temp_database import maintenance_url
 from confiture.exceptions import ConfiturError
 from confiture.url_redaction import redact_url
 
@@ -166,8 +167,10 @@ def _finding(
         file_path=file,
         line_number=reference.line if reference.line_is_exact else reference.referrer_line,
         suggested_fix=(
-            f"Create '{reference.qualified}' in the schema tree, or correct the name."
-            + (f" Note that {note}." if note else "")
+            f"If an extension provides it: {note}. Otherwise create '{reference.qualified}' "
+            "in the schema tree, or correct the name."
+            if note
+            else f"Create '{reference.qualified}' in the schema tree, or correct the name."
         ),
     )
 
@@ -306,21 +309,31 @@ def _hosted(schema: str, extensions: Sequence[BuiltExtension]) -> bool:
 
 
 def unwritten_note(
-    reference: Reference, unwritten: Sequence[BuiltExtension], search_path: Sequence[str] = ()
+    reference: Reference,
+    unwritten: Sequence[BuiltExtension],
+    search_path: Sequence[str] = (),
+    *,
+    answered: bool = False,
 ) -> str:
     """What a finding adds when an extension with no ``SCHEMA`` clause might hold the name.
 
     The schema it lands in is the applying role's, so it never loosens a
     verdict; the finding says which extensions they are and how to have them
     asked. It names no schema to write: ``plpgsql`` belongs in ``pg_catalog``.
+    *answered* says a scratch server was asked and could not create them.
     """
     if not unwritten or DEFAULT_SCHEMA not in _schemas(reference, search_path):
         return ""
     named = ", ".join(f"{ext.name} ({ext.where})" for ext in unwritten)
+    if answered:
+        return (
+            f"the scratch server could not create extension(s) {named}, which have no SCHEMA "
+            "clause, so confiture cannot tell whether one provides this (see the degraded entry)"
+        )
     return (
         f"the build creates extension(s) {named} with no SCHEMA clause: write the schema each "
-        "is installed in (SCHEMA …), or configure scratch_url, so confiture can tell whether "
-        "one provides this"
+        "is installed in (SCHEMA …), or give a scratch server (--server-url, or scratch_url), "
+        "so confiture can tell whether one provides this"
     )
 
 
@@ -342,6 +355,7 @@ def reference_findings(
     unwritten: Sequence[BuiltExtension] = (),
     asked: Sequence[BuiltExtension] = (),
     search_path: Sequence[str] = (),
+    answered: bool = False,
 ) -> list[LintViolation]:
     """One ``build_003`` per unresolved name per referring object, in source order.
 
@@ -354,7 +368,7 @@ def reference_findings(
         _finding(
             file,
             reference,
-            unwritten_note(reference, unwritten, search_path),
+            unwritten_note(reference, unwritten, search_path, answered=answered),
             _not_provided(reference, asked, search_path),
         )
         for file, reference in candidates
@@ -409,7 +423,8 @@ def scratch_names(
     masked = redact_url(server_url)
     try:
         # `TempDatabase` connects with no timeout: a server that is not there must cost seconds.
-        with psycopg.connect(server_url, connect_timeout=connect_timeout):
+        # The maintenance database, as `TempDatabase` connects: only the server is used.
+        with psycopg.connect(maintenance_url(server_url), connect_timeout=connect_timeout):
             pass
     except (psycopg.Error, OSError) as exc:
         raise ScratchUnavailable(
@@ -440,6 +455,8 @@ class ExtensionTier:
     asked: tuple[BuiltExtension, ...] = ()
     unwritten: tuple[BuiltExtension, ...] = ()
     reason: str | None = None
+    #: A scratch database was built and asked: ``unwritten`` then failed in it.
+    answered: bool = False
 
 
 #: Asks a scratch database about the references it is handed, or raises ScratchUnavailable.
@@ -518,6 +535,7 @@ def _answered(
         asked=tuple(ext for ext in extensions if ext.name not in answer.failed),
         unwritten=tuple(ext for ext in failed if not ext.schema_written),
         reason=_failure_reason(unchecked, named, answer.failed, search_path),
+        answered=True,
     )
 
 

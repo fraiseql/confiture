@@ -16,7 +16,7 @@ import pytest
 from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.schema_artifact import build_schema_artifact
-from confiture.core.temp_database import _maintenance_url
+from confiture.core.temp_database import maintenance_url
 from confiture.core.test_db import TemplateState, TestDbProvisioner
 from confiture.exceptions import ConfigurationError, SchemaError
 from confiture.testing.worker_db import resolve_worker_db_name
@@ -37,7 +37,7 @@ def _server_url() -> str:
 
 
 def _drop_all(names: list[str]) -> None:
-    with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(_server_url()), autocommit=True) as conn:
         for name in names:
             conn.execute(
                 psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
@@ -50,7 +50,7 @@ def _drop_all(names: list[str]) -> None:
 def provisioner() -> Iterator[TestDbProvisioner]:
     url = _server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True):
+        with psycopg.connect(maintenance_url(url), autocommit=True):
             pass
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")
@@ -83,7 +83,7 @@ def _show_synchronous_commit(provisioner: TestDbProvisioner, db: str) -> str:
 
 def _per_db_settings(provisioner: TestDbProvisioner, db: str) -> list[str]:
     """Return the database-wide ``pg_db_role_setting`` entries for *db* (empty if none)."""
-    with psycopg.connect(_maintenance_url(provisioner.server_url), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(provisioner.server_url), autocommit=True) as conn:
         row = conn.execute(
             "SELECT s.setconfig FROM pg_db_role_setting s "
             "JOIN pg_database d ON s.setdatabase = d.oid "
@@ -95,7 +95,7 @@ def _per_db_settings(provisioner: TestDbProvisioner, db: str) -> list[str]:
 
 def _clone_tablespace(provisioner: TestDbProvisioner, db: str) -> str | None:
     """Return the spcname of the tablespace *db* lives in, or None if it is gone."""
-    with psycopg.connect(_maintenance_url(provisioner.server_url), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(provisioner.server_url), autocommit=True) as conn:
         row = conn.execute(
             "SELECT t.spcname FROM pg_database d "
             "JOIN pg_tablespace t ON d.dattablespace = t.oid WHERE d.datname = %s",
@@ -105,7 +105,7 @@ def _clone_tablespace(provisioner: TestDbProvisioner, db: str) -> str | None:
 
 
 def _db_exists(provisioner: TestDbProvisioner, db: str) -> bool:
-    with psycopg.connect(_maintenance_url(provisioner.server_url), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(provisioner.server_url), autocommit=True) as conn:
         return (
             conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db,)).fetchone()
             is not None
@@ -400,7 +400,7 @@ class TestBoundedCloneConcurrency:
     """Cross-process clone throttling (#166): real advisory-lock slots on PG."""
 
     def test_cluster_fsync_on_matches_show_fsync(self, provisioner: TestDbProvisioner) -> None:
-        with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as conn:
+        with psycopg.connect(maintenance_url(_server_url()), autocommit=True) as conn:
             expected = conn.execute("SHOW fsync").fetchone()[0] == "on"
         assert provisioner.cluster_fsync_on() is expected
 
@@ -416,7 +416,7 @@ class TestBoundedCloneConcurrency:
         done = threading.Event()
         errors: list[Exception] = []
 
-        with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as holder:
+        with psycopg.connect(maintenance_url(_server_url()), autocommit=True) as holder:
             for k in keys:
                 holder.execute("SELECT pg_advisory_lock(%s)", (k,))
 

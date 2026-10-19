@@ -411,6 +411,18 @@ def _ref_of(obj: SchemaObject) -> ObjectRef:
     )
 
 
+def defined_kind(raw: Any) -> str | None:
+    """The kind a statement defines, from its node alone, for a node read by ``_EXTRA``.
+
+    ``"extension"`` for ``CREATE EXTENSION`` (and the parameterless ``CREATE
+    LANGUAGE`` PostgreSQL turns into one), ``"schema"`` for ``CREATE SCHEMA``, and
+    so on; ``None`` for a node :func:`object_of` reads through the inventory. A
+    reader looking for one kind asks this before paying for :func:`object_of`.
+    """
+    spec = _EXTRA.get(type(raw.stmt).__name__)
+    return None if spec is None else spec.kind
+
+
 def object_of(sql: str, raw: Any) -> DDLObject | None:
     """The object this statement defines, or ``None`` when it defines none here.
 

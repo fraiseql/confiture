@@ -84,12 +84,13 @@ def migrations_dir_option(
     )
 
 
-def scratch_url_option() -> Any:
+def scratch_url_option(help: str | None = None) -> Any:
     """``--scratch-url``: the server a tree is built on and read back from (``materialised``)."""
     return _option(
         None,
         ("--scratch-url",),
-        "Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, "
+        help
+        or "Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, "
         "index expressions and predicates and view bodies compare as PostgreSQL stores "
         "them (default: the environment's scratch_url; without one, they compare "
         "structurally)",

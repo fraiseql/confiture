@@ -19,7 +19,7 @@ from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.core.temp_database import _maintenance_url, _replace_dbname
+from confiture.core.temp_database import _replace_dbname, maintenance_url
 
 runner = CliRunner()
 
@@ -32,7 +32,7 @@ def _server_url() -> str:
 
 
 def _drop_template() -> None:
-    with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(_server_url()), autocommit=True) as conn:
         conn.execute(
             psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
                 psycopg.sql.Identifier(_TEMPLATE)
@@ -57,7 +57,7 @@ def project(tmp_path):
     if shutil.which("psql") is None:
         pytest.skip("psql not on PATH")
     try:
-        with psycopg.connect(_maintenance_url(_server_url()), autocommit=True):
+        with psycopg.connect(maintenance_url(_server_url()), autocommit=True):
             pass
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")

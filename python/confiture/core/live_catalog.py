@@ -828,6 +828,7 @@ SELECT EXISTS (
 
 _SCHEMA_EXISTS = "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = %s)"
 
+
 _COLUMNS_OF = f"""
 SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
        pg_get_expr(d.adbin, d.adrelid), a.attidentity, a.attgenerated,

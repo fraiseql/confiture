@@ -135,7 +135,7 @@ class TestBuildArtifactSkip:
         assert result.artifact_hash == "abcdef0123456789"
         dumper.dump.assert_not_called()
 
-    @patch("confiture.core.schema_artifact.TempDatabase")
+    @patch("confiture.core.seed.seeded_database.TempDatabase")
     def test_builds_and_dumps_when_absent(self, mock_tempdb: MagicMock, tmp_path: Path) -> None:
         # TempDatabase context yields a temp URL; apply_schema is a no-op mock.
         instance = mock_tempdb.return_value

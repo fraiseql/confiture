@@ -16,8 +16,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from confiture.core.seed.applier import apply_seed_files
-from confiture.core.temp_database import TempDatabase
+from confiture.core.seed.seeded_database import seeded_database
 from confiture.exceptions import SchemaError
 from confiture.url_redaction import libpq_env, split_password
 
@@ -194,13 +193,8 @@ def build_schema_artifact(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     dumper = dumper or SchemaArtifactDumper()
-    seeds_applied = 0
 
-    temp_db = TempDatabase(server_url)
-    with temp_db as temp_url:
-        temp_db.apply_schema(temp_url, schema_sql)
-        if seed_files:
-            seeds_applied = apply_seed_files(temp_url, seed_files)
+    with seeded_database(server_url, schema_sql, seed_files or ()) as (temp_url, seeds_applied):
         dumper.dump(temp_url, output_path, dump_format)
 
     return ArtifactResult(

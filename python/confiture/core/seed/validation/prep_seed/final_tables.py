@@ -108,18 +108,31 @@ def decide(
     return finals
 
 
-def _written(resolver: Resolver, staging: str, prep: str) -> set[tuple[str, str]]:
-    """``(schema, name)`` of each table *resolver* inserts rows of ``<prep>.<staging>`` into."""
-    targets: set[tuple[str, str]] = set()
+def resolver_inserts(resolver: Resolver, staging: str, prep: str) -> list[Any]:
+    """Each ``INSERT`` in *resolver* that moves rows of ``<prep>.<staging>`` into another schema.
+
+    The statement nodes themselves, so a caller reads what they write
+    (``relation``, ``cols``) from the one walk.
+    """
+    found: list[Any] = []
     for statement in resolver.body.statements:
         for node in walk_nodes(statement.root):
             if type(node).__name__ != "InsertStmt":
                 continue
             schema, table = relation_parts(node.relation)
-            target = ((schema or DEFAULT_SCHEMA).lower(), table)
-            if table is None or target[0] == prep or not _reads(node, prep, staging):
+            if table is None or (schema or DEFAULT_SCHEMA).lower() == prep:
                 continue
-            targets.add((target[0], table))
+            if _reads(node, prep, staging):
+                found.append(node)
+    return found
+
+
+def _written(resolver: Resolver, staging: str, prep: str) -> set[tuple[str, str]]:
+    """``(schema, name)`` of each table *resolver* inserts rows of ``<prep>.<staging>`` into."""
+    targets: set[tuple[str, str]] = set()
+    for node in resolver_inserts(resolver, staging, prep):
+        schema, table = relation_parts(node.relation)
+        targets.add(((schema or DEFAULT_SCHEMA).lower(), table))
     return targets
 
 

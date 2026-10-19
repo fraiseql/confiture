@@ -185,12 +185,14 @@ what a routine or view body names; what is left is a body referring to
 something nobody built — the failure that had one routine in a large schema
 never completing a call.
 
-It resolves in three tiers: the build inventory, then a live database when
-`--env`'s connection is reachable (an object created by a migration or owned by
-an extension is real and absent from the tree), then `lint.ignore_objects` for
-a project with neither. A run where no database answered prints
-`build_003 ran without the live tier: …` and carries the same sentence in the
-JSON `degraded` array — read its count as an upper bound.
+It resolves in four tiers: the build inventory and `lint.ignore_objects`, then a
+live database when `--env`'s connection is reachable (an object created by a
+migration is real and absent from the tree), then, for a name in a schema where
+the build runs `CREATE EXTENSION`, a scratch database holding those extensions
+(`--server-url` or `scratch_url`). A run a tier could not answer prints
+`build_003 ran on less than the whole schema: …` and carries the same sentence in
+the JSON `degraded` array; read its count as an upper bound. The full account is
+[lint-rules.md § build_003](../reference/lint-rules.md#build_003-the-inventory-read-backwards).
 
 A CI gate that only counts findings passes such a run, with fewer findings than
 a complete one. `--require-complete` makes coverage part of the gate: a run in

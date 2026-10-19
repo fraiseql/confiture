@@ -1046,7 +1046,8 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
     )
 
 
-def _primary_key(table: Table) -> tuple[str, ...]:
+def primary_key(table: Table) -> tuple[str, ...]:
+    """The columns of *table*'s primary key, declared at table level or on a column; empty for none."""
     declared = table.constraints_of("primary_key")
     if declared:
         return declared[0].columns
@@ -1061,7 +1062,7 @@ def with_referenced_keys(model: SchemaModel) -> SchemaModel:
     either way. A target the model does not hold, or one with no primary key,
     leaves the key as written.
     """
-    keys = {table.relation.identity: _primary_key(table) for table in model.tables.values()}
+    keys = {table.relation.identity: primary_key(table) for table in model.tables.values()}
 
     def resolved(constraint: Constraint) -> Constraint:
         if constraint.kind != "foreign_key" or constraint.ref_columns:

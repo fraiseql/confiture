@@ -102,6 +102,7 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "migrate-validate-idempotent.schema.json",
     "migrate-validate-list-patterns.schema.json",
     "schema-dump-model.schema.json",
+    "seed-drift.schema.json",
     "seed-validate.schema.json",
     "test-db-drop.schema.json",
     "test-db-list.schema.json",

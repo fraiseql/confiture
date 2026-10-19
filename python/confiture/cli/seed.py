@@ -15,6 +15,7 @@ from confiture.cli.markup import Printer, Table
 from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, convert
+from confiture.cli.seed_drift import drift as seed_drift
 from confiture.config.environment import Environment
 from confiture.core.connection import DatabaseError
 from confiture.core.progress import ProgressManager
@@ -572,6 +573,7 @@ def apply(
 
 
 seed_app.command("convert")(convert)
+seed_app.command("drift")(seed_drift)
 
 
 @seed_app.command("generate")

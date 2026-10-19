@@ -47,6 +47,8 @@ class TestAWheelFitsATarget:
             ("x-1-py2.py3-none-any.whl", "macosx_arm64"),
             ("x-1-cp39-abi3-win_amd64.whl", "win_amd64"),
             ("x-1-1build-cp314-cp314-win_amd64.whl", "win_amd64"),
+            ("x-1-cp313.cp314-cp313.cp314-win_amd64.whl", "win_amd64"),
+            ("x-1-cp314-cp314-manylinux1_x86_64.whl", "manylinux_x86_64"),
         ],
     )
     def test_fits(self, wheels, filename: str, target: str) -> None:
@@ -62,6 +64,10 @@ class TestAWheelFitsATarget:
             ("x-1-cp314-cp314-manylinux_2_28_aarch64.whl", "manylinux_x86_64"),
             ("x-1-cp314-cp314-macosx_10_15_x86_64.whl", "macosx_arm64"),
             ("x-1.tar.gz", "win_amd64"),
+            # Newer systems than confiture's own wheel installs on (release review).
+            ("x-1-cp314-cp314-manylinux_2_34_x86_64.whl", "manylinux_x86_64"),
+            ("x-1-cp314-cp314-macosx_14_0_arm64.whl", "macosx_arm64"),
+            ("x-1.whl", "win_amd64"),
         ],
     )
     def test_does_not_fit(self, wheels, filename: str, target: str) -> None:
@@ -106,5 +112,25 @@ def test_an_exclusion_still_missing_a_wheel_stands(wheels) -> None:
 
 
 def test_the_targets_are_the_platforms_confiture_ships_wheels_for(wheels) -> None:
-    """``publish.yml`` builds linux x86_64 (cibuildwheel), macos-latest and windows-latest."""
-    assert set(wheels.TARGETS) == {"manylinux_x86_64", "macosx_arm64", "win_amd64"}
+    """Read from ``publish.yml``: linux x86_64 by cibuildwheel, then macos-latest and windows-latest."""
+    import yaml
+
+    publish = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "publish.yml").read_text())
+    job = publish["jobs"]["build-wheels"]
+    runners = {entry["os"] for entry in job["strategy"]["matrix"]["include"]}
+    linux = next(step for step in job["steps"] if "cibuildwheel" in step.get("uses", ""))
+    built = {
+        "ubuntu-latest": f"manylinux_{linux['env']['CIBW_ARCHS']}",
+        "macos-latest": "macosx_arm64",
+        "windows-latest": "win_amd64",
+    }
+
+    assert {built[runner] for runner in runners} == set(wheels.TARGETS)
+
+
+def test_every_exclusion_in_a_requirement_is_checked_and_a_range_is_skipped(wheels) -> None:
+    files = {("x", "2.0"): ["x-2.0-py3-none-any.whl"], ("x", "2.1"): ["x-2.1-py3-none-any.whl"]}
+
+    stale = wheels.stale_exclusions(["x>=1,!=2.0,!=2.1,!=3.*"], files.__getitem__)
+
+    assert [line.split(":")[0] for line in stale] == ["x!=2.0", "x!=2.1"]

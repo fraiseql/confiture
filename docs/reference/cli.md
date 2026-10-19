@@ -3908,6 +3908,33 @@ confiture seed validate [OPTIONS]
 
 <!-- END GENERATED: cli confiture seed validate -->
 
+### `confiture seed drift`
+
+Compare the reference rows the seed tree writes with what a live database holds.
+
+<!-- BEGIN GENERATED: cli confiture seed drift -->
+
+**Usage**
+
+```bash
+confiture seed drift [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--env` | `-e` | str | `local` | The seed-built environment: its schema tree, its seed files and its seed_drift settings (default: local) |
+| `--against` | - | str | - | The live database to compare with: an environment name (its ssh_tunnel is used) or a PostgreSQL URL. Read in a read-only transaction; nothing is written |
+| `--build` | - | Flag | off | Build the seed side from the tree and its seeds on a scratch server instead of reading --env's database, so the comparison is the tree's, not that database's history |
+| `--scratch-url` | - | str | - | With --build: the writable server the seed side is built on (default: the environment's scratch_url; never its database_url) |
+| `--seeds-dir` | - | path | - | A directory `confiture seed apply` applies: its files count as seeds, after the seed files in the environment's include_dirs |
+| `--list-scope` | - | Flag | off | Print what would be compared (tables, keys, columns) and stop; reads no database |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
+| `--output` | `-o` | path | - | Write the JSON report to this file (whatever --format prints) |
+
+<!-- END GENERATED: cli confiture seed drift -->
+
 ## `confiture validate-config`
 
 Validate configuration and the migrations tree — without connecting (#144).

@@ -7,9 +7,9 @@ import pytest
 
 from confiture.core.temp_database import (
     TempDatabase,
-    _maintenance_url,
     _replace_dbname,
     clean_pg_dump_output,
+    maintenance_url,
     pg_dump_schema,
 )
 from confiture.exceptions import SchemaError
@@ -21,18 +21,18 @@ from confiture.exceptions import SchemaError
 
 class TestMaintenanceUrl:
     def test_replaces_dbname_with_postgres(self) -> None:
-        assert _maintenance_url("postgresql://user:pass@host:5432/myapp") == (
+        assert maintenance_url("postgresql://user:pass@host:5432/myapp") == (
             "postgresql://user:pass@host:5432/postgres"
         )
 
     def test_preserves_query_params(self) -> None:
         url = "postgresql://user@host/mydb?sslmode=require"
-        result = _maintenance_url(url)
+        result = maintenance_url(url)
         assert "/postgres?" in result
         assert "sslmode=require" in result
 
     def test_handles_no_dbname(self) -> None:
-        result = _maintenance_url("postgresql://host:5432")
+        result = maintenance_url("postgresql://host:5432")
         assert result == "postgresql://host:5432/postgres"
 
     def test_hostless_socket_dsn_keeps_authority_marker(self) -> None:
@@ -42,7 +42,7 @@ class TestMaintenanceUrl:
         malformed 'postgresql:/postgres'; it must round-trip to a libpq-valid
         'postgresql:///postgres'.
         """
-        assert _maintenance_url("postgresql:///confiture_test") == "postgresql:///postgres"
+        assert maintenance_url("postgresql:///confiture_test") == "postgresql:///postgres"
 
 
 class TestReplaceDbname:
