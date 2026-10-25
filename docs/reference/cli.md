@@ -243,7 +243,7 @@ name: local
 include_dirs:
   - db/schema/00_common
   - db/schema/10_tables
-  - db/seeds/common  # Excluded with --schema-only
+  - db/seeds/common  # Excluded with --schema-only (a file there that only creates objects is kept)
 exclude_dirs: []
 
 database:

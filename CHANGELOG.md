@@ -16,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A file under a seed directory that only creates schema objects is schema** (#748). A file is a
+  seed when a directory on its path holds `seed` or `seeds` as a word, so the prep-seed layout the
+  guide teaches — staging tables in `db/schema/prep_seed/`, as in examples 06 and 08 — had its
+  `CREATE TABLE`s filed as seeds: `read_schema(env=…)` and every reader built on it did not see
+  them, and `migrate rebuild --seed`, `test-db` and sequential builds applied them after the whole
+  schema. A file there whose every statement creates a persistent schema object (a table, index,
+  view, routine, type, sequence, schema, trigger or extension, or a `COMMENT ON` one) is now schema
+  wherever it sits. Anything else stays a seed: a row written, a `TEMP` table, `CREATE TABLE … AS`,
+  an `ALTER TABLE … DISABLE TRIGGER`, a `SET`, a file the parser rejects. Only a statement that
+  opens with `CREATE` or `COMMENT` is parsed, so a large seed file costs one token.
+- **`build --schema-only` leaves out seed files one by one.** It used to drop the `include_dirs`
+  entries whose own path was a seed directory and build every file of the others, so a seed
+  directory nested inside a schema entry was built into a schema-only output. It now asks the same
+  question as every other reader; an entry that selects only seed files is still left out whole.
 - **`sync`, `ProductionSyncer` and `migrate schema-to-schema` open an environment through its
   `ssh_tunnel`** (#750). Four places answered "environment name, config file or URL" for a
   database, and only `seed drift --against` honoured the tunnel: `sync --from production` connected
