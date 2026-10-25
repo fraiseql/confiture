@@ -23,6 +23,14 @@ def test_group_help_lists_all_subcommands() -> None:
         assert sub in result.output
 
 
+def _entered(migrator: MagicMock) -> MagicMock:
+    """What ``_migrator`` returns: a context manager handing out *migrator*."""
+    factory_result = MagicMock()
+    factory_result.__enter__.return_value = migrator
+    factory_result.__exit__.return_value = False
+    return factory_result
+
+
 def test_each_subcommand_help_is_reachable() -> None:
     for sub in _SUBCOMMANDS:
         result = runner.invoke(app, ["migrate", "schema-to-schema", sub, "--help"])
@@ -31,7 +39,9 @@ def test_each_subcommand_help_is_reachable() -> None:
 
 def test_setup_threads_to_core() -> None:
     mock_migrator = MagicMock()
-    with patch("confiture.cli.schema_to_schema._migrator", return_value=mock_migrator) as factory:
+    with patch(
+        "confiture.cli.schema_to_schema._migrator", return_value=_entered(mock_migrator)
+    ) as factory:
         result = runner.invoke(
             app,
             ["migrate", "schema-to-schema", "setup", "--source", "old", "--target", "new"],
@@ -44,7 +54,7 @@ def test_setup_threads_to_core() -> None:
 def test_migrate_table_parses_inline_mapping() -> None:
     mock_migrator = MagicMock()
     mock_migrator.migrate_table.return_value = 42
-    with patch("confiture.cli.schema_to_schema._migrator", return_value=mock_migrator):
+    with patch("confiture.cli.schema_to_schema._migrator", return_value=_entered(mock_migrator)):
         result = runner.invoke(
             app,
             [
@@ -78,7 +88,7 @@ def test_verify_mismatch_exits_1() -> None:
         "users": {"match": True, "source_count": 10, "target_count": 10},
         "posts": {"match": False, "source_count": 5, "target_count": 4},
     }
-    with patch("confiture.cli.schema_to_schema._migrator", return_value=mock_migrator):
+    with patch("confiture.cli.schema_to_schema._migrator", return_value=_entered(mock_migrator)):
         result = runner.invoke(
             app,
             [

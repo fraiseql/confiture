@@ -12,8 +12,7 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.cli.seed_drift import exit_code
-from confiture.config.environment import Environment
-from confiture.core.seed import drift
+from confiture.core import connection
 from confiture.core.seed.drift import SeedDriftReport, TableDrift
 from confiture.core.seed.drift_scope import NotCompared, SeedScope
 from confiture.error_codes import FINDINGS, NOT_RUN, SUCCESS
@@ -124,14 +123,13 @@ def test_against_an_environment_opens_it_with_its_ssh_tunnel(
         opened.append(config)
         raise ConfigurationError("no tunnel in a unit test", error_code="CONFIG_006")
 
-    monkeypatch.setattr(drift, "open_connection", refuse)
+    monkeypatch.setattr(connection, "open_connection", refuse)
 
     result = runner.invoke(app, ["seed", "drift", "--against", "production", "--format", "json"])
 
     assert result.exit_code == 3, result.output
     [config] = opened
-    assert isinstance(config, Environment)
-    assert config.ssh_tunnel is not None
+    assert config["ssh_tunnel"]["host"] == "bastion.invalid"
 
 
 def test_build_without_a_scratch_server_says_how_to_give_one(in_tmp: Path) -> None:

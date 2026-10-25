@@ -130,7 +130,6 @@
     "python/confiture/core/seed/validation/prep_seed/level_4_runtime.py": 1,
     "python/confiture/core/seed/validation/prep_seed/level_5_execution.py": 1,
     "python/confiture/core/seed/validation/prep_seed/orchestrator.py": 3,
-    "python/confiture/core/syncer.py": 1,
     "python/confiture/core/unified_linter.py": 1,
     "python/confiture/core/validation/signature_drift.py": 1,
     "python/confiture/testing/loader.py": 1,
