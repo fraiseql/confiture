@@ -73,6 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A release ships wheels for the declared CPythons only.** The macOS and Windows builds
+  ran maturin with `--find-interpreter`, which also found the CPython 3.15 the hosted runner
+  carries, so 1.40.0 uploaded `cp315` wheels for an interpreter confiture does not declare.
+  maturin is now given setup-python's interpreter by path, and Publish's validate job refuses
+  any wheel whose tag is not declared, as it already refused a missing one. The `cp315` files
+  already on PyPI are left in place.
 - **`--help` re-wraps a paragraph instead of breaking it where the docstring did** (#751). Typer
   keeps every line break of a command's docstring after its first paragraph, and Rich wrapped
   inside each source line, so on a terminal narrower than the source a sentence broke twice
