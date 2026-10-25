@@ -14,6 +14,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`sync`, `ProductionSyncer` and `migrate schema-to-schema` open an environment through its
+  `ssh_tunnel`** (#750). Four places answered "environment name, config file or URL" for a
+  database, and only `seed drift --against` honoured the tunnel: `sync --from production` connected
+  straight to `database_url` (with its `${TUNNEL_LOCAL_PORT}` unfilled) and failed, or reached
+  another host. One resolver, `core.connection.resolve_target`, now answers for all four, and each
+  opens what it returns through `open_connection`:
+  - a PostgreSQL URL is opened as given; a value ending in `.yaml`/`.yml` is a config file (now
+    accepted by `sync` and `seed drift` too); anything else is an environment name;
+  - a value that is none of these is `CONFIG_003`, and is not echoed;
+  - an environment with no config file is `CONFIG_001` everywhere. `schema-to-schema` used to say
+    `CONFIG_004`; a missing `.yaml` file is still `CONFIG_004`. Both exit 5.
+  - an environment is read for its connection (`database_url`, `ssh_tunnel`) only, as
+    `schema-to-schema` read it: `sync` and `seed drift` no longer refuse an environment whose
+    `include_dirs` are not on the machine that connects.
+  - `ProductionSyncer(source, target)` takes a name, a config file, a URL, an `Environment` or a
+    `DatabaseConfig`. A checkpoint file names each side as a report does (a URL masked, an
+    environment by name).
+  - a database that does not answer is `CONFIG_006` naming it as a report does, from all four
+    (`schema-to-schema` did; `sync` and `seed drift` did not say which side).
+
 ## [1.40.0] - 2026-10-25
 
 ### Added

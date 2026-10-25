@@ -610,8 +610,8 @@ confiture sync [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--from` | - | str | - | Source database: env name or DSN. |
-| `--to` | - | str | - | Target database: env name or DSN. |
+| `--from` | - | str | - | Source database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--to` | - | str | - | Target database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--anonymize` | - | Flag | off | Mask PII during the copy (see --anonymization-config). |
 | `--anonymization-config` | - | path | `db/sync/anonymization.yaml` | Anonymization rules YAML (default: db/sync/anonymization.yaml). |
 | `--tables` | - | str | - | Comma-separated tables to include (default: all). |
@@ -2720,8 +2720,8 @@ confiture migrate schema-to-schema analyze [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--target` | - | str | - | Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--schema` | - | str | `public` | The source's schema to size (default: public). |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
@@ -2743,8 +2743,8 @@ confiture migrate schema-to-schema cleanup [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--target` | - | str | - | Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema cleanup -->
@@ -2765,8 +2765,8 @@ confiture migrate schema-to-schema migrate [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--target` | - | str | - | Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--mapping` | - | path | - | Per-table column-mapping YAML (see the guide). |
 | `--strategy` | - | str | `fdw` | Migration strategy: fdw or copy (default: fdw). |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
@@ -2789,8 +2789,8 @@ confiture migrate schema-to-schema migrate-table [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--target` | - | str | - | Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--source-table` | - | str | - | Source table name. |
 | `--target-table` | - | str | - | Target table name. |
 | `--mapping` | - | str | - | Inline column mapping 'src_col:dst_col,...'. |
@@ -2815,8 +2815,8 @@ confiture migrate schema-to-schema setup [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--target` | - | str | - | Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--skip-import` | - | Flag | off | Create the FDW server without importing the foreign schema. |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
@@ -2838,8 +2838,8 @@ confiture migrate schema-to-schema verify [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
+| `--target` | - | str | - | Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL. |
 | `--tables` | - | str | - | Comma-separated target tables to verify (default: every table --mapping maps). |
 | `--mapping` | - | path | - | The column-mapping YAML migrate read: where each target table came from. |
 | `--source-schema` | - | str | `old_schema` |  |
@@ -3925,7 +3925,7 @@ confiture seed drift [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--env` | `-e` | str | `local` | The seed-built environment: its schema tree, its seed files and its seed_drift settings (default: local) |
-| `--against` | - | str | - | The live database to compare with: an environment name (its ssh_tunnel is used) or a PostgreSQL URL. Read in a read-only transaction; nothing is written |
+| `--against` | - | str | - | The live database to compare with: an environment name (its ssh_tunnel is used), a .yaml config file or a PostgreSQL URL. Read in a read-only transaction; nothing is written |
 | `--build` | - | Flag | off | Build the seed side from the tree and its seeds on a scratch server instead of reading --env's database, so the comparison is the tree's, not that database's history |
 | `--scratch-url` | - | str | - | With --build: the writable server the seed side is built on (default: the environment's scratch_url; never its database_url) |
 | `--seeds-dir` | - | path | - | A directory `confiture seed apply` applies: its files count as seeds, after the seed files in the environment's include_dirs |
