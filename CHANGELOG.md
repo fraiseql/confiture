@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A scratch database is a copy of `template0`, not `template1`** (#749). Every database
+  confiture creates to build a tree into and read back — `drift`/`migrate diff` with a scratch
+  server, `lint`'s extension tier and `body` rule, `seed drift --build`, `migrate squash` — was a
+  copy of the server's `template1`, so whatever a server keeps there (a PostGIS image ships PostGIS
+  in it) answered for the build: `build_003` could resolve `public.st_makepoint` for a tree that
+  never creates it, and a materialised side could hold objects the tree does not declare. A tree
+  that relied on `template1`'s extensions without its own `CREATE EXTENSION` now fails its scratch
+  build, as it fails on a fresh server. `test-db` (your own test databases) is unchanged.
+
 ### Fixed
 
 - **`--help` re-wraps a paragraph instead of breaking it where the docstring did** (#751). Typer
