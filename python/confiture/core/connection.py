@@ -1,7 +1,9 @@
 """Database connection management for CLI commands."""
 
+import re
 from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -11,7 +13,8 @@ from psycopg.conninfo import make_conninfo
 
 from confiture.config.environment import DatabaseConfig, SshTunnelConfig
 from confiture.core import ssh_tunnel as _core_ssh_tunnel
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, base_message
+from confiture.url_redaction import redact_url
 
 #: The driver's error base class. ``cli/`` reaches the database only through
 #: ``core``, so a command that must tell a database failure from any other catches
@@ -241,6 +244,63 @@ def create_connection(config: dict[str, Any] | Any) -> psycopg.Connection:
         ) from e
 
 
+#: What an environment may be called: a file name under ``db/environments/``.
+_ENVIRONMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+
+
+@dataclass(frozen=True)
+class Target:
+    """A database a command was pointed at: what opens it, and how a report names it.
+
+    ``opens`` is what :func:`open_connection` takes — the URL, an
+    :class:`~confiture.config.environment.Environment` a caller built, or a
+    config file's mapping — so an environment's ``ssh_tunnel`` is opened with it. ``label``
+    never carries a password. ``environment`` is the environment's name, when
+    the value named one.
+    """
+
+    opens: Any
+    label: str
+    environment: str | None = None
+
+
+def resolve_target(spec: str, *, flag: str, project_dir: Path | None = None) -> Target:
+    """The database a ``--from``/``--to``/``--against``/``--source`` value names.
+
+    A PostgreSQL URL is opened as given. A value ending in ``.yaml``/``.yml`` is
+    a config file. Anything else is an environment name, read from
+    ``db/environments/<name>.yaml``.
+
+    Raises:
+        ConfigurationError: ``CONFIG_003`` for a value that is none of these (it
+            is not echoed: a mistyped URL carries its password), ``CONFIG_004``
+            for a config file that does not exist, ``CONFIG_001`` for an
+            environment with no config file.
+    """
+    if spec.startswith(("postgresql://", "postgres://")):
+        return Target(spec, redact_url(spec))
+    if spec.endswith((".yaml", ".yml")):
+        return Target(load_config(Path(spec)), spec)
+    if not _ENVIRONMENT_NAME.fullmatch(spec):
+        raise ConfigurationError(
+            f"{flag} is neither a PostgreSQL URL, a config file nor an environment name",
+            error_code="CONFIG_003",
+            resolution_hint=(
+                "Pass postgresql://user@host/db, a .yaml config file, "
+                "or the name of a file in db/environments/"
+            ),
+        )
+    # Read for its connection only: a host that just connects has no schema tree,
+    # so the include directories ``Environment.load`` insists on are not asked for.
+    path = (project_dir or Path.cwd()) / "db" / "environments" / f"{spec}.yaml"
+    if not path.exists():
+        raise ConfigurationError(
+            f"Environment config not found: {path}\nExpected: db/environments/{spec}.yaml",
+            error_code="CONFIG_001",
+        )
+    return Target(load_config(path), spec, spec)
+
+
 ConnectionFactory = Callable[[Any], "psycopg.Connection[Any]"]
 """``config -> connection``; :func:`create_connection` is the default."""
 
@@ -320,3 +380,25 @@ def open_connection(
             yield conn
         finally:
             conn.close()
+
+
+@contextmanager
+def open_target(target: Target) -> Generator[psycopg.Connection[Any]]:
+    """Open *target* as :func:`open_connection` does; a failure to connect names it, masked.
+
+    Raises:
+        ConfigurationError: ``CONFIG_006`` naming ``target.label`` when the
+            database (or its tunnel) does not answer.
+    """
+    with ExitStack() as opened:
+        try:
+            connection = opened.enter_context(open_connection(target.opens))
+        except ConfigurationError as exc:
+            if exc.error_code != "CONFIG_006":
+                raise
+            raise ConfigurationError(
+                f"Could not connect to {target.label}: {base_message(exc)}",
+                error_code="CONFIG_006",
+                resolution_hint=exc.resolution_hint,
+            ) from exc
+        yield connection

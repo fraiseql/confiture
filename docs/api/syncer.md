@@ -33,6 +33,10 @@ with ProductionSyncer(source="production", target="local") as syncer:
         print(f"{table}: {stats['rows']} rows ({stats['duration']})")
 ```
 
+`source` and `target` each take an environment name, a `.yaml` config file or a PostgreSQL URL
+(read as `confiture sync --from/--to` reads them), an `Environment`, or a `DatabaseConfig`. An
+environment's `ssh_tunnel` is opened on `__enter__` and closed on `__exit__`.
+
 ---
 
 ## Class Reference

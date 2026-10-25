@@ -86,7 +86,8 @@ def force_drop_database(conn: psycopg.Connection, db_name: str) -> None:
 class TempDatabase:
     """Context manager that creates a throwaway PostgreSQL database.
 
-    On enter, creates a uniquely-named database and returns a connection URL.
+    On enter, creates a uniquely-named database, a copy of ``template0``, and
+    returns a connection URL.
     On exit, drops the database unconditionally (``DROP DATABASE … WITH (FORCE)``).
 
     The context manager connects to the ``postgres`` maintenance database —
@@ -120,7 +121,9 @@ class TempDatabase:
                 ),
             ) from exc
 
-        self._maintenance_conn.execute(t"CREATE DATABASE {self._db_name:i}")
+        # template0, never template1: whatever a server keeps in template1 (PostGIS, a
+        # table) is not something the build creates, and must not answer for it (#749).
+        self._maintenance_conn.execute(t"CREATE DATABASE {self._db_name:i} TEMPLATE template0")
         return _replace_dbname(self._server_url, self._db_name)
 
     def __exit__(

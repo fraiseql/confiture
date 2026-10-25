@@ -100,7 +100,7 @@ OnChecksumMismatchOpt = Annotated[
     str,
     typer.Option(
         "--on-checksum-mismatch",
-        help="Checksum mismatch behavior: fail, warn, ignore (default: fail)",
+        help="Checksum mismatch behavior: fail, warn, ignore",
     ),
 ]
 AutoDetectBaselineOpt = Annotated[
@@ -153,13 +153,13 @@ BatchedOpt = Annotated[
 ]
 BatchSizeOpt = Annotated[
     int,
-    typer.Option("--batch-size", help="Rows per batch when --batched is active (default: 10000)"),
+    typer.Option("--batch-size", help="Rows per batch when --batched is active"),
 ]
 BatchSleepOpt = Annotated[
     float,
     typer.Option(
         "--batch-sleep",
-        help="Seconds to sleep between batches to reduce lock pressure (default: 0.1)",
+        help="Seconds to sleep between batches to reduce lock pressure",
     ),
 ]
 YesOpt = Annotated[

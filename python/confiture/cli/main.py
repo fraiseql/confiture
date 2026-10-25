@@ -49,6 +49,7 @@ from confiture.cli.commands.migrate.validate import migrate_validate
 from confiture.cli.commands.migrate.verify import migrate_verify
 from confiture.cli.commands.schema import schema_app
 from confiture.cli.generate import generate_app
+from confiture.cli.help_text import UnwrappingGroup
 from confiture.cli.helpers import console
 from confiture.cli.plugins import load_plugins
 from confiture.cli.schema_to_schema import schema_to_schema_app
@@ -95,6 +96,7 @@ app = typer.Typer(
     help="PostgreSQL migrations, sweetly done 🍓",
     epilog=_EXIT_CODE_EPILOG,
     add_completion=False,
+    cls=UnwrappingGroup,
 )
 
 # Create migrate subcommand group

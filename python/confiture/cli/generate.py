@@ -82,7 +82,7 @@ def alloc_filename(
     schema_dir: Path = typer.Option(
         Path("db/schema"),
         "--schema-dir",
-        help="Root of the schema tree (default: db/schema).",
+        help="Root of the schema tree.",
     ),
     verb: str | None = typer.Option(
         None,
@@ -163,7 +163,7 @@ def scaffold_functions(
     schema_dir: Path = typer.Option(
         Path("db/schema"),
         "--schema-dir",
-        help="Root of the schema tree (default: db/schema).",
+        help="Root of the schema tree.",
     ),
     overrides_dir: Path | None = typer.Option(
         None,
@@ -306,7 +306,7 @@ def renumber_path(
     schema_dir: Path = typer.Option(
         Path("db/schema"),
         "--schema-dir",
-        help="Root of the schema tree (default: db/schema).",
+        help="Root of the schema tree.",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -329,7 +329,7 @@ def renumber_path(
         "order confiture build reads the tree in.",
     ),
     migrations_dir: Path = migrations_dir_option(
-        help="Migrations whose file reads pin a schema path (default: db/migrations)."
+        help="Migrations whose file reads pin a schema path."
     ),
     output_json: bool = typer.Option(
         False,

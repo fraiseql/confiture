@@ -31,7 +31,7 @@ def introspect(
     schema: str = typer.Option(
         "public",
         "--schema",
-        help="Schema to introspect (default: public)",
+        help="Schema to introspect",
     ),
     format_type: str = format_option("json", "yaml"),
     all_tables: bool = typer.Option(

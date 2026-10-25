@@ -89,6 +89,17 @@ class TestTempDatabase:
         assert "WITH (FORCE)" in str(drop_calls[0][0][0])
 
     @patch("confiture.core.temp_database.psycopg.connect")
+    def test_scratch_is_a_copy_of_template0(self, mock_connect: MagicMock) -> None:
+        """Not template1: a server's extras there (PostGIS, a table) are not the build's (#749)."""
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        with TempDatabase("postgresql://localhost/myapp"):
+            create = mock_conn.execute.call_args_list[0][0][0]
+
+        assert "".join(create.strings).endswith(" TEMPLATE template0")
+
+    @patch("confiture.core.temp_database.psycopg.connect")
     def test_drops_database_even_on_schema_error(self, mock_connect: MagicMock) -> None:
         mock_conn = MagicMock()
         mock_conn.closed = False
