@@ -147,7 +147,7 @@ def sync(
     anonymization_config: Path = typer.Option(
         _DEFAULT_ANON_CONFIG,
         "--anonymization-config",
-        help="Anonymization rules YAML (default: db/sync/anonymization.yaml).",
+        help="Anonymization rules YAML.",
     ),
     tables: str | None = typer.Option(
         None, "--tables", help="Comma-separated tables to include (default: all)."

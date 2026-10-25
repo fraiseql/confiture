@@ -55,7 +55,7 @@ def migrate_down(
         1,
         "--steps",
         "-n",
-        help="Number of migrations to rollback (default: 1)",
+        help="Number of migrations to rollback",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -79,7 +79,7 @@ def migrate_down(
     """Rollback previously applied migrations.
 
     PROCESS:
-      Rolls back the last N applied migrations (default: 1), reverting schema
+      Rolls back the last N applied migrations, reverting schema
       changes. Use --dry-run to analyze without executing. If any of them has
       no usable down (no .down.sql, or a Python down() that does nothing), it
       refuses before rolling anything back: exit 8 (ROLLBACK_600).
@@ -104,7 +104,7 @@ def migrate_down(
 
     OPTIONS:
       CORE: --steps
-        How many migrations to rollback (default: 1)
+        How many migrations to rollback
 
       DRY-RUN: --dry-run, --verbose, --format, --output
         Analyze rollback without executing, with detailed reports

@@ -27,7 +27,7 @@ def exit_code(report: SeedDriftReport) -> int:
 def drift(
     env: str = env_option(
         help="The seed-built environment: its schema tree, its seed files and its "
-        "seed_drift settings (default: local)"
+        "seed_drift settings"
     ),
     against: str | None = typer.Option(
         None,

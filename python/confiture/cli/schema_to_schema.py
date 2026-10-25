@@ -155,9 +155,7 @@ def s2s_setup(
 def s2s_analyze(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
-    schema: str = typer.Option(
-        "public", "--schema", help="The source's schema to size (default: public)."
-    ),
+    schema: str = typer.Option("public", "--schema", help="The source's schema to size."),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
     """Size the source's tables and recommend a per-table strategy (FDW vs COPY)."""
@@ -186,9 +184,7 @@ def s2s_migrate(
     mapping: Path = typer.Option(
         ..., "--mapping", help="Per-table column-mapping YAML (see the guide)."
     ),
-    strategy: str = typer.Option(
-        "fdw", "--strategy", help="Migration strategy: fdw or copy (default: fdw)."
-    ),
+    strategy: str = typer.Option("fdw", "--strategy", help="Migration strategy: fdw or copy."),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
     """Migrate every table declared in the column-mapping YAML."""
@@ -230,7 +226,7 @@ def s2s_migrate_table(
     mapping: str = typer.Option(
         ..., "--mapping", help="Inline column mapping 'src_col:dst_col,...'."
     ),
-    strategy: str = typer.Option("fdw", "--strategy", help="fdw or copy (default: fdw)."),
+    strategy: str = typer.Option("fdw", "--strategy", help="fdw or copy."),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
     """Migrate a single table with an inline column mapping."""
