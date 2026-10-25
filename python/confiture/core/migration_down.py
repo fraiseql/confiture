@@ -42,8 +42,12 @@ def has_usable_down(migration: Path) -> bool:
 
 
 def read_python_down(path: Path) -> DownBody:
-    """:func:`read_down` over the migration file at *path*."""
-    return read_down(path.read_text(encoding="utf-8"))
+    """:func:`read_down` over the migration file at *path*; text that is not UTF-8 is unknown."""
+    try:
+        source = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return DownBody.UNKNOWN
+    return read_down(source)
 
 
 def read_down(source: str) -> DownBody:

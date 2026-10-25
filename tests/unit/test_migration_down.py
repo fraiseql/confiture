@@ -176,3 +176,11 @@ def test_preflight_reversibility_is_the_usable_down(tmp_path: Path) -> None:
     }
     assert [m.version for m in result.irreversible] == ["001", "003"]
     assert [i.migration for i in result.issues if i.code == "PFLIGHT_MISSING_DOWN"] == ["001"]
+
+
+def test_a_file_that_is_not_utf8_is_unknown(tmp_path: Path) -> None:
+    from confiture.core.migration_down import read_python_down
+
+    path = tmp_path / "002_bad.py"
+    path.write_bytes(b'x = "\xff"\n')
+    assert read_python_down(path) is DownBody.UNKNOWN
