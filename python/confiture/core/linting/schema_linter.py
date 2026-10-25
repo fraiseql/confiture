@@ -7,7 +7,7 @@ and other best practices.
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
@@ -90,6 +90,36 @@ def _ask_scratch(
         search_path,
         connect_timeout=_LIVE_TIER_TIMEOUT_S,
     )
+
+
+class _OneScratch:
+    """One scratch database per lint run, asked by ``build_003`` and ``build_004`` together.
+
+    The first question asks about every name either rule may put (*names*) as
+    well as its own, so the second is answered by the same build, and so is its
+    failure.
+    """
+
+    def __init__(self, ask_once: Callable[[list[Any]], Any], names: list[Any]) -> None:
+        self._ask_once = ask_once
+        self._names = names
+        self._answer: Any = None
+        self._error: Exception | None = None
+
+    def __call__(self, candidates: list[Any]) -> Any:
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import ScratchUnavailable
+
+        if self._answer is None and self._error is None:
+            keys = {(ref.kind, ref.qualified) for _file, ref in self._names}
+            extra = [pair for pair in candidates if (pair[1].kind, pair[1].qualified) not in keys]
+            try:
+                self._answer = self._ask_once([*self._names, *extra])
+            except ScratchUnavailable as exc:
+                self._error = exc
+        if self._error is not None:
+            raise self._error
+        return self._answer
 
 
 def first_line(exc: Exception) -> str:
@@ -940,18 +970,68 @@ class SchemaLinter:
         from confiture.core.linting.unresolved import forward_references
 
         scans = [(parsed.label, read_references(parsed)) for parsed in self._files]
+        extensions, ask = self._extension_scratch(scans)
         if self.config.check_forward_references:
-            for violation in forward_references(
+            forward = forward_references(
                 scans,
                 self._file_objects or self._inventory.objects,
                 search_path=self.environment.lint.search_path,
                 two_pass=self.environment.build.two_pass,
-            ):
+                extensions=extensions,
+                ask=ask,
+            )
+            for violation in forward.findings:
                 report.add_violation(violation)
+            if forward.reason is not None:
+                report.degraded.append(
+                    RuleStatus(code="build_004", state="degraded", reason=forward.reason)
+                )
         if self.config.check_references:
-            self._check_unresolved(scans, report)
+            self._check_unresolved(scans, report, extensions, ask)
 
-    def _check_unresolved(self, scans: list[tuple[str | None, Any]], report: LintReport) -> None:
+    def _extension_scratch(self, scans: list[tuple[str | None, Any]]) -> tuple[list[Any], Any]:
+        """The extensions the build creates, and the one scratch tier both rules ask about them.
+
+        With a scratch server (``--server-url``, else the environment's
+        ``scratch_url``, never its ``database_url``: a lint does not create a
+        database on the server it lints against unless told to), one scratch
+        database holding only the build's schemas and extensions is built the
+        first time either rule asks, and asked about every name either may put.
+        """
+        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
+        from confiture.core.linting.extensions import built_extensions, extension_schemas
+
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import split_by_extension
+
+        uncreated = self._inventory.uncreated
+        extensions = built_extensions(self._files, uncreated)
+        server = self.config.server_url or self.environment.scratch_url
+        if server is None or not extensions:
+            return extensions, None
+        search_path = self.environment.lint.search_path
+        everything = [
+            (label, reference)
+            for label, scan in scans
+            for reference in [*scan.references, *scan.clauses]
+        ]
+        names, _elsewhere = split_by_extension(everything, extensions, search_path)
+        once = partial(
+            _ask_scratch,
+            server,
+            extensions,
+            partial(extension_schemas, extensions, self._files, uncreated),
+            search_path,
+        )
+        return extensions, _OneScratch(once, names)
+
+    def _check_unresolved(
+        self,
+        scans: list[tuple[str | None, Any]],
+        report: LintReport,
+        extensions: list[Any],
+        ask: Any,
+    ) -> None:
         """``build_003``: a body names an object no file in the build creates (#246)."""
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting.unresolved import reference_findings, unresolved_references
@@ -969,7 +1049,7 @@ class SchemaLinter:
             candidates = self._after_live_tier(candidates, report)
         tier = None
         if candidates:
-            tier = self._after_extension_tier(candidates, report)
+            tier = self._after_extension_tier(candidates, report, extensions, ask)
             candidates = tier.missing
             # The live tier's silence cost nothing when the scratch answered every name it left.
             if len(report.degraded) > live_at and not candidates and tier.reason is None:
@@ -984,39 +1064,23 @@ class SchemaLinter:
             report.add_violation(violation)
 
     def _after_extension_tier(
-        self, candidates: list[tuple[str | None, Any]], report: LintReport
+        self,
+        candidates: list[tuple[str | None, Any]],
+        report: LintReport,
+        extensions: list[Any],
+        ask: Any,
     ) -> Any:
         """*candidates* minus what an extension the build creates provides, or may.
 
-        With a scratch server (``--server-url``, else the environment's
-        ``scratch_url``, never its ``database_url``: a lint does not create a
-        database on the server it lints against unless told to), a scratch
-        database holding only the build's schemas and extensions answers. With
-        none, or when it cannot be built, a reference into a schema an
-        extension's written ``SCHEMA`` names is *unchecked*, not missing, and
-        one ``degraded`` entry says so.
+        *ask* is the scratch tier :meth:`_extension_scratch` built, or ``None``
+        with no scratch server. With none, or when it cannot be built, a
+        reference into a schema an extension's written ``SCHEMA`` names is
+        *unchecked*, not missing, and one ``degraded`` entry says so.
         """
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting import unresolved
 
-        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
-        from confiture.core.linting.extensions import built_extensions, extension_schemas
-
-        uncreated = self._inventory.uncreated
-        extensions = built_extensions(self._files, uncreated)
         search_path = self.environment.lint.search_path
-        server = self.config.server_url or self.environment.scratch_url
-        ask = (
-            None
-            if server is None or not extensions
-            else partial(
-                _ask_scratch,
-                server,
-                extensions,
-                partial(extension_schemas, extensions, self._files, uncreated),
-                search_path,
-            )
-        )
         tier = unresolved.extension_tier(candidates, extensions, search_path, ask)
         if tier.reason is not None:
             report.degraded.append(

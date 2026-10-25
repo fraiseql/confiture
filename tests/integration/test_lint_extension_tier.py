@@ -17,6 +17,9 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.builder import SchemaBuilder
+from confiture.core.psql_applier import apply_sql_via_psql
+from confiture.exceptions import SchemaError
 
 runner = CliRunner()
 
@@ -328,3 +331,56 @@ class TestEachFailureSaysWhatFailed:
         assert payload.get("degraded")
 
         assert all(password not in d["reason"] for d in payload.get("degraded", []))
+
+
+class TestBuild004OrdersAgainstTheExtension:
+    """``build_004`` reads the same scratch: what each ``CREATE EXTENSION`` creates, and where (#747)."""
+
+    _SQL_CALLER = (
+        "CREATE SCHEMA IF NOT EXISTS app;\n"
+        "CREATE FUNCTION app.path(p text) RETURNS text LANGUAGE sql\n"
+        "AS $$ SELECT public.text2ltree(p)::text $$;\n"
+    )
+
+    def _forward(self, server_url: str) -> dict:
+        result = runner.invoke(
+            app,
+            [
+                "lint",
+                "--select",
+                "build_004",
+                "--format",
+                "json",
+                "--fail-on",
+                "never",
+                "--server-url",
+                server_url,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    def test_a_call_before_the_extension_is_reported_and_postgresql_agrees(
+        self, in_tmp: Path, test_db_url: str, fresh_database: str
+    ) -> None:
+        _project(in_tmp, {"001_fn.sql": self._SQL_CALLER, "002_extensions.sql": _EXTENSIONS})
+
+        payload = self._forward(test_db_url)
+
+        [finding] = [i for i in payload["violations"]["items"] if i["rule_id"] == "build_004"]
+        assert "'public.text2ltree'" in finding["message"]
+        assert "(extension ltree)" in finding["message"]
+        bundle = SchemaBuilder(env="local", project_dir=in_tmp).build()
+        with pytest.raises(SchemaError, match=r"public\.text2ltree\(text\) does not exist"):
+            apply_sql_via_psql(fresh_database, bundle)
+
+    def test_after_the_extension_it_is_clean_and_postgresql_agrees(
+        self, in_tmp: Path, test_db_url: str, fresh_database: str
+    ) -> None:
+        _project(in_tmp, {"001_extensions.sql": _EXTENSIONS, "002_fn.sql": self._SQL_CALLER})
+
+        payload = self._forward(test_db_url)
+
+        assert [i for i in payload["violations"]["items"] if i["rule_id"] == "build_004"] == []
+        assert [d for d in payload.get("degraded", []) if d["code"] == "build_004"] == []
+        apply_sql_via_psql(fresh_database, SchemaBuilder(env="local", project_dir=in_tmp).build())
