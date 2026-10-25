@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.40.0] - 2026-10-25
+
 ### Added
 
 - **`migrate preflight` says what `migrate down` cannot undo** (#754). Both preflight payloads
