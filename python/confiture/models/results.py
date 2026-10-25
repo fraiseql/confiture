@@ -978,6 +978,18 @@ class PreflightResult:
             for m in self.migrations
             if m.destructive
         )
+        out.extend(
+            PreflightIssue.of(
+                "PFLIGHT_IRREVERSIBLE",
+                f"Migration {m.version} ({m.name}) declares that migrate down does not undo it: "
+                f"{'; '.join(m.irreversible_reasons)}.",
+                migration=m.version,
+                file=m.filename,
+                details={"irreversible": list(m.irreversible_reasons)},
+            )
+            for m in self.migrations
+            if m.irreversible_reasons
+        )
         for version, files in self.duplicate_versions.items():
             out.append(
                 PreflightIssue.of(
@@ -1047,6 +1059,11 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
     "PFLIGHT_DESTRUCTIVE_GATED": (
         "warning",
         "Review the migration, then run migrate up --allow-destructive to apply it.",
+    ),
+    "PFLIGHT_IRREVERSIBLE": (
+        "info",
+        "Plan the recovery without migrate down: the migration's -- confiture:irreversible "
+        "reasons say what its down does not restore.",
     ),
     "PFLIGHT_NON_TRANSACTIONAL": (
         "warning",

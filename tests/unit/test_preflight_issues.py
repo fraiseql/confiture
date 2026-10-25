@@ -93,3 +93,46 @@ def test_issue_of_pulls_defaults() -> None:
     issue = PreflightIssue.of("PFLIGHT_MISSING_DOWN", "msg", migration="v1")
     assert issue.severity == "error"
     assert issue.actionable == PFLIGHT_CODES["PFLIGHT_MISSING_DOWN"][1]
+
+
+def _irreversible(issues: list[PreflightIssue]) -> list[PreflightIssue]:
+    return [i for i in issues if i.code == "PFLIGHT_IRREVERSIBLE"]
+
+
+def test_irreversible_marker_reaches_the_report_ungated(tmp_path: Path) -> None:
+    # A migration a down exists for, that declares the down does not restore its data (#754).
+    _mig(
+        tmp_path,
+        "002",
+        "overwrite_v",
+        body="-- confiture:irreversible overwrites t.v\nUPDATE t SET v = 0;",
+    )
+    issues = run_preflight(tmp_path).issues
+    (marked,) = _irreversible(issues)
+    assert marked.severity == "info"
+    assert marked.migration == "002"
+    assert marked.file == "002_overwrite_v.up.sql"
+    assert marked.details == {"irreversible": ["overwrites t.v"]}
+    assert not [i for i in issues if i.code == "PFLIGHT_DESTRUCTIVE_GATED"]
+
+
+def test_irreversible_marker_is_reported_beside_the_destructive_gate(tmp_path: Path) -> None:
+    _mig(
+        tmp_path,
+        "002",
+        "drop_c",
+        body=(
+            "-- confiture:destructive\n-- confiture:irreversible data\nALTER TABLE t DROP COLUMN c;"
+        ),
+    )
+    issues = run_preflight(tmp_path).issues
+    assert [i.details for i in _irreversible(issues)] == [{"irreversible": ["data"]}]
+    (gated,) = [i for i in issues if i.code == "PFLIGHT_DESTRUCTIVE_GATED"]
+    assert gated.details == {"irreversible": ["data"]}
+
+
+def test_irreversible_marker_moves_no_exit_code(tmp_path: Path) -> None:
+    _mig(tmp_path, "002", "m", body="-- confiture:irreversible why\nUPDATE t SET v = 0;")
+    report = run_preflight(tmp_path).to_report_dict(strict=True)
+    assert report["ok"] is True
+    assert report["summary"]["info"] == 1
