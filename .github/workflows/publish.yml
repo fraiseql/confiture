@@ -249,10 +249,12 @@ jobs:
         fetch-depth: 0
 
     - name: Set up Python
+      id: python
       uses: actions/setup-python@v6
       with:
-        # Every interpreter a wheel is built for: `maturin --find-interpreter`
-        # builds one wheel per interpreter it finds, and finds only these (#586).
+        # The interpreter macOS and Windows build their wheel for, named to maturin
+        # by path: `--find-interpreter` also finds the runner's own CPythons and
+        # shipped a cp315 wheel nobody declared.
         python-version: |
           3.14
 
@@ -277,7 +279,7 @@ jobs:
       with:
         maturin-version: "1.9.6"
         command: build
-        args: --release --out dist --find-interpreter
+        args: --release --out dist --interpreter ${{ steps.python.outputs.python-path }}
 
     - name: Upload wheels
       uses: actions/upload-artifact@v7
@@ -326,18 +328,28 @@ jobs:
           fi
         done
 
-    - name: Every platform has a wheel for every supported CPython (#586)
+    - name: The wheels are exactly the declared CPythons on every platform (#586)
+      env:
+        # pyproject.toml's `Programming Language :: Python :: 3.x` classifiers.
+        DECLARED: cp314
       run: |
-        missing=0
-        for py in cp314; do
+        status=0
+        for whl in dist/*.whl; do
+          tag="$(basename "$whl" .whl | cut -d- -f3)"
+          case " $DECLARED " in
+            *" $tag "*) ;;
+            *) echo "❌ $(basename "$whl") is for $tag, which is not declared"; status=1 ;;
+          esac
+        done
+        for py in $DECLARED; do
           for platform in manylinux macosx win; do
             if ! ls dist/*-"$py"-"$py"-*"$platform"*.whl >/dev/null 2>&1; then
               echo "❌ no $py wheel for $platform"
-              missing=1
+              status=1
             fi
           done
         done
-        exit $missing
+        exit $status
 
     - name: Set up uv
       uses: astral-sh/setup-uv@v7
