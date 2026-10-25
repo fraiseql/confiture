@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`build_004` orders a reference against the `CREATE EXTENSION` that creates it** (#747). A
+  `LANGUAGE sql` body, a default or a `CHECK` calling `public.text2ltree` in a file before the
+  file running `CREATE EXTENSION ltree SCHEMA public` fails the build with "function
+  public.text2ltree(text) does not exist", and `confiture lint` said nothing: the build's
+  inventory holds no extension routines. With a scratch server the scratch database
+  `build_003`'s extension tier builds is now asked after each `CREATE EXTENSION`, so each name is
+  placed at the statement that creates it, and the finding names the extension. One scratch
+  database answers both rules. Without a scratch server, a reference made before an extension
+  whose written `SCHEMA` it could mean is not ordered, and a `degraded` entry for `build_004` says
+  how many and which extension, rather than a guessed finding.
+
 ### Changed
 
 - **A file under a seed directory that only creates schema objects is schema** (#748). A file is a

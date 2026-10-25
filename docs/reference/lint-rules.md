@@ -676,6 +676,17 @@ sooner. An object no file creates is `build_003`'s, not this rule's. A statement
 naming what it creates itself (a table's foreign key to itself, a recursive
 `LANGUAGE sql` function) is not a finding: PostgreSQL accepts both.
 
+An extension the build creates counts as creating what it installs, at its
+`CREATE EXTENSION` statement (#747): a `LANGUAGE sql` body calling
+`public.text2ltree` in a file before `CREATE EXTENSION ltree SCHEMA public` is a
+finding, which names the extension. Only a server knows what an extension
+installs, so this needs a scratch server (`--server-url`, or `scratch_url` in
+the environment), the one `build_003`'s extension tier builds: a single scratch
+database is created for both rules and asked after each `CREATE EXTENSION`.
+Without one, a reference made before an extension whose written `SCHEMA` it
+could mean is not ordered, and one `degraded` entry for `build_004` says how
+many and which extension.
+
 It is an **error**, on by default, with no directive to silence it: every row
 of the table above was applied to an empty PostgreSQL in both orders
 (`tests/integration/test_forward_reference_oracle.py`), and the rule reports
