@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-10-25
+
 ### Added
 
 - **`build_004` orders a reference against the `CREATE EXTENSION` that creates it** (#747). A
