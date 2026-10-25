@@ -565,6 +565,7 @@ confiture/
 │   │   ├── error_json.py         # Structured error envelope + JSON-aware CLI error boundary (issue #145)
 │   │   ├── generate.py           # CLI commands for the `confiture generate` subcommand group
 │   │   ├── git_validation.py     # CLI helpers for git-aware schema validation
+│   │   ├── help_text.py          # A command's help as paragraphs Rich can re-wrap: a sentence's line brea…
 │   │   ├── helpers.py            # Shared helpers for Confiture CLI commands
 │   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
 │   │   ├── lint_formatter.py     # Output formatting for linting results

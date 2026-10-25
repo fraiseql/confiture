@@ -35,6 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     environment by name).
   - a database that does not answer is `CONFIG_006` naming it as a report does, from all four
     (`schema-to-schema` did; `sync` and `seed drift` did not say which side).
+- **A scratch database is a copy of `template0`, not `template1`** (#749). Every database
+  confiture creates to build a tree into and read back — `drift`/`migrate diff` with a scratch
+  server, `lint`'s extension tier and `body` rule, `seed drift --build`, `migrate squash` — was a
+  copy of the server's `template1`, so whatever a server keeps there (a PostGIS image ships PostGIS
+  in it) answered for the build: `build_003` could resolve `public.st_makepoint` for a tree that
+  never creates it, and a materialised side could hold objects the tree does not declare. A tree
+  that relied on `template1`'s extensions without its own `CREATE EXTENSION` now fails its scratch
+  build, as it fails on a fresh server. `test-db` (your own test databases) is unchanged.
+
+### Fixed
+
+- **`--help` re-wraps a paragraph instead of breaking it where the docstring did** (#751). Typer
+  keeps every line break of a command's docstring after its first paragraph, and Rich wrapped
+  inside each source line, so on a terminal narrower than the source a sentence broke twice
+  ("…Every table" / "the seed" / "tree writes…"). This was every command, not only `seed drift`.
+  The lines of a sentence are now joined once, when the command tree is built; headings, list
+  items, examples, column-aligned lines and `\b` blocks keep their layout.
+- **An option prints its default once.** 140 options wrote `(default: x)` in their help beside
+  Typer's own `[default: x]`. The hand-written copy is gone wherever Typer shows the default;
+  `--project-dir` keeps "(default: current directory)" and no longer also shows `[default: .]`.
 
 ## [1.40.0] - 2026-10-25
 
