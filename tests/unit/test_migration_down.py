@@ -136,3 +136,43 @@ def test_the_reader_never_imports_or_executes() -> None:
     }
     assert not calls & {"eval", "exec", "compile", "__import__"}
     assert not imported & {"importlib", "runpy", "subprocess"}
+
+
+def test_a_usable_down_is_a_down_sql_or_a_python_down_that_is_not_empty(tmp_path: Path) -> None:
+    from confiture.core.migration_down import has_usable_down
+
+    (tmp_path / "001_a.up.sql").write_text("CREATE TABLE a (id int);")
+    (tmp_path / "001_a.down.sql").write_text("DROP TABLE a;")
+    (tmp_path / "002_b.up.sql").write_text("CREATE TABLE b (id int);")
+    (tmp_path / "003_c.py").write_text(_class("def down(self):\n    pass"))
+    (tmp_path / "004_d.py").write_text(_class("def down(self):\n    self.execute('SELECT 1')"))
+    (tmp_path / "005_e.py").write_text("from base import Base\n\n\nclass E(Base):\n    pass\n")
+
+    assert {
+        p.name: has_usable_down(p)
+        for p in sorted(tmp_path.glob("*[!n].*"))
+        if ".down." not in p.name
+    } == {
+        "001_a.up.sql": True,
+        "002_b.up.sql": False,
+        "003_c.py": False,
+        "004_d.py": True,
+        "005_e.py": True,  # unknown is never refused
+    }
+
+
+def test_preflight_reversibility_is_the_usable_down(tmp_path: Path) -> None:
+    from confiture.core.migration_down import has_usable_down
+    from confiture.core.preflight import run_preflight
+
+    (tmp_path / "001_a.up.sql").write_text("CREATE TABLE a (id int);")
+    (tmp_path / "003_c.py").write_text(_class("def down(self):\n    pass"))
+    (tmp_path / "004_d.py").write_text(_class("def down(self):\n    self.execute('SELECT 1')"))
+    result = run_preflight(tmp_path)
+
+    files = {"001": "001_a.up.sql", "003": "003_c.py", "004": "004_d.py"}
+    assert {m.version: m.reversible for m in result.migrations} == {
+        v: has_usable_down(tmp_path / f) for v, f in files.items()
+    }
+    assert [m.version for m in result.irreversible] == ["001", "003"]
+    assert [i.migration for i in result.issues if i.code == "PFLIGHT_MISSING_DOWN"] == ["001"]

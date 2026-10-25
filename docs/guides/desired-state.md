@@ -135,7 +135,8 @@ constraint is dropped by its name. A type change PostgreSQL has no assignment ca
 cast fails the migration. Rows never
 come back, nor a sequence's position: the up statement that loses them is preceded by
 `-- confiture:irreversible data`, and
-`migrate preflight` repeats the reason under the gate issue's `details.irreversible`. A change the
+`migrate preflight` reports the reason as `PFLIGHT_IRREVERSIBLE`'s `details.irreversible` (and
+under the gate issue's, when the file is gated). A change the
 generator has no rollback for is written as `-- confiture:irreversible no rollback derived for …` in
 the down file — and its up statement is tiered `irreversible`, whatever its DDL alone would say.
 Nothing is commented out silently.

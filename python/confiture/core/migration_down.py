@@ -29,6 +29,18 @@ class DownBody(Enum):
     UNKNOWN = "unknown"
 
 
+def has_usable_down(migration: Path) -> bool:
+    """Whether ``migrate down`` has a down to run for *migration*.
+
+    An ``.up.sql`` has one when its ``.down.sql`` twin exists; a ``.py`` has one unless
+    its ``down()`` is :attr:`DownBody.EMPTY` — an :attr:`DownBody.UNKNOWN` one is never
+    refused.
+    """
+    if migration.name.endswith(".up.sql"):
+        return migration.with_name(migration.name.removesuffix(".up.sql") + ".down.sql").exists()
+    return read_python_down(migration) is not DownBody.EMPTY
+
+
 def read_python_down(path: Path) -> DownBody:
     """:func:`read_down` over the migration file at *path*."""
     return read_down(path.read_text(encoding="utf-8"))

@@ -287,8 +287,9 @@ def _before_apply(session: SessionHost, plan: _Plan, options: UpOptions) -> Migr
                 checksums_verified=plan.checksums_verified,
                 dry_run=False,
                 errors=[
-                    f"Irreversible migrations detected (missing .down.sql): {names}. "
-                    f"Use require_reversible=False or add .down.sql files."
+                    f"Irreversible migrations detected (no .down.sql, or a down() that "
+                    f"does nothing): {names}. Use require_reversible=False, or give each "
+                    f"one a down."
                 ],
                 skipped=plan.skipped_versions,
             )

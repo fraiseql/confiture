@@ -839,8 +839,8 @@ class MigrationPreflightInfo:
 
     @property
     def reversible(self) -> bool:
-        """True if this migration has a rollback file."""
-        return self.has_down
+        """True if ``migrate down`` has a down to run: a rollback file, or a ``down()`` that is not empty."""
+        return self.has_down and self.python_down != "empty"
 
     @property
     def fully_transactional(self) -> bool:
@@ -876,7 +876,7 @@ class PreflightResult:
 
     @property
     def all_reversible(self) -> bool:
-        """True if every migration has a rollback file."""
+        """True if ``migrate down`` has a down to run for every migration."""
         return all(m.reversible for m in self.migrations)
 
     @property
@@ -896,7 +896,7 @@ class PreflightResult:
 
     @property
     def irreversible(self) -> list[MigrationPreflightInfo]:
-        """Migrations missing a rollback file."""
+        """Migrations ``migrate down`` has no down to run for."""
         return [m for m in self.migrations if not m.reversible]
 
     @property
@@ -955,7 +955,8 @@ class PreflightResult:
                 migration=m.version,
                 file=m.filename,
             )
-            for m in self.irreversible
+            for m in self.migrations
+            if not m.has_down
         )
         out.extend(
             PreflightIssue.of(
