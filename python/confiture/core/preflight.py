@@ -26,6 +26,7 @@ from confiture.core.destructive import irreversible_reasons, is_gated
 from confiture.core.expand_contract import StagedPlan, plannable
 from confiture.core.ledger import find_ledger_relations
 from confiture.core.migration_analyzer import MigrationAnalyzer
+from confiture.core.migration_down import read_python_down
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
 from confiture.core.sql_lexer import parse_file
 from confiture.exceptions import ConfigurationError
@@ -240,13 +241,14 @@ def run_preflight(
         if versions is not None and version not in versions:
             continue
         _, name = parse_migration_filename(py_file.name)
-        # Python migrations define down() in-class — assumed reversible
+        # A Python migration defines down() in-class; what it holds is read, never assumed
         infos.append(
             MigrationPreflightInfo(
                 version=version,
                 name=name,
                 has_down=True,
                 filename=py_file.name,
+                python_down=read_python_down(py_file).value,
             )
         )
 

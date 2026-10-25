@@ -136,3 +136,50 @@ def test_irreversible_marker_moves_no_exit_code(tmp_path: Path) -> None:
     report = run_preflight(tmp_path).to_report_dict(strict=True)
     assert report["ok"] is True
     assert report["summary"]["info"] == 1
+
+
+def _py(d: Path, version: str, name: str, down: str) -> None:
+    (d / f"{version}_{name}.py").write_text(
+        "from confiture.models.migration import Migration\n\n\n"
+        f"class M(Migration):\n    version = {version!r}\n    name = {name!r}\n\n"
+        "    def up(self):\n        self.execute('ALTER TABLE t ADD COLUMN u int')\n\n"
+        f"    def down(self):\n        {down}\n"
+    )
+
+
+def _of(issues: list[PreflightIssue], code: str) -> list[PreflightIssue]:
+    return [i for i in issues if i.code == code]
+
+
+def test_a_python_down_that_is_pass_is_reported_empty(tmp_path: Path) -> None:
+    _py(tmp_path, "002", "add_u", "pass")
+    result = run_preflight(tmp_path)
+    (empty,) = _of(result.issues, "PFLIGHT_DOWN_EMPTY")
+    assert empty.severity == "warning"
+    assert empty.migration == "002"
+    assert empty.file == "002_add_u.py"
+    assert not _of(result.issues, "PFLIGHT_MISSING_DOWN")
+    assert not _of(result.issues, "PFLIGHT_DOWN_UNVERIFIED")
+    assert result.migrations[0].has_down is True
+
+
+def test_a_python_down_with_statements_is_unverified(tmp_path: Path) -> None:
+    _py(tmp_path, "002", "add_u", "self.execute('ALTER TABLE t DROP COLUMN u')")
+    issues = run_preflight(tmp_path).issues
+    (unverified,) = _of(issues, "PFLIGHT_DOWN_UNVERIFIED")
+    assert unverified.severity == "info"
+    assert unverified.migration == "002"
+    assert unverified.details == {"down": "present"}
+    assert not _of(issues, "PFLIGHT_DOWN_EMPTY")
+
+
+def test_a_python_down_confiture_cannot_place_is_unverified(tmp_path: Path) -> None:
+    (tmp_path / "002_add_u.py").write_text("from base import Base\n\n\nclass M(Base):\n    pass\n")
+    (unverified,) = _of(run_preflight(tmp_path).issues, "PFLIGHT_DOWN_UNVERIFIED")
+    assert unverified.details == {"down": "unknown"}
+
+
+def test_a_sql_migration_has_no_python_down_finding(tmp_path: Path) -> None:
+    _mig(tmp_path, "001", "a")
+    issues = run_preflight(tmp_path).issues
+    assert not _of(issues, "PFLIGHT_DOWN_EMPTY") + _of(issues, "PFLIGHT_DOWN_UNVERIFIED")

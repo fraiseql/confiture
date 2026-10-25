@@ -168,6 +168,8 @@ warnings → 0 unless `--strict`.
 |------|------------------|---------|
 | `PFLIGHT_UNPARSEABLE` | error | PostgreSQL's parser rejects the migration, so nothing about it can be certified (forces `window_safe: false`) |
 | `PFLIGHT_MISSING_DOWN` | error | Migration has no matching `.down.sql` (not reversible) |
+| `PFLIGHT_DOWN_EMPTY` | warning | A `.py` migration's `down()` does nothing (absent, or only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError`), read from its source and never imported |
+| `PFLIGHT_DOWN_UNVERIFIED` | info | A `.py` migration's `down()` is not read: whether `migrate down` undoes it is not checked (`details.down`: `present` — it has statements; `unknown` — another base class may supply it) |
 | `PFLIGHT_DESTRUCTIVE_GATED` | warning | Migration carries `-- confiture:destructive`: `migrate up` refuses it without `--allow-destructive` |
 | `PFLIGHT_IRREVERSIBLE` | info | Migration declares `-- confiture:irreversible <reason>`: `migrate down` runs but does not restore what the reasons name (`details.irreversible`) |
 | `PFLIGHT_NON_TRANSACTIONAL` | warning | Migration contains a statement that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) |

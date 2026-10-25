@@ -86,3 +86,42 @@ def test_an_irreversible_marker_reaches_the_wire_without_the_gate(
     assert marked["severity"] == "info"
     assert marked["details"] == {"irreversible": ["overwrites t.v"]}
     assert not _codes(payload, "PFLIGHT_DESTRUCTIVE_GATED")
+
+
+def _python(migrations: Path, down: str) -> None:
+    (migrations / "002_add_u.py").write_text(
+        "from confiture.models.migration import Migration\n\n\n"
+        "class AddU(Migration):\n    version = '002'\n    name = 'add_u'\n\n"
+        "    def up(self):\n        self.execute('ALTER TABLE t ADD COLUMN u int')\n\n"
+        f"    def down(self):\n        {down}\n"
+    )
+
+
+@pytest.mark.parametrize("against", [False, True], ids=["static", "against"])
+def test_a_python_down_that_is_pass_reaches_the_wire(
+    migrations: Path, applied: str, against: bool
+) -> None:
+    _python(migrations, "pass")
+
+    code, payload = _preflight(migrations, applied, *(["--against", applied] if against else []))
+
+    assert code == 0, payload
+    (empty,) = _codes(payload, "PFLIGHT_DOWN_EMPTY")
+    assert (empty["migration"], empty["file"], empty["severity"]) == (
+        "002",
+        "002_add_u.py",
+        "warning",
+    )
+    assert not _codes(payload, "PFLIGHT_MISSING_DOWN")
+    assert [i["migration"] for i in _codes(payload, "PFLIGHT_REPLICA_UNCLASSIFIED")] == ["002"]
+
+
+def test_a_python_down_with_statements_is_unverified(migrations: Path, applied: str) -> None:
+    _python(migrations, "self.execute('ALTER TABLE t DROP COLUMN u')")
+
+    code, payload = _preflight(migrations, applied, "--against", applied)
+
+    assert code == 0, payload
+    (unverified,) = _codes(payload, "PFLIGHT_DOWN_UNVERIFIED")
+    assert unverified["migration"] == "002"
+    assert unverified["details"] == {"down": "present"}

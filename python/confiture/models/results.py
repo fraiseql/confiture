@@ -834,6 +834,8 @@ class MigrationPreflightInfo:
         False  # every statement has an expand/contract plan (migrate up --online)
     )
     online_stages: list[dict[str, Any]] = field(default_factory=list)
+    # A .py migration's down() as its source reads (core.migration_down.DownBody); None for SQL
+    python_down: Literal["empty", "present", "unknown"] | None = None
 
     @property
     def reversible(self) -> bool:
@@ -990,6 +992,7 @@ class PreflightResult:
             for m in self.migrations
             if m.irreversible_reasons
         )
+        out.extend(self._python_down_issues())
         for version, files in self.duplicate_versions.items():
             out.append(
                 PreflightIssue.of(
@@ -1008,6 +1011,33 @@ class PreflightResult:
             )
             for version in self.checksum_mismatches
         )
+        return out
+
+    def _python_down_issues(self) -> list[PreflightIssue]:
+        """A .py migration's down() is never assumed: empty, or not verified (#754)."""
+        out: list[PreflightIssue] = []
+        for m in self.migrations:
+            if m.python_down == "empty":
+                out.append(
+                    PreflightIssue.of(
+                        "PFLIGHT_DOWN_EMPTY",
+                        f"Migration {m.version} ({m.name}) has a down() that does nothing: "
+                        "migrate down would record a rollback and undo nothing.",
+                        migration=m.version,
+                        file=m.filename,
+                    )
+                )
+            elif m.python_down is not None:
+                out.append(
+                    PreflightIssue.of(
+                        "PFLIGHT_DOWN_UNVERIFIED",
+                        f"Migration {m.version} ({m.name}) is Python: confiture does not read "
+                        "what its down() does, so whether migrate down undoes it is not checked.",
+                        migration=m.version,
+                        file=m.filename,
+                        details={"down": m.python_down},
+                    )
+                )
         return out
 
     @property
@@ -1064,6 +1094,16 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
         "info",
         "Plan the recovery without migrate down: the migration's -- confiture:irreversible "
         "reasons say what its down does not restore.",
+    ),
+    "PFLIGHT_DOWN_EMPTY": (
+        "warning",
+        "Write the down() that undoes the migration: migrate down, migrate down-to and "
+        "migrate up --require-reversible refuse one that does nothing.",
+    ),
+    "PFLIGHT_DOWN_UNVERIFIED": (
+        "info",
+        "Review the Python migration's down() by hand, or express the change as .up.sql + "
+        ".down.sql so confiture can read both.",
     ),
     "PFLIGHT_NON_TRANSACTIONAL": (
         "warning",
