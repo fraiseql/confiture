@@ -21,7 +21,7 @@ def migrate_introspect(
     snapshots_dir: Path = typer.Option(
         Path("db/schema_history"),
         "--snapshots-dir",
-        help="Schema history snapshots directory (default: db/schema_history)",
+        help="Schema history snapshots directory",
     ),
     format_output: str = format_option("text", "json"),
 ) -> None:

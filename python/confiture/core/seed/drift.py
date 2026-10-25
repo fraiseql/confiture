@@ -11,7 +11,6 @@ tree's seed files and reads the rows.
 import hashlib
 import hmac
 import os
-import re
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -25,7 +24,7 @@ from psycopg import sql as pgsql
 from confiture.config.environment import Environment, SeedDriftSettings
 from confiture.core import live_catalog
 from confiture.core.builder import SchemaBuilder
-from confiture.core.connection import open_connection
+from confiture.core.connection import open_connection, open_target, resolve_target
 from confiture.core.linting.inventory import label_for
 from confiture.core.linting.schema_linter import first_line
 from confiture.core.linting.seed_secrets import secret_kind
@@ -50,7 +49,6 @@ from confiture.sql_text import relation
 from confiture.url_redaction import redact_url
 
 #: What an environment's name may be: the stem of a file in ``db/environments/``.
-_ENVIRONMENT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 
 #: A row's key: each key field as PostgreSQL renders it as text.
 Key = tuple[str | None, ...]
@@ -501,29 +499,6 @@ def compare(
     )
 
 
-def against_target(spec: str, project_dir: Path | None = None) -> tuple[Any, str, str | None]:
-    """``(what to open, how a report names it, the environment name)`` for a ``--against`` value.
-
-    A URL is opened as given and named masked. Anything else is an environment
-    name, opened as its :class:`Environment`, so its ``ssh_tunnel`` is honoured.
-
-    Raises:
-        ConfigurationError: ``CONFIG_001`` for an environment with no config file.
-    """
-    if spec.startswith(("postgres://", "postgresql://")):
-        return spec, redact_url(spec), None
-    if not _ENVIRONMENT_NAME.fullmatch(spec):
-        # Not echoed: a mistyped URL carries its password.
-        raise ConfigurationError(
-            "--against is neither a PostgreSQL URL nor an environment name",
-            error_code="CONFIG_003",
-            resolution_hint=(
-                "Pass postgresql://user@host/db, or the name of a file in db/environments/"
-            ),
-        )
-    return Environment.load(spec, project_dir=project_dir), spec, spec
-
-
 def _resolve(conn: Any, read: SchemaRead, settings: SeedDriftSettings) -> None:
     """Run the tree's prep-seed resolvers, parents first, as level 5 runs them.
 
@@ -623,11 +598,11 @@ def run(
             error_code="CONFIG_001",
             resolution_hint="Pass --scratch-url, or set scratch_url in the environment",
         )
-    target, label, against_env = against_target(against, project_dir)
+    live = resolve_target(against, flag="--against", project_dir=project_dir)
     if build:
         _probe_scratch(server or "")
     side: Literal["database", "built"] = "built" if build else "database"
-    with open_connection(target) as live_conn:
+    with open_target(live) as live_conn:
         try:
             seed_cm = (
                 built_side(server or "", env, project_dir, files, read, settings)
@@ -641,15 +616,15 @@ def run(
                     live_conn,
                     settings,
                     seed_side=side,
-                    against=label,
-                    against_env=against_env,
+                    against=live.label,
+                    against_env=live.environment,
                 )
         except (SchemaError, SeedError) as exc:
             if not build:
                 raise
             return SeedDriftReport(
                 seed_side=side,
-                against=label,
+                against=live.label,
                 scope=scope,
                 not_compared=(
                     *scope.not_compared,

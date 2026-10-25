@@ -21,8 +21,13 @@ CONN = ["--source", "old_prod", "--target", "new_prod"]
 
 
 def _fake_migrator() -> MagicMock:
-    """A migrator whose every operation reports a clean, successful run."""
+    """A migrator whose every operation reports a clean, successful run.
+
+    ``_migrator`` is a context manager; this one hands itself out.
+    """
     m = MagicMock()
+    m.__enter__.return_value = m
+    m.__exit__.return_value = False
     m.analyze_tables.return_value = {
         "users": {"recommended_strategy": "fdw", "row_count": 1_000},
         "events": {"recommended_strategy": "copy", "row_count": 50_000_000},

@@ -31,7 +31,6 @@ from confiture.core.linting.duplicates import duplicate_violations, find_duplica
 from confiture.core.progress import ProgressManager
 from confiture.core.schema_artifact import build_schema_artifact, default_artifact_path
 from confiture.core.seed.applier import apply_profile_filter
-from confiture.core.seed.paths import is_seed_path
 from confiture.core.seed.sequencer import apply_seed_files
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
@@ -289,6 +288,7 @@ def build(
             out,
             env=env,
             output=output,
+            schema_only=schema_only,
             apply_sequential=apply_sequential,
             duplicate_gate=lambda files: _duplicate_gate(
                 files,
@@ -476,12 +476,7 @@ def _build_settings(
         ``(output, seed_profile_obj, apply_sequential)``.
     """
     if schema_only:
-        builder.include_dirs = [d for d in builder.include_dirs if not is_seed_path(d)]
-        builder.include_configs = [
-            cfg for cfg in builder.include_configs if not is_seed_path(cfg["path"])
-        ]
-        if builder.include_dirs:
-            builder.base_dir = builder.find_common_parent(builder.include_dirs)
+        builder.leave_out_seed_entries()
     if output is None:
         output_dir = project_dir / "db" / "generated"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -503,6 +498,7 @@ def _run_build(
     *,
     env: str,
     output: Path,
+    schema_only: bool,
     apply_sequential: bool,
     duplicate_gate: Callable[[list[Path]], Any],
 ) -> tuple[int, Any, list[BuildWarning]]:
@@ -510,14 +506,15 @@ def _run_build(
 
     Returns:
         ``(schema_file_count, duplicates, warnings)``; the seed files are left
-        to the sequential applier when ``apply_sequential``.
+        out under ``--schema-only``, and to the sequential applier when
+        ``apply_sequential``.
     """
     out.print(t"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
     with ProgressManager() as progress:
         sql_files = builder.find_sql_files()
         duplicates, warnings = duplicate_gate(sql_files)
-        if apply_sequential:
+        if schema_only or apply_sequential:
             builder.build(output_path=output, schema_only=True, progress=progress)
             schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
         else:

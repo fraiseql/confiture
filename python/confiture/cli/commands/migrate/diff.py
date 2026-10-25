@@ -69,9 +69,7 @@ def migrate_diff(
         ),
     ),
     to_env: str | None = typer.Option(None, "--to-env", help=_TO_ENV_HELP),
-    config: Path = config_option(
-        help="Environment config, read for `--from db` (default: db/environments/local.yaml)"
-    ),
+    config: Path = config_option(help="Environment config, read for `--from db`"),
     scratch_url: str | None = scratch_url_option(),
     generate: bool = typer.Option(
         False,
