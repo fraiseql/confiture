@@ -183,3 +183,28 @@ def test_a_sql_migration_has_no_python_down_finding(tmp_path: Path) -> None:
     _mig(tmp_path, "001", "a")
     issues = run_preflight(tmp_path).issues
     assert not _of(issues, "PFLIGHT_DOWN_EMPTY") + _of(issues, "PFLIGHT_DOWN_UNVERIFIED")
+
+
+def test_reversible_is_false_on_each_code_that_says_down_cannot_undo() -> None:
+    from confiture.core.preflight import IRREVERSIBLE_CODES, is_reversible
+
+    assert is_reversible([], ())
+    assert is_reversible([PreflightIssue.of("PFLIGHT_REPLICA_DROP_COLUMN", "m")], ())
+    for code in IRREVERSIBLE_CODES:
+        issue = PreflightIssue(severity="info", code=code, message="m")
+        assert not is_reversible([issue], ()), code
+    assert set(IRREVERSIBLE_CODES) <= set(PFLIGHT_CODES)
+
+
+def test_reversible_is_false_on_a_change_a_down_cannot_restore() -> None:
+    from confiture.core.change_set.models import ChangeEntry
+    from confiture.core.preflight import is_reversible
+    from confiture.core.risk_tier import RiskTier
+
+    def change(tier: RiskTier | None) -> ChangeEntry:
+        return ChangeEntry(kind="k", object="public.t", migration="001", tier=tier)
+
+    undoable = [RiskTier.ADDITIVE, RiskTier.REVERSIBLE, RiskTier.LOCK_RISKY]
+    assert is_reversible([], [change(t) for t in undoable])
+    for tier in (RiskTier.DESTRUCTIVE, RiskTier.IRREVERSIBLE, None):
+        assert not is_reversible([], [change(RiskTier.ADDITIVE), change(tier)]), tier

@@ -298,6 +298,45 @@ and pinned in the published schemas + the contract test. The `ok` flag **cannot*
 substitute for it: replica findings are warn-by-default, so `ok == true` can
 coincide with `window_safe == false`.
 
+## Can `migrate down` undo it? (`reversible`)
+
+A deploy tool that rolls a failed deploy back with `migrate down` — rather than restoring
+a full-database template — reads one more top-level boolean, `reversible` (1.40.0, #754),
+on both preflight payloads:
+
+```json
+{ "ok": true, "window_safe": true, "reversible": false, "summary": { ... }, "issues": [ ... ] }
+```
+
+`reversible == true` iff every `change_set` entry is `additive`, `reversible` or
+`lock_risky` — not `destructive`, not `irreversible`, never without a tier — and no
+migration preflight judged (`scope`) carries one of these issues, each with `migration`
+set to its version:
+
+| Code | Severity | Why `migrate down` cannot be trusted to undo it |
+|------|----------|--------------------------------------------------|
+| `PFLIGHT_MISSING_DOWN` | error | no `.down.sql` |
+| `PFLIGHT_DOWN_EMPTY` | warning | a `.py` whose `down()` does nothing (read from its source; `migrate down` refuses it, `ROLLBACK_600`) |
+| `PFLIGHT_DOWN_UNVERIFIED` | info | a `.py` whose `down()` confiture does not read (`details.down`: `present` or `unknown`) |
+| `PFLIGHT_IRREVERSIBLE` | info | the migration declares `-- confiture:irreversible <reason>`: its down runs and does not restore what `details.irreversible` names |
+| `PFLIGHT_DESTRUCTIVE_GATED` | warning | the migration is gated as destructive: data is lost when it applies |
+| `PFLIGHT_NON_TRANSACTIONAL` | warning | an autocommit migration can stop part way, in a state its down was not written for |
+| `PFLIGHT_UNPARSEABLE` | error | PostgreSQL's parser rejects the file, so nothing about it is certified |
+
+The tiers catch what no issue names: an ungated `DROP COLUMN` with a `.down.sql` is tiered
+`irreversible` (the down re-adds the column, not its data), so `reversible` is `false`.
+`reversible` and `window_safe` answer different questions — a migration marked
+irreversible can be window-safe, an `ADD COLUMN … NOT NULL DEFAULT` is reversible and not
+window-safe — and a consumer that needs both reads both. Its absence (confiture before
+1.40.0) is `false`. The code set is pinned by
+`test_the_codes_that_deny_reversible_are_a_stability_commitment`; a code leaving it is a
+contract change, not a refactor.
+
+The new codes are preflight report codes, not `ConfiturError` codes:
+`confiture --exit-codes-json` is unchanged, and none of them moves preflight's exit code
+except `PFLIGHT_DOWN_EMPTY`, a warning, under `--strict` (where every `.py` already fails on
+`PFLIGHT_REPLICA_UNCLASSIFIED`).
+
 ## Per-change risk tier (`change_set`)
 
 **Since 0.43.0** (#197), paired with

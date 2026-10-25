@@ -86,6 +86,7 @@ def test_an_irreversible_marker_reaches_the_wire_without_the_gate(
     assert marked["severity"] == "info"
     assert marked["details"] == {"irreversible": ["overwrites t.v"]}
     assert not _codes(payload, "PFLIGHT_DESTRUCTIVE_GATED")
+    assert payload["reversible"] is False
 
 
 def _python(migrations: Path, down: str) -> None:
@@ -114,6 +115,7 @@ def test_a_python_down_that_is_pass_reaches_the_wire(
     )
     assert not _codes(payload, "PFLIGHT_MISSING_DOWN")
     assert [i["migration"] for i in _codes(payload, "PFLIGHT_REPLICA_UNCLASSIFIED")] == ["002"]
+    assert payload["reversible"] is False
 
 
 def test_a_python_down_with_statements_is_unverified(migrations: Path, applied: str) -> None:
@@ -125,3 +127,16 @@ def test_a_python_down_with_statements_is_unverified(migrations: Path, applied: 
     (unverified,) = _codes(payload, "PFLIGHT_DOWN_UNVERIFIED")
     assert unverified["migration"] == "002"
     assert unverified["details"] == {"down": "present"}
+
+
+@pytest.mark.parametrize("against", [False, True], ids=["static", "against"])
+def test_a_pending_set_down_can_undo_is_reversible(
+    migrations: Path, applied: str, against: bool
+) -> None:
+    (migrations / "002_add_u.up.sql").write_text("ALTER TABLE t ADD COLUMN u int;")
+    (migrations / "002_add_u.down.sql").write_text("ALTER TABLE t DROP COLUMN u;")
+
+    code, payload = _preflight(migrations, applied, *(["--against", applied] if against else []))
+
+    assert code == 0, payload
+    assert payload["reversible"] is True

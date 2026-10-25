@@ -504,3 +504,51 @@ def test_adapter_up_that_halts_is_a_failure_that_says_why(adapter_db, tmp_path) 
     assert f"{halted}_needs_superuser" in message
     assert f"confiture migrate apply-as <role> {halted}" in message
     assert "1 migration left pending" in message
+
+
+#: Codes that mean ``migrate down`` cannot be trusted to undo the migration they name
+#: (#754). Pinned as a literal: a code leaving this set makes ``reversible`` say true
+#: where a deploy tool would have taken the full-database template.
+EXPECTED_IRREVERSIBLE_CODES = frozenset(
+    {
+        "PFLIGHT_MISSING_DOWN",
+        "PFLIGHT_DOWN_EMPTY",
+        "PFLIGHT_DOWN_UNVERIFIED",
+        "PFLIGHT_IRREVERSIBLE",
+        "PFLIGHT_DESTRUCTIVE_GATED",
+        "PFLIGHT_NON_TRANSACTIONAL",
+        "PFLIGHT_UNPARSEABLE",
+    }
+)
+
+
+def test_the_codes_that_deny_reversible_are_a_stability_commitment() -> None:
+    from confiture.core.preflight import IRREVERSIBLE_CODES
+
+    assert IRREVERSIBLE_CODES == EXPECTED_IRREVERSIBLE_CODES
+
+
+def test_preflight_exposes_top_level_reversible_verdict(tmp_path: Path) -> None:
+    """`reversible`: can `migrate down` undo every checked migration (#754)?"""
+    undoable = _preflight_payload(
+        tmp_path / "undoable", "ALTER TABLE t ADD COLUMN c int;", "ALTER TABLE t DROP COLUMN c;"
+    )
+    assert undoable["reversible"] is True
+
+    no_down = _preflight_payload(tmp_path / "no_down", "ALTER TABLE t ADD COLUMN c int;", None)
+    assert no_down["reversible"] is False
+
+    marked = _preflight_payload(
+        tmp_path / "marked",
+        "-- confiture:irreversible overwrites t.v\nUPDATE t SET v = 0;",
+        "SELECT 1;",
+    )
+    assert marked["reversible"] is False
+    assert marked["window_safe"] is True  # the two verdicts answer different questions
+
+    # Not gated, not marked, has a down — and still loses the column's data: its tier says so.
+    dropped = _preflight_payload(
+        tmp_path / "dropped", "ALTER TABLE t DROP COLUMN c;", "ALTER TABLE t ADD COLUMN c int;"
+    )
+    assert [c["tier"] for c in dropped["change_set"]["changes"]] == ["irreversible"]
+    assert dropped["reversible"] is False
