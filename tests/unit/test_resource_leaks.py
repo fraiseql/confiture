@@ -19,8 +19,8 @@ def test_syncer_closes_source_when_target_connect_fails() -> None:
     syncer = ProductionSyncer(DatabaseConfig(), DatabaseConfig())
     with (
         patch(
-            "confiture.core.syncer.create_connection",
-            side_effect=[source, ConfigurationError("target unreachable")],
+            "confiture.core.connection.psycopg.connect",
+            side_effect=[source, psycopg.OperationalError("target unreachable")],
         ),
         pytest.raises(ConfigurationError, match="target unreachable"),
     ):

@@ -10,7 +10,8 @@ migrator, runs the operation, and routes failures through the ``fail()``
 boundary. Errors emit the #145 envelope in ``--format json``.
 """
 
-import contextlib
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +19,13 @@ import typer
 import yaml
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import connect, console, emit, is_json
+from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.markup import markup
 from confiture.cli.options import format_option
-from confiture.core import connection as _core_connection
+from confiture.core.connection import open_target, resolve_target
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 from confiture.error_codes import FINDINGS
-from confiture.exceptions import ConfigurationError, ConfiturError
-from confiture.url_redaction import redact_url
+from confiture.exceptions import ConfigurationError
 
 schema_to_schema_app = typer.Typer(
     help="Medium 4: zero-downtime schema migration via Foreign Data Wrapper (FDW).",
@@ -35,48 +35,14 @@ schema_to_schema_app = typer.Typer(
 _SOURCE_OPTION = typer.Option(
     ...,
     "--source",
-    help="Source (old) database: env name, config path, or DSN.",
+    help="Source (old) database: environment name (its ssh_tunnel is used), .yaml config file or URL.",
 )
 _TARGET_OPTION = typer.Option(
     ...,
     "--target",
-    help="Target (new) database: env name, config path, or DSN.",
+    help="Target (new) database: environment name (its ssh_tunnel is used), .yaml config file or URL.",
 )
 _FORMAT_OPTION = format_option("text", "json")
-
-
-def _resolve_connection(spec: str) -> Any:
-    """Open a connection from an env name, a config path, or a raw DSN.
-
-    Resolution order:
-      1. Looks like a DSN (``postgres://`` / ``postgresql://``) → connect directly.
-      2. A ``.yaml`` path or existing file → ``load_config`` + the CLI connection seam.
-      3. Otherwise treat as an environment name → ``db/environments/{name}.yaml``.
-
-    Raises:
-        ConfigurationError: the spec can't be resolved or the connection fails.
-    """
-
-    try:
-        if spec.startswith(("postgres://", "postgresql://")):
-            return _core_connection.connect_url(spec)
-
-        candidate = Path(spec)
-        if not (spec.endswith(".yaml") or candidate.exists()):
-            candidate = Path("db") / "environments" / f"{spec}.yaml"
-        if not candidate.exists():
-            raise ConfigurationError(
-                f"Could not resolve database '{spec}'. Pass an env name "
-                f"(db/environments/{spec}.yaml), a config path, or a DSN.",
-                error_code="CONFIG_004",
-            )
-        return connect(_core_connection.load_config(candidate))
-    except ConfiturError:
-        raise
-    except (_core_connection.DatabaseError, OSError) as exc:
-        raise ConfigurationError(
-            f"Could not connect to '{redact_url(spec)}': {exc}", error_code="CONFIG_006"
-        ) from exc
 
 
 def _parse_inline_mapping(mapping: str) -> dict[str, str]:
@@ -116,9 +82,14 @@ def _source_tables(spec: dict[str, dict[str, Any]]) -> dict[str, str]:
     return pairs
 
 
-def _migrator(source: str, target: str):
-
-    return SchemaToSchemaMigrator(_resolve_connection(source), _resolve_connection(target))
+@contextmanager
+def _migrator(source: str, target: str) -> Generator[SchemaToSchemaMigrator]:
+    """The migrator over both databases, each opened through its tunnel when it has one."""
+    with (
+        open_target(resolve_target(source, flag="--source")) as source_conn,
+        open_target(resolve_target(target, flag="--target")) as target_conn,
+    ):
+        yield SchemaToSchemaMigrator(source_conn, target_conn)
 
 
 @schema_to_schema_app.command("setup")
@@ -138,16 +109,12 @@ def s2s_setup(
     imported (never a table of your own).
     """
     json_mode = is_json(format_output)
-    m = None
-    try:
-        m = _migrator(source, target)
+    with _migrator(source, target) as m:
         m.setup_fdw(skip_import=skip_import)
         if json_mode:
             emit({"skip_import": skip_import})
         else:
             console.print("[green]✅ FDW configured[/green] (target → source)")
-    finally:
-        _close(m)
 
 
 @schema_to_schema_app.command("analyze")
@@ -155,16 +122,12 @@ def s2s_setup(
 def s2s_analyze(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
-    schema: str = typer.Option(
-        "public", "--schema", help="The source's schema to size (default: public)."
-    ),
+    schema: str = typer.Option("public", "--schema", help="The source's schema to size."),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
     """Size the source's tables and recommend a per-table strategy (FDW vs COPY)."""
     json_mode = is_json(format_output)
-    m = None
-    try:
-        m = _migrator(source, target)
+    with _migrator(source, target) as m:
         recommendations = m.analyze_tables(schema=schema)
         if json_mode:
             emit({"tables": recommendations})
@@ -174,8 +137,6 @@ def s2s_analyze(
                 strat = info.get("recommended_strategy", info.get("strategy", "?"))
                 rows = info.get("row_count", info.get("rows", "?"))
                 console.print(t"  • {table}: [bold]{strat}[/bold] ({rows} rows)")
-    finally:
-        _close(m)
 
 
 @schema_to_schema_app.command("migrate")
@@ -186,19 +147,15 @@ def s2s_migrate(
     mapping: Path = typer.Option(
         ..., "--mapping", help="Per-table column-mapping YAML (see the guide)."
     ),
-    strategy: str = typer.Option(
-        "fdw", "--strategy", help="Migration strategy: fdw or copy (default: fdw)."
-    ),
+    strategy: str = typer.Option("fdw", "--strategy", help="Migration strategy: fdw or copy."),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
     """Migrate every table declared in the column-mapping YAML."""
     json_mode = is_json(format_output)
-    m = None
-    try:
-        if strategy not in ("fdw", "copy"):
-            raise ConfigurationError(f"Invalid --strategy {strategy!r}. Use 'fdw' or 'copy'.")
-        spec = _load_mapping_file(mapping)
-        m = _migrator(source, target)
+    if strategy not in ("fdw", "copy"):
+        raise ConfigurationError(f"Invalid --strategy {strategy!r}. Use 'fdw' or 'copy'.")
+    spec = _load_mapping_file(mapping)
+    with _migrator(source, target) as m:
         results: dict[str, int] = {}
         for table, entry in spec.items():
             if not isinstance(entry, dict):
@@ -216,8 +173,6 @@ def s2s_migrate(
             for table, rows in results.items():
                 console.print(t"  • {table}: [green]{rows}[/green] rows migrated")
             console.print(t"[green]✅ Migrated {len(results)} table(s) via {strategy}[/green]")
-    finally:
-        _close(m)
 
 
 @schema_to_schema_app.command("migrate-table")
@@ -230,17 +185,15 @@ def s2s_migrate_table(
     mapping: str = typer.Option(
         ..., "--mapping", help="Inline column mapping 'src_col:dst_col,...'."
     ),
-    strategy: str = typer.Option("fdw", "--strategy", help="fdw or copy (default: fdw)."),
+    strategy: str = typer.Option("fdw", "--strategy", help="fdw or copy."),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
     """Migrate a single table with an inline column mapping."""
     json_mode = is_json(format_output)
-    m = None
-    try:
-        if strategy not in ("fdw", "copy"):
-            raise ConfigurationError(f"Invalid --strategy {strategy!r}. Use 'fdw' or 'copy'.")
-        column_mapping = _parse_inline_mapping(mapping)
-        m = _migrator(source, target)
+    if strategy not in ("fdw", "copy"):
+        raise ConfigurationError(f"Invalid --strategy {strategy!r}. Use 'fdw' or 'copy'.")
+    column_mapping = _parse_inline_mapping(mapping)
+    with _migrator(source, target) as m:
         fn = m.migrate_table if strategy == "fdw" else m.migrate_table_copy
         rows = fn(
             source_table=source_table, target_table=target_table, column_mapping=column_mapping
@@ -249,8 +202,6 @@ def s2s_migrate_table(
             emit({"target_table": target_table, "rows": rows})
         else:
             console.print(t"[green]✅ {target_table}: {rows} rows migrated[/green]")
-    finally:
-        _close(m)
 
 
 @schema_to_schema_app.command("verify")
@@ -279,19 +230,17 @@ def s2s_verify(
     ``migrate`` read.
     """
     json_mode = is_json(format_output)
-    m = None
-    try:
-        sources = _source_tables(_load_mapping_file(mapping)) if mapping else {}
-        if tables:
-            table_list = [t.strip() for t in tables.split(",") if t.strip()]
-        elif sources:
-            table_list = list(sources)
-        else:
-            raise ConfigurationError(
-                "Nothing to verify: pass --tables, --mapping, or both.",
-                error_code="CONFIG_001",
-            )
-        m = _migrator(source, target)
+    sources = _source_tables(_load_mapping_file(mapping)) if mapping else {}
+    if tables:
+        table_list = [t.strip() for t in tables.split(",") if t.strip()]
+    elif sources:
+        table_list = list(sources)
+    else:
+        raise ConfigurationError(
+            "Nothing to verify: pass --tables, --mapping, or both.",
+            error_code="CONFIG_001",
+        )
+    with _migrator(source, target) as m:
         report = m.verify_migration(
             tables=table_list,
             source_schema=source_schema,
@@ -315,8 +264,6 @@ def s2s_verify(
                 console.print("[green]✅ All tables match[/green]")
         if mismatches:
             raise typer.Exit(FINDINGS)  # success-signal: verification found a mismatch
-    finally:
-        _close(m)
 
 
 @schema_to_schema_app.command("cleanup")
@@ -328,25 +275,9 @@ def s2s_cleanup(
 ) -> None:
     """Remove the FDW server + foreign schema from the target after cutover."""
     json_mode = is_json(format_output)
-    m = None
-    try:
-        m = _migrator(source, target)
+    with _migrator(source, target) as m:
         m.cleanup_fdw()
         if json_mode:
             emit({})
         else:
             console.print("[green]✅ FDW removed from target[/green]")
-    finally:
-        _close(m)
-
-
-def _close(migrator: Any) -> None:
-    """Close both connections held by the migrator, ignoring teardown errors."""
-
-    if migrator is None:
-        return
-    for attr in ("source_connection", "target_connection"):
-        conn = getattr(migrator, attr, None)
-        if conn is not None:
-            with contextlib.suppress(Exception):
-                conn.close()

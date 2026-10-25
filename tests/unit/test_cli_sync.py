@@ -14,11 +14,11 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.config.environment import DatabaseConfig
+from confiture.core.connection import Target
 
 runner = CliRunner()
 
-_RESOLVE = "confiture.cli.sync._resolve_database"
+_RESOLVE = "confiture.cli.sync.resolve_target"
 _BUILD = "confiture.cli.sync._build_syncer"
 
 
@@ -35,7 +35,7 @@ def test_sync_basic_runs_and_reports() -> None:
     """`confiture sync --from … --to …` drives ProductionSyncer.sync and reports rows."""
     m = _mock_syncer({"users": 10})
     with (
-        patch(_RESOLVE, return_value=DatabaseConfig()),
+        patch(_RESOLVE, return_value=Target("postgresql://localhost/app", "x")),
         patch(_BUILD, return_value=m),
     ):
         r = runner.invoke(app, ["sync", "--from", "production", "--to", "local"])
@@ -47,7 +47,10 @@ def test_sync_basic_runs_and_reports() -> None:
 def test_sync_warns_about_plaintext_when_not_anonymized() -> None:
     """Without --anonymize, the JSON payload carries a PII warning (warn posture)."""
     m = _mock_syncer({"users": 10})
-    with patch(_RESOLVE, return_value=DatabaseConfig()), patch(_BUILD, return_value=m):
+    with (
+        patch(_RESOLVE, return_value=Target("postgresql://localhost/app", "x")),
+        patch(_BUILD, return_value=m),
+    ):
         r = runner.invoke(
             app, ["sync", "--from", "production", "--to", "local", "--format", "json"]
         )
@@ -71,7 +74,10 @@ def test_sync_anonymize_loads_rules_from_yaml(tmp_path) -> None:
         "    strategy: redact\n"
     )
     m = _mock_syncer({"users": 10})
-    with patch(_RESOLVE, return_value=DatabaseConfig()), patch(_BUILD, return_value=m):
+    with (
+        patch(_RESOLVE, return_value=Target("postgresql://localhost/app", "x")),
+        patch(_BUILD, return_value=m),
+    ):
         r = runner.invoke(
             app,
             [
@@ -102,7 +108,7 @@ def test_sync_anonymize_loads_rules_from_yaml(tmp_path) -> None:
 def test_sync_anonymize_missing_config_fails_config_004(tmp_path) -> None:
     """--anonymize with a missing config file → CONFIG_004 envelope, exit 5."""
     missing = tmp_path / "nope.yaml"
-    with patch(_RESOLVE, return_value=DatabaseConfig()):
+    with patch(_RESOLVE, return_value=Target("postgresql://localhost/app", "x")):
         r = runner.invoke(
             app,
             [
@@ -139,7 +145,10 @@ def test_sync_unknown_env_fails_with_envelope() -> None:
 def test_sync_table_selection_include_exclude() -> None:
     """--tables / --exclude become the syncer's TableSelection."""
     m = _mock_syncer({"users": 10})
-    with patch(_RESOLVE, return_value=DatabaseConfig()), patch(_BUILD, return_value=m):
+    with (
+        patch(_RESOLVE, return_value=Target("postgresql://localhost/app", "x")),
+        patch(_BUILD, return_value=m),
+    ):
         r = runner.invoke(
             app,
             ["sync", "--from", "p", "--to", "l", "--tables", "users, posts", "--exclude", "logs"],
@@ -150,11 +159,11 @@ def test_sync_table_selection_include_exclude() -> None:
     assert sync_config.tables.exclude == ["logs"]
 
 
-def test_sync_dsn_resolution_builds_configs() -> None:
-    """A raw DSN for --from/--to is parsed into a DatabaseConfig."""
-    captured: dict[str, DatabaseConfig] = {}
+def test_sync_dsn_resolution_opens_each_url_as_given() -> None:
+    """A URL for --from/--to is opened as given and named with its password masked."""
+    captured: dict[str, Target] = {}
 
-    def fake_build(source: DatabaseConfig, target: DatabaseConfig) -> MagicMock:
+    def fake_build(source: Target, target: Target) -> MagicMock:
         captured["source"] = source
         captured["target"] = target
         return _mock_syncer({"users": 1})
@@ -171,10 +180,9 @@ def test_sync_dsn_resolution_builds_configs() -> None:
             ],
         )
     assert r.exit_code == 0, r.output
-    assert captured["source"].host == "dbhost"
-    assert captured["source"].database == "prod"
-    assert captured["target"].host == "localhost"
-    assert captured["target"].database == "dev"
+    assert captured["source"].opens == "postgresql://u:pw@dbhost:5432/prod"
+    assert captured["target"].opens == "postgresql://u:pw@localhost:5432/dev"
+    assert "pw" not in captured["source"].label
 
 
 def test_sync_help_is_reachable() -> None:

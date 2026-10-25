@@ -149,9 +149,7 @@ ListUnmigratedBodiesOpt = Annotated[
         "combined with any other check.",
     ),
 ]
-BaseRefOpt = Annotated[
-    str, typer.Option("--base-ref", help="Base git reference for comparison (default: origin/main)")
-]
+BaseRefOpt = Annotated[str, typer.Option("--base-ref", help="Base git reference for comparison")]
 SinceOpt = Annotated[
     str | None, typer.Option("--since", help="Shortcut for --base-ref (default: none)")
 ]
@@ -526,7 +524,7 @@ def migrate_validate(
       --check-signatures takes both a singular --schema and a plural --schemas:
         --schema FILE       Path to a *SQL file* to compare function signatures against.
                             If omitted, schema is auto-built from db/schema/ DDL files.
-        --schemas LIST      Comma-separated list of *database schema names* (default: public)
+        --schemas LIST      Comma-separated list of *database schema names*
                             to scan in the live DB for stale overloads.
         They're different things — file path vs. DB schema names — and both flags can
         appear in the same invocation.

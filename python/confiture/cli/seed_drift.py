@@ -27,13 +27,14 @@ def exit_code(report: SeedDriftReport) -> int:
 def drift(
     env: str = env_option(
         help="The seed-built environment: its schema tree, its seed files and its "
-        "seed_drift settings (default: local)"
+        "seed_drift settings"
     ),
     against: str | None = typer.Option(
         None,
         "--against",
         help="The live database to compare with: an environment name (its ssh_tunnel is "
-        "used) or a PostgreSQL URL. Read in a read-only transaction; nothing is written",
+        "used), a .yaml config file or a PostgreSQL URL. Read in a read-only transaction; "
+        "nothing is written",
     ),
     build: bool = typer.Option(
         False,

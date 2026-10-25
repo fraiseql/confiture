@@ -30,7 +30,8 @@ or pass `--scratch-url` to `confiture drift` or `confiture migrate diff --from d
 wins over the key). `migrate validate --check-live-drift` reads the key as well. The scratch
 server is never the environment's own `database_url`, and it does not have to be the server
 the database runs on: a read-only production replica is compared at the materialised tier
-from a CI or local server. The scratch database is dropped when the comparison ends, whatever
+from a CI or local server. The scratch database is a copy of `template0`, so nothing the server
+keeps in `template1` answers for the tree, and it is dropped when the comparison ends, whatever
 happens.
 
 The scratch server must be able to build the tree: the extensions it creates must be

@@ -392,10 +392,14 @@ class ScratchAnswer:
 
     ``failed`` maps each extension the scratch could not create to PostgreSQL's
     first error line: its references are not answered by ``catalogue``.
+    ``after[i]`` is what the scratch held once the *i*-th extension's statement
+    had run, so a name is attributed to the statement that made it exist
+    (``build_004``, #747).
     """
 
     catalogue: LiveCatalogue
     failed: Mapping[str, str] = field(default_factory=dict)
+    after: tuple[LiveCatalogue, ...] = ()
 
 
 def scratch_names(
@@ -411,7 +415,8 @@ def scratch_names(
 
     The schemas are created by name, and each extension's own statement runs
     on its own, in build order, so one that fails costs only its own
-    references. The question is :func:`probe_live`'s: no catalog SQL here.
+    references; the scratch is asked again after each. The question is
+    :func:`probe_live`'s: no catalog SQL here.
 
     Raises:
         ScratchUnavailable: the server did not answer within *connect_timeout*
@@ -434,13 +439,17 @@ def scratch_names(
         with ExpectedSchemaDB(server_url).from_source(schema_sql="") as connection:
             for schema in sorted(schemas):
                 connection.execute(t"CREATE SCHEMA IF NOT EXISTS {schema:i}")
+            asked = list(candidates)
             failed: dict[str, str] = {}
+            after: list[LiveCatalogue] = []
             for ext in extensions:
                 try:
                     connection.execute(Template(ext.create_sql))
                 except psycopg.Error as exc:
                     failed[ext.name] = first_line(exc)
-            return ScratchAnswer(probe_live(connection, candidates, search_path), failed)
+                after.append(probe_live(connection, asked, search_path))
+            final = after[-1] if after else probe_live(connection, asked, search_path)
+            return ScratchAnswer(final, failed, tuple(after))
     except (psycopg.Error, OSError, ConfiturError) as exc:
         raise ScratchUnavailable(
             f"could not build a scratch database on {masked}: {first_line(exc)}"
@@ -566,6 +575,19 @@ class _Created:
     position: Position
     file: str | None
     line: int
+    #: The extension whose ``CREATE EXTENSION`` creates it, when no file spells it out.
+    extension: str | None = None
+
+
+@dataclass(frozen=True)
+class _Need:
+    """A name a statement needs when it is created, which the build does not create before it."""
+
+    file: str | None
+    reference: Reference
+    position: Position
+    #: Where a file of the build first creates it (after *position*), if one does.
+    tree: _Created | None
 
 
 def _first_created(
@@ -621,24 +643,18 @@ def _needs_at_create(reference: Reference, *, two_pass: bool) -> bool:
     )
 
 
-def forward_references(
+def _needs(
     scans: Sequence[tuple[str | None, ReferenceScan]],
     objects: Sequence[SchemaObject],
+    order: dict[str | None, int],
     *,
-    search_path: Sequence[str] = (),
-    two_pass: bool = False,
-) -> list[LintViolation]:
-    """``build_004``: every name a statement needs when it runs that the build creates later.
-
-    *scans* is each file's :class:`ReferenceScan` in build order, labelled as a
-    finding names the file; *objects* the whole build's inventory, each object
-    carrying its file's label. *two_pass* is ``build.two_pass``: the builder
-    then moves every foreign key written in a ``CREATE TABLE`` to the end.
-    """
-    order = {label: index for index, (label, _scan) in enumerate(scans)}
+    search_path: Sequence[str],
+    two_pass: bool,
+) -> list[_Need]:
+    """Every name a statement needs when it runs that no file creates before it, once per statement."""
     first = _first_created(objects, order)
     checks = _bodies_checked(scans)
-    findings: list[LintViolation] = []
+    needs: list[_Need] = []
     seen: set[tuple[str | None, str, str, str]] = set()
     for index, (label, scan) in enumerate(scans):
         for reference in [*scan.references, *scan.clauses]:
@@ -658,21 +674,138 @@ def forward_references(
                 for found in (first.get((bucket, schema, name)), first.get((bucket, None, name)))
                 if found is not None
             ]
-            if not created:
-                continue
-            earliest = min(created, key=lambda c: c.position)
+            earliest = min(created, key=lambda c: c.position) if created else None
             # The same statement creates what it names: a table's foreign key
             # to itself, a routine that calls itself. PostgreSQL accepts both.
-            if earliest.position <= position:
+            if earliest is not None and earliest.position <= position:
                 continue
             seen.add(pair)
-            findings.append(_forward_finding(label, reference, earliest))
-    return findings
+            needs.append(_Need(label, reference, position, earliest))
+    return needs
+
+
+def _later_extensions(
+    need: _Need,
+    extensions: Sequence[BuiltExtension],
+    order: dict[str | None, int],
+    search_path: Sequence[str],
+) -> list[BuiltExtension]:
+    """The extensions created after *need*'s statement in a schema its name could mean."""
+    schemas = _schemas(need.reference, search_path)
+    return [
+        ext
+        for ext in extensions
+        if ext.file in order
+        and (order[ext.file], ext.line) > need.position
+        and ext.schema in schemas
+    ]
+
+
+@dataclass(frozen=True)
+class ForwardReferences:
+    """``build_004``'s findings, and why some references could not be ordered, if any were not."""
+
+    findings: list[LintViolation]
+    reason: str | None = None
+
+
+def forward_references(
+    scans: Sequence[tuple[str | None, ReferenceScan]],
+    objects: Sequence[SchemaObject],
+    *,
+    search_path: Sequence[str] = (),
+    two_pass: bool = False,
+    extensions: Sequence[BuiltExtension] = (),
+    ask: Ask | None = None,
+) -> ForwardReferences:
+    """``build_004``: every name a statement needs when it runs that the build creates later.
+
+    *scans* is each file's :class:`ReferenceScan` in build order, labelled as a
+    finding names the file; *objects* the whole build's inventory, each object
+    carrying its file's label. *two_pass* is ``build.two_pass``: the builder
+    then moves every foreign key written in a ``CREATE TABLE`` to the end.
+
+    A name no file creates may be an extension's, created at its ``CREATE
+    EXTENSION`` (#747). *ask* is the scratch tier: asked once, about every such
+    name made before an extension in a schema it could mean. With no scratch,
+    or one that cannot answer, those names are not ordered, and ``reason`` says
+    so: only an extension whose ``SCHEMA`` is written counts then, as for
+    ``build_003``.
+    """
+    order = {label: index for index, (label, _scan) in enumerate(scans)}
+    needs = _needs(scans, objects, order, search_path=search_path, two_pass=two_pass)
+    ordering = [
+        need
+        for need in needs
+        if need.tree is None and _later_extensions(need, extensions, order, search_path)
+    ]
+    by_extension, reason = _extension_creations(ordering, extensions, order, search_path, ask)
+    findings = [
+        _forward_finding(need.file, need.reference, min(created, key=lambda c: c.position))
+        for need in needs
+        if (created := [c for c in (need.tree, by_extension.get(id(need))) if c is not None])
+    ]
+    return ForwardReferences(findings, reason)
+
+
+def _extension_creations(
+    ordering: list[_Need],
+    extensions: Sequence[BuiltExtension],
+    order: dict[str | None, int],
+    search_path: Sequence[str],
+    ask: Ask | None,
+) -> tuple[dict[int, _Created], str | None]:
+    """Which extension's statement creates each of *ordering*'s names, and what stayed unknown."""
+    if not ordering:
+        return {}, None
+    why = NO_SCRATCH_SERVER
+    answer: ScratchAnswer | None = None
+    if ask is not None:
+        try:
+            answer = ask([(need.file, need.reference) for need in ordering])
+        except ScratchUnavailable as exc:
+            why = str(exc)
+    created: dict[int, _Created] = {}
+    unknown: dict[int, list[BuiltExtension]] = {}
+    for need in ordering:
+        later = _later_extensions(need, extensions, order, search_path)
+        if answer is None or len(answer.after) != len(extensions):
+            if written := [ext for ext in later if ext.schema_written]:
+                unknown[id(need)] = written
+            continue
+        for ext in later:
+            if ext.name in answer.failed:
+                unknown.setdefault(id(need), []).append(ext)
+            elif answer.after[extensions.index(ext)].holds(need.reference, search_path):
+                position = (order[ext.file], ext.line)
+                created[id(need)] = _Created(position, ext.file, ext.line, ext.name)
+                break
+    if answer is not None and answer.failed:
+        why = "the scratch server could not create " + "; ".join(
+            f"{name}: {error}" for name, error in answer.failed.items()
+        )
+    unordered = [need for need in ordering if id(need) in unknown and id(need) not in created]
+    if not unordered:
+        return created, None
+    named = sorted(
+        {ext for need in unordered for ext in unknown[id(need)]}, key=_build_order(order)
+    )
+    count = len(unordered)
+    return created, (
+        f"could not order {count} reference{'' if count == 1 else 's'} made before "
+        f"{_creates(named)}, which may create {'it' if count == 1 else 'them'}: {why}"
+    )
+
+
+def _build_order(order: dict[str | None, int]) -> Callable[[BuiltExtension], Position]:
+    return lambda ext: (order.get(ext.file, -1), ext.line)
 
 
 def _forward_finding(file: str | None, reference: Reference, created: _Created) -> LintViolation:
     referrer_noun = KIND_KEYWORD.get(reference.referrer_kind, reference.referrer_kind).capitalize()
     where = f"{created.file}:{created.line}" if created.file else f"line {created.line}"
+    if created.extension:
+        where = f"{where} (extension {created.extension})"
     clause = f" (its {reference.clause})" if reference.clause else ""
     why = (
         " A LANGUAGE sql body is resolved when the function is created, while "
