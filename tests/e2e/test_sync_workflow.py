@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.config.environment import DatabaseConfig
+from confiture.core.connection import Target
 
 runner = CliRunner()
 
@@ -32,7 +32,9 @@ def _fake_syncer(results: dict[str, int]) -> MagicMock:
 
 def test_sync_workflow_basic_then_anonymized(tmp_path) -> None:
     """A verbatim sync (warned) then an anonymized sync both succeed end to end."""
-    with patch("confiture.cli.sync._resolve_database", return_value=DatabaseConfig()):
+    with patch(
+        "confiture.cli.sync.resolve_target", return_value=Target("postgresql://localhost/app", "x")
+    ):
         # 1. Basic verbatim sync — runs, reports rows, exit 0.
         m1 = _fake_syncer({"users": 1_000, "posts": 250})
         with patch("confiture.cli.sync._build_syncer", return_value=m1):
@@ -65,7 +67,9 @@ def test_sync_workflow_basic_then_anonymized(tmp_path) -> None:
 
 def test_sync_workflow_json_envelopes_are_well_formed(tmp_path) -> None:
     """Both the verbatim and anonymized JSON outputs are valid envelopes."""
-    with patch("confiture.cli.sync._resolve_database", return_value=DatabaseConfig()):
+    with patch(
+        "confiture.cli.sync.resolve_target", return_value=Target("postgresql://localhost/app", "x")
+    ):
         # Verbatim → ok:true, anonymized:false, a plaintext warning present.
         m1 = _fake_syncer({"users": 10})
         with patch("confiture.cli.sync._build_syncer", return_value=m1):
@@ -105,7 +109,10 @@ def test_sync_workflow_table_selection(tmp_path) -> None:
     """--tables / --exclude flow through to the syncer's selection."""
     m = _fake_syncer({"users": 5})
     with (
-        patch("confiture.cli.sync._resolve_database", return_value=DatabaseConfig()),
+        patch(
+            "confiture.cli.sync.resolve_target",
+            return_value=Target("postgresql://localhost/app", "x"),
+        ),
         patch("confiture.cli.sync._build_syncer", return_value=m),
     ):
         r = runner.invoke(app, ["sync", *CONN, "--tables", "users,posts", "--exclude", "audit_log"])

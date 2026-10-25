@@ -6,6 +6,7 @@ local/staging environments with PII anonymization support.
 
 import json
 import time
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime
 from difflib import get_close_matches
@@ -21,9 +22,10 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from confiture.config.environment import DatabaseConfig, Environment
 from confiture.core import live_catalog
 from confiture.core.anonymization.pseudonymizer import Pseudonymizer
-from confiture.core.connection import create_connection
+from confiture.core.connection import Target, open_target, resolve_target
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.exceptions import ConfigurationError
+from confiture.url_redaction import redact_url
 
 
 @dataclass
@@ -109,6 +111,19 @@ class TableMetrics:
     synced_at: str
 
 
+def _target(database: Target | Environment | DatabaseConfig | str, role: str) -> Target:
+    """*database* as a :class:`Target`, whichever form the caller handed in."""
+    if isinstance(database, Target):
+        return database
+    if isinstance(database, str):
+        return resolve_target(database, flag=role)
+    if isinstance(database, Environment):
+        return Target(
+            database, database.name or redact_url(str(database.database_url)), database.name or None
+        )
+    return Target(database, f"{database.host}:{database.port}/{database.database}")
+
+
 class ProductionSyncer:
     """Synchronize data from production to target database.
 
@@ -122,25 +137,21 @@ class ProductionSyncer:
 
     def __init__(
         self,
-        source: DatabaseConfig | str,
-        target: DatabaseConfig | str,
+        source: Target | Environment | DatabaseConfig | str,
+        target: Target | Environment | DatabaseConfig | str,
     ):
         """Initialize syncer with source and target databases.
 
         Args:
-            source: Source database config or environment name
-            target: Target database config or environment name
+            source: Source database: an environment name, a config file or a
+                PostgreSQL URL (read by :func:`~confiture.core.connection.resolve_target`),
+                an ``Environment``, or a ``DatabaseConfig``. An environment's
+                ``ssh_tunnel`` is opened with it.
+            target: Target database, in any of the same forms.
         """
-
-        # Load configs if strings provided
-        if isinstance(source, str):
-            source = Environment.load(source).database
-
-        if isinstance(target, str):
-            target = Environment.load(target).database
-
-        self.source_config = source
-        self.target_config = target
+        self.source = _target(source, "source")
+        self.target = _target(target, "target")
+        self._connections = ExitStack()
 
         self._source_conn: psycopg.Connection[Any] | None = None
         self._target_conn: psycopg.Connection[Any] | None = None
@@ -156,23 +167,18 @@ class ProductionSyncer:
         self._pseudonymizer_cache: Pseudonymizer | None = None
 
     def __enter__(self) -> ProductionSyncer:
-        """Context manager entry."""
-        self._source_conn = create_connection(self.source_config)
-        try:
-            self._target_conn = create_connection(self.target_config)
-        # Reason: resource guard: the source connection must not leak on any exit, KeyboardInterrupt included
-        except BaseException:
-            self._source_conn.close()
-            self._source_conn = None
-            raise
+        """Open both databases, each through its tunnel when its environment has one."""
+        with ExitStack() as opening:
+            self._source_conn = opening.enter_context(open_target(self.source))
+            self._target_conn = opening.enter_context(open_target(self.target))
+            self._connections = opening.pop_all()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Context manager exit."""
-        if self._source_conn:
-            self._source_conn.close()
-        if self._target_conn:
-            self._target_conn.close()
+        """Close both connections and any tunnel."""
+        self._connections.close()
+        self._source_conn = None
+        self._target_conn = None
 
     def get_all_tables(self) -> list[str]:
         """Get list of all user tables in source database.
@@ -618,8 +624,8 @@ class ProductionSyncer:
         checkpoint_data = {
             "version": "1.0",
             "timestamp": datetime.now().isoformat(),
-            "source_database": f"{self.source_config.host}:{self.source_config.port}/{self.source_config.database}",
-            "target_database": f"{self.target_config.host}:{self.target_config.port}/{self.target_config.database}",
+            "source_database": self.source.label,
+            "target_database": self.target.label,
             "completed_tables": {
                 table: {
                     "rows_synced": metrics.rows_synced,

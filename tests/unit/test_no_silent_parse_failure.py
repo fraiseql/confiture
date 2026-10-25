@@ -63,6 +63,9 @@ ALLOWED: dict[str, str] = {
     "python/confiture/core/schema_analyzer.py:_foreign_keys": (
         "dry-run: a statement PostgreSQL rejects fails the dry run's own execution"
     ),
+    "python/confiture/core/seed/paths.py:_only_creates": (
+        "a file the parser rejects keeps its path's verdict; lint reports it UNPARSEABLE"
+    ),
     "python/confiture/core/sql_lexer.py:_scan_recovering": (
         "the scanner's recovery: the tokens before an error, and none past it, is the answer"
     ),

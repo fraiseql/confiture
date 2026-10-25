@@ -63,8 +63,9 @@ The default side assumes that environment ran its resolvers too.
 
 **Seed files.** The seed files in the environment's `include_dirs` are the ones `confiture build`
 treats as seeds: any file under a directory whose name holds `seed` or `seeds` as a word
-(`db/seeds/`, `30_seed_backend/`, `10-seeds/`). With `--seeds-dir`, that directory's files follow
-them, as `confiture seed apply` adds them.
+(`db/seeds/`, `30_seed_backend/`, `10-seeds/`), unless it only creates schema objects — the
+prep-seed layout's `prep_seed/` staging tables are schema. With `--seeds-dir`, that directory's
+files follow them, as `confiture seed apply` adds them.
 
 **Scope.** Every table a seed file writes: `INSERT … VALUES`, `COPY … FROM stdin`, and the
 statements whose rows confiture does not read statically (`INSERT … SELECT`, a data-modifying CTE,

@@ -14,6 +14,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`build_004` orders a reference against the `CREATE EXTENSION` that creates it** (#747). A
+  `LANGUAGE sql` body, a default or a `CHECK` calling `public.text2ltree` in a file before the
+  file running `CREATE EXTENSION ltree SCHEMA public` fails the build with "function
+  public.text2ltree(text) does not exist", and `confiture lint` said nothing: the build's
+  inventory holds no extension routines. With a scratch server the scratch database
+  `build_003`'s extension tier builds is now asked after each `CREATE EXTENSION`, so each name is
+  placed at the statement that creates it, and the finding names the extension. One scratch
+  database answers both rules. Without a scratch server, a reference made before an extension
+  whose written `SCHEMA` it could mean is not ordered, and a `degraded` entry for `build_004` says
+  how many and which extension, rather than a guessed finding.
+
+### Changed
+
+- **A file under a seed directory that only creates schema objects is schema** (#748). A file is a
+  seed when a directory on its path holds `seed` or `seeds` as a word, so the prep-seed layout the
+  guide teaches — staging tables in `db/schema/prep_seed/`, as in examples 06 and 08 — had its
+  `CREATE TABLE`s filed as seeds: `read_schema(env=…)` and every reader built on it did not see
+  them, and `migrate rebuild --seed`, `test-db` and sequential builds applied them after the whole
+  schema. A file there whose every statement creates a persistent schema object (a table, index,
+  view, routine, type, sequence, schema, trigger or extension, or a `COMMENT ON` one) is now schema
+  wherever it sits. Anything else stays a seed: a row written, a `TEMP` table, `CREATE TABLE … AS`,
+  an `ALTER TABLE … DISABLE TRIGGER`, a `SET`, a file the parser rejects. Only a statement that
+  opens with `CREATE` or `COMMENT` is parsed, so a large seed file costs one token.
+- **`build --schema-only` leaves out seed files one by one.** It used to drop the `include_dirs`
+  entries whose own path was a seed directory and build every file of the others, so a seed
+  directory nested inside a schema entry was built into a schema-only output. It now asks the same
+  question as every other reader; an entry that selects only seed files is still left out whole.
+- **`sync`, `ProductionSyncer` and `migrate schema-to-schema` open an environment through its
+  `ssh_tunnel`** (#750). Four places answered "environment name, config file or URL" for a
+  database, and only `seed drift --against` honoured the tunnel: `sync --from production` connected
+  straight to `database_url` (with its `${TUNNEL_LOCAL_PORT}` unfilled) and failed, or reached
+  another host. One resolver, `core.connection.resolve_target`, now answers for all four, and each
+  opens what it returns through `open_connection`:
+  - a PostgreSQL URL is opened as given; a value ending in `.yaml`/`.yml` is a config file (now
+    accepted by `sync` and `seed drift` too); anything else is an environment name;
+  - a value that is none of these is `CONFIG_003`, and is not echoed;
+  - an environment with no config file is `CONFIG_001` everywhere. `schema-to-schema` used to say
+    `CONFIG_004`; a missing `.yaml` file is still `CONFIG_004`. Both exit 5.
+  - an environment is read for its connection (`database_url`, `ssh_tunnel`) only, as
+    `schema-to-schema` read it: `sync` and `seed drift` no longer refuse an environment whose
+    `include_dirs` are not on the machine that connects.
+  - `ProductionSyncer(source, target)` takes a name, a config file, a URL, an `Environment` or a
+    `DatabaseConfig`. A checkpoint file names each side as a report does (a URL masked, an
+    environment by name).
+  - a database that does not answer is `CONFIG_006` naming it as a report does, from all four
+    (`schema-to-schema` did; `sync` and `seed drift` did not say which side).
+- **A scratch database is a copy of `template0`, not `template1`** (#749). Every database
+  confiture creates to build a tree into and read back — `drift`/`migrate diff` with a scratch
+  server, `lint`'s extension tier and `body` rule, `seed drift --build`, `migrate squash` — was a
+  copy of the server's `template1`, so whatever a server keeps there (a PostGIS image ships PostGIS
+  in it) answered for the build: `build_003` could resolve `public.st_makepoint` for a tree that
+  never creates it, and a materialised side could hold objects the tree does not declare. A tree
+  that relied on `template1`'s extensions without its own `CREATE EXTENSION` now fails its scratch
+  build, as it fails on a fresh server. `test-db` (your own test databases) is unchanged.
+
 ### Fixed
 
 - **A release ships wheels for the declared CPythons only.** The macOS and Windows builds
@@ -22,6 +79,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   maturin is now given setup-python's interpreter by path, and Publish's validate job refuses
   any wheel whose tag is not declared, as it already refused a missing one. The `cp315` files
   already on PyPI are left in place.
+- **`--help` re-wraps a paragraph instead of breaking it where the docstring did** (#751). Typer
+  keeps every line break of a command's docstring after its first paragraph, and Rich wrapped
+  inside each source line, so on a terminal narrower than the source a sentence broke twice
+  ("…Every table" / "the seed" / "tree writes…"). This was every command, not only `seed drift`.
+  The lines of a sentence are now joined once, when the command tree is built; headings, list
+  items, examples, column-aligned lines and `\b` blocks keep their layout.
+- **An option prints its default once.** 140 options wrote `(default: x)` in their help beside
+  Typer's own `[default: x]`. The hand-written copy is gone wherever Typer shows the default;
+  `--project-dir` keeps "(default: current directory)" and no longer also shows `[default: .]`.
 
 ## [1.40.0] - 2026-10-25
 
