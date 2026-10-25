@@ -834,11 +834,13 @@ class MigrationPreflightInfo:
         False  # every statement has an expand/contract plan (migrate up --online)
     )
     online_stages: list[dict[str, Any]] = field(default_factory=list)
+    # A .py migration's down() as its source reads (core.migration_down.DownBody); None for SQL
+    python_down: Literal["empty", "present", "unknown"] | None = None
 
     @property
     def reversible(self) -> bool:
-        """True if this migration has a rollback file."""
-        return self.has_down
+        """True if ``migrate down`` has a down to run: a rollback file, or a ``down()`` that is not empty."""
+        return self.has_down and self.python_down != "empty"
 
     @property
     def fully_transactional(self) -> bool:
@@ -874,7 +876,7 @@ class PreflightResult:
 
     @property
     def all_reversible(self) -> bool:
-        """True if every migration has a rollback file."""
+        """True if ``migrate down`` has a down to run for every migration."""
         return all(m.reversible for m in self.migrations)
 
     @property
@@ -894,7 +896,7 @@ class PreflightResult:
 
     @property
     def irreversible(self) -> list[MigrationPreflightInfo]:
-        """Migrations missing a rollback file."""
+        """Migrations ``migrate down`` has no down to run for."""
         return [m for m in self.migrations if not m.reversible]
 
     @property
@@ -953,7 +955,8 @@ class PreflightResult:
                 migration=m.version,
                 file=m.filename,
             )
-            for m in self.irreversible
+            for m in self.migrations
+            if not m.has_down
         )
         out.extend(
             PreflightIssue.of(
@@ -978,6 +981,19 @@ class PreflightResult:
             for m in self.migrations
             if m.destructive
         )
+        out.extend(
+            PreflightIssue.of(
+                "PFLIGHT_IRREVERSIBLE",
+                f"Migration {m.version} ({m.name}) declares that migrate down does not undo it: "
+                f"{'; '.join(m.irreversible_reasons)}.",
+                migration=m.version,
+                file=m.filename,
+                details={"irreversible": list(m.irreversible_reasons)},
+            )
+            for m in self.migrations
+            if m.irreversible_reasons
+        )
+        out.extend(self._python_down_issues())
         for version, files in self.duplicate_versions.items():
             out.append(
                 PreflightIssue.of(
@@ -996,6 +1012,33 @@ class PreflightResult:
             )
             for version in self.checksum_mismatches
         )
+        return out
+
+    def _python_down_issues(self) -> list[PreflightIssue]:
+        """A .py migration's down() is never assumed: empty, or not verified (#754)."""
+        out: list[PreflightIssue] = []
+        for m in self.migrations:
+            if m.python_down == "empty":
+                out.append(
+                    PreflightIssue.of(
+                        "PFLIGHT_DOWN_EMPTY",
+                        f"Migration {m.version} ({m.name}) has a down() that does nothing: "
+                        "migrate down would record a rollback and undo nothing.",
+                        migration=m.version,
+                        file=m.filename,
+                    )
+                )
+            elif m.python_down is not None:
+                out.append(
+                    PreflightIssue.of(
+                        "PFLIGHT_DOWN_UNVERIFIED",
+                        f"Migration {m.version} ({m.name}) is Python: confiture does not read "
+                        "what its down() does, so whether migrate down undoes it is not checked.",
+                        migration=m.version,
+                        file=m.filename,
+                        details={"down": m.python_down},
+                    )
+                )
         return out
 
     @property
@@ -1047,6 +1090,21 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
     "PFLIGHT_DESTRUCTIVE_GATED": (
         "warning",
         "Review the migration, then run migrate up --allow-destructive to apply it.",
+    ),
+    "PFLIGHT_IRREVERSIBLE": (
+        "info",
+        "Plan the recovery without migrate down: the migration's -- confiture:irreversible "
+        "reasons say what its down does not restore.",
+    ),
+    "PFLIGHT_DOWN_EMPTY": (
+        "warning",
+        "Write the down() that undoes the migration: migrate down, migrate down-to and "
+        "migrate up --require-reversible refuse one that does nothing.",
+    ),
+    "PFLIGHT_DOWN_UNVERIFIED": (
+        "info",
+        "Review the Python migration's down() by hand, or express the change as .up.sql + "
+        ".down.sql so confiture can read both.",
     ),
     "PFLIGHT_NON_TRANSACTIONAL": (
         "warning",

@@ -128,3 +128,22 @@ def test_versions_scope_the_replica_findings(tmp_path: Path) -> None:
 
     assert {i.file for i in every} == {"001_drop.up.sql", "003_data.py"}
     assert pending == []
+
+
+def test_every_replica_issue_names_its_migration_by_version(tmp_path: Path) -> None:
+    """``migration`` is the version, as on every other issue; the table is a detail (#754)."""
+    (tmp_path / "20260606120000_drop.up.sql").write_text("ALTER TABLE tb_item DROP COLUMN c;")
+    (tmp_path / "20260606120001_bad.up.sql").write_text("ALTER TABLE ;")
+    (tmp_path / "20260606120002_data.py").write_text("def up(cur):\n    pass\n")
+    issues = replica_preflight_issues(tmp_path, has_replicas=True, bypass=False)
+
+    by_file = {i.file: i for i in issues}
+    assert {f: i.migration for f, i in by_file.items()} == {
+        "20260606120000_drop.up.sql": "20260606120000",
+        "20260606120001_bad.up.sql": "20260606120001",
+        "20260606120002_data.py": "20260606120002",
+    }
+    assert by_file["20260606120000_drop.up.sql"].details == {
+        "operation": "DropColumn",
+        "table": "tb_item",
+    }

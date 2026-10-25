@@ -210,7 +210,7 @@ def replica_preflight_issues(
                         f"{f.migration_file.name}: pglast could not parse the migration, so "
                         "its replica forward-compatibility cannot be classified"
                     ),
-                    migration=None,
+                    migration=_version_from_migration_filename(f.migration_file.name),
                     file=f.migration_file.name,
                     actionable="fix the SQL syntax so the classifier can read the migration",
                     details={"operation": "Unparseable"},
@@ -222,10 +222,10 @@ def replica_preflight_issues(
                 severity=f.severity,
                 code=f.code,
                 message=f.message,
-                migration=f.op.table,
+                migration=_version_from_migration_filename(f.migration_file.name),
                 file=f.migration_file.name,
                 actionable=f.verdict.multi_step,
-                details={"operation": type(f.op).__name__},
+                details={"operation": type(f.op).__name__, "table": f.op.table},
             )
         )
     issues.extend(
@@ -237,7 +237,7 @@ def replica_preflight_issues(
                 "classifier cannot inspect it, so window-safety cannot be "
                 "certified automatically; review manually"
             ),
-            migration=None,
+            migration=_version_from_migration_filename(py.name),
             file=py.name,
             actionable=(
                 "review the migration's DDL by hand for replica "

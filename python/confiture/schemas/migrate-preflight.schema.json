@@ -4,7 +4,7 @@
   "title": "confiture migrate preflight --format json (no --against)",
   "description": "Structured preflight report (issue #148/#154): {ok, window_safe, summary, issues[]}. Reports per-migration reversibility (.down.sql present), transactionality, duplicate version prefixes, checksum mismatches, and replica forward-compatibility as a uniform issues[] of the shared issue object. No database connection required, unless `--scope pending` asks the ledger which migrations to judge. A preflight that *crashed* (config/DB error) emits the #145 error envelope instead — branch on `issues` vs `error`. Since 0.43.0 the payload also carries `change_set` (#197): the per-change risk tiers for the pending set. It is declared but not required — an absent `change_set` is the honest signal that the producer did not classify, which a consumer treats as unclassified and denies.",
   "type": "object",
-  "required": ["ok", "window_safe", "summary", "issues"],
+  "required": ["ok", "window_safe", "reversible", "summary", "issues"],
   "properties": {
     "command": {"type": "string", "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture` (`migrate up`, `lint`)."},
     "parser": {"type": "object", "additionalProperties": false, "required": ["pglast", "pg_major"], "description": "What parsed the SQL behind this payload: the installed pglast release and the PostgreSQL grammar major it embeds. In the envelope since 1.16.0.", "properties": {"pglast": {"type": "string"}, "pg_major": {"type": "integer"}}},
@@ -16,6 +16,11 @@
       "type": "boolean",
       "description": "Top-level blue-green window-safety verdict (#154): true iff confiture certifies every checked migration is forward-compatible for a two-version shared-DB window (both N-1 and N served against one Postgres during the cutover). False when any PFLIGHT_REPLICA_* finding is present: a replica-unsafe op, OR a non-SQL .py migration the classifier cannot read. Forward-compatibility only — NOT atomicity: PFLIGHT_MISSING_DOWN (reversibility) and PFLIGHT_NON_TRANSACTIONAL are reported but do not gate this (a non-transactional CREATE INDEX CONCURRENTLY is window-safe). This is the whole window-safety contract: consume it directly instead of prefix-matching codes; a consumer treats its absence (older confiture) as fail-safe blocked. Note `ok` cannot substitute for it — replica findings are warn-by-default, so `ok` can be true while `window_safe` is false.",
       "$comment": "STABILITY: this field and its semantics are a cross-repo contract (#154). It must remain present and false whenever any PFLIGHT_REPLICA_* finding (incl. PFLIGHT_REPLICA_UNCLASSIFIED for unreadable migrations) is present."
+    },
+    "reversible": {
+      "type": "boolean",
+      "description": "Top-level rollback verdict (#754): true iff `migrate down` can undo every checked migration. False when any of PFLIGHT_MISSING_DOWN (no .down.sql), PFLIGHT_DOWN_EMPTY (a .py down() that does nothing), PFLIGHT_DOWN_UNVERIFIED (a .py down() confiture does not read), PFLIGHT_IRREVERSIBLE (a -- confiture:irreversible reason), PFLIGHT_DESTRUCTIVE_GATED, PFLIGHT_NON_TRANSACTIONAL (an autocommit migration can stop part way) or PFLIGHT_UNPARSEABLE is present, or when any change_set entry's tier is other than additive, reversible or lock_risky (destructive, irreversible, or no tier at all). It answers what `window_safe` does not: whether a failed deploy is undone by `migrate down` or needs a restore. Consume it directly; a consumer treats its absence (older confiture) as false.",
+      "$comment": "STABILITY: this field and its semantics are a cross-repo contract (#754). It must remain present and false whenever any of the codes named in its description is present, or any change_set entry falls outside the three undoable tiers; tests/contract/test_fraisier_adapter_surface.py pins the code set."
     },
     "summary": {
       "type": "object",

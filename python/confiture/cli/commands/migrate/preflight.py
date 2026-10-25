@@ -725,7 +725,7 @@ def _preflight_payload(
     pending: PendingScope | None,
 ) -> dict[str, Any]:
     # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
-    from confiture.core.preflight import is_window_safe
+    from confiture.core.preflight import is_reversible, is_window_safe
 
     return {
         "ok": exit_code == 0,
@@ -733,6 +733,8 @@ def _preflight_payload(
         # safety contract for the consumer (folds in replica-unsafe ops,
         # unreadable .py migrations, and the down path).
         "window_safe": is_window_safe(all_issues),
+        # #754: whether migrate down can undo every checked migration.
+        "reversible": is_reversible(all_issues, change_set.changes),
         "summary": summary,
         "issues": [i.to_dict() for i in all_issues],
         # #197: per-change risk tiers. The object wrapper is load-bearing —

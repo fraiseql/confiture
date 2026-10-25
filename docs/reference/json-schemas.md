@@ -495,6 +495,15 @@ Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issue
 > declared but not required, so older payloads stay valid. See the
 > [fraisier adapter contract](./fraisier-adapter-contract.md#per-change-risk-tier-change_set).
 
+> **New in 1.40.0 (#754).** Both preflight payloads carry `reversible`: `true` iff
+> `migrate down` can undo every checked migration, `false` when any of
+> `PFLIGHT_MISSING_DOWN`, `PFLIGHT_DOWN_EMPTY`, `PFLIGHT_DOWN_UNVERIFIED`,
+> `PFLIGHT_IRREVERSIBLE`, `PFLIGHT_DESTRUCTIVE_GATED`, `PFLIGHT_NON_TRANSACTIONAL`
+> or `PFLIGHT_UNPARSEABLE` is in `issues[]`, or a `change_set` entry's tier is not
+> `additive`, `reversible` or `lock_risky` (an absent tier included). A consumer treats
+> its absence as `false`.
+> See the [fraisier adapter contract](./fraisier-adapter-contract.md#can-migrate-down-undo-it-reversible).
+
 ### `confiture migrate preflight --against <url> --format json`
 
 [migrate-preflight-against.schema.json](./json-schemas/migrate-preflight-against.schema.json)
@@ -741,6 +750,3 @@ sub-schemas:
   fixtures in `tests/fixtures/preflight-contract/`
 * `DependentAnalysis` — the optional dependent-objects analysis, referenced by
   both `migrate-preflight.schema.json` and `migrate-preflight-against.schema.json`
-* `StaticPreflight` — the legacy `PreflightResult.to_dict()` shape. **Unused
-  since 0.21.0 (#151)** — the `--against` `static` block it described was folded
-  into the unified `issues[]`. Retained for back-reference only.

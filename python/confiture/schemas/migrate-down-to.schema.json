@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-down-to.schema.json",
   "title": "confiture migrate down-to <revision> --format json",
-  "description": "Plan+result of an absolute rollback (issue #142). rolled_back is newest \u2192 oldest. An invalid plan (unknown/forward target, or a missing .down.sql) is an error path that emits the error envelope (error-envelope.schema.json) and applies nothing \u2014 not this shape.",
+  "description": "Plan+result of an absolute rollback (issue #142). rolled_back is newest \u2192 oldest. An invalid plan (unknown/forward target, or a migration with no usable down: a missing .down.sql, or a Python down() that does nothing) is an error path that emits the error envelope (error-envelope.schema.json) and applies nothing \u2014 not this shape.",
   "type": "object",
   "required": [
     "from",

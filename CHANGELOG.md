@@ -14,6 +14,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`migrate preflight` says what `migrate down` cannot undo** (#754). Both preflight payloads
+  (with and without `--against`) carry a top-level **`reversible`** boolean. It is `true` only when
+  `migrate down` can undo every checked migration. A consumer treats its absence as `false`. It is
+  built from `issues[]` and `change_set` the way `window_safe` is. It is `false` when any of the
+  codes below is present, or when a `change_set` entry is not `additive`, `reversible` or
+  `lock_risky` (an entry with no tier counts). New issue codes, each with `migration` set to the
+  version:
+  - `PFLIGHT_IRREVERSIBLE` (info): the migration declares `-- confiture:irreversible <reason>`
+    (`details.irreversible`). It is reported whether or not the file is destructive-gated. Before,
+    the reasons reached the wire only inside `PFLIGHT_DESTRUCTIVE_GATED`.
+  - `PFLIGHT_DOWN_EMPTY` (warning): a `.py` migration whose `down()` does nothing. That means it is
+    absent, or holds only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError`.
+    confiture reads this from the source with `ast`, never by importing it.
+  - `PFLIGHT_DOWN_UNVERIFIED` (info): any other `.py` migration. `details.down` is `present` or
+    `unknown` (another base class may supply the `down()`). A `.py` migration used to be assumed
+    reversible with nothing on the wire.
+
+  These are preflight report codes: **`confiture --exit-codes-json` is unchanged**. Only
+  `PFLIGHT_DOWN_EMPTY` can move preflight's exit code, and only under `--strict`, where every `.py`
+  migration already fails on `PFLIGHT_REPLICA_UNCLASSIFIED`. The adapter contract has a new section,
+  "Can `migrate down` undo it?". The codebook in `docs/reference/error-codes.md` now lists every
+  `PFLIGHT_*` code, and a test keeps it complete.
+
+### Changed
+
+- **A Python migration whose `down()` does nothing is refused, not run** (#754). `migrate down`
+  (with or without `--dry-run`), `migrate down-to` and `migrate up --require-reversible` now refuse
+  a rollback that reaches one, before anything runs: `ROLLBACK_600`, exit 8, an existing code.
+  Before, `migrate down` ran the no-op, deleted the ledger row and reported success. `migrate down`
+  also refuses a missing `.down.sql` up front. Before, it failed while loading that migration, after
+  rolling back any newer migration. A `down()` confiture cannot place (`unknown`) is never refused.
+- **Every `PFLIGHT_REPLICA_*` issue carries the migration's version in `migration`** (#754).
+  `PFLIGHT_REPLICA_UNCLASSIFIED` wrote `null`. The classified codes wrote the table name, which is
+  now in `details.table`.
+
+### Removed
+
+- The `StaticPreflight` definition in `_preflight_defs.schema.json`. No schema has referenced it and
+  no command has emitted it since 0.21.0 (#151). `PreflightResult.to_dict()` remains for the library
+  API.
+
 ## [1.39.0] - 2026-10-19
 
 ### Added

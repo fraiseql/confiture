@@ -216,6 +216,7 @@ def _payload_with(change_set) -> dict:
     return {
         "ok": True,
         "window_safe": True,
+        "reversible": True,
         "summary": {"errors": 0, "warnings": 0, "info": 0, "migrations_checked": 1},
         "issues": [],
         "change_set": change_set,
@@ -282,6 +283,7 @@ def test_large_tables_validates_and_constrains(schemas_dir):
     payload = {
         "ok": True,
         "window_safe": True,
+        "reversible": True,
         "summary": {
             "errors": 0,
             "warnings": 0,
@@ -311,6 +313,7 @@ def test_scope_and_ledger_validate_and_constrain(schemas_dir, schema):
     payload = {
         "ok": True,
         "window_safe": True,
+        "reversible": True,
         "summary": {
             "errors": 0,
             "warnings": 0,
@@ -327,3 +330,9 @@ def test_scope_and_ledger_validate_and_constrain(schemas_dir, schema):
     for bad in ({"scope": "some"}, {"ledger": {"table": "tb_confiture"}}):
         with pytest.raises(ValidationError):
             validator.validate({**payload, **bad})
+
+
+@pytest.mark.parametrize("schema", [PREFLIGHT_SCHEMA, AGAINST_SCHEMA])
+def test_reversible_is_required(schemas_dir: Path, schema: str) -> None:
+    """#754: `reversible` is always on the wire; a consumer reads its absence as false."""
+    assert "reversible" in _load(schemas_dir, schema)["required"]

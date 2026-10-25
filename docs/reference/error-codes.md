@@ -166,11 +166,17 @@ warnings → 0 unless `--strict`.
 
 | Code | Default severity | Meaning |
 |------|------------------|---------|
+| `PFLIGHT_UNPARSEABLE` | error | PostgreSQL's parser rejects the migration, so nothing about it can be certified (forces `window_safe: false`) |
 | `PFLIGHT_MISSING_DOWN` | error | Migration has no matching `.down.sql` (not reversible) |
+| `PFLIGHT_DOWN_EMPTY` | warning | A `.py` migration's `down()` does nothing (absent, or only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError`), read from its source and never imported |
+| `PFLIGHT_DOWN_UNVERIFIED` | info | A `.py` migration's `down()` is not read: whether `migrate down` undoes it is not checked (`details.down`: `present` — it has statements; `unknown` — another base class may supply it) |
+| `PFLIGHT_DESTRUCTIVE_GATED` | warning | Migration carries `-- confiture:destructive`: `migrate up` refuses it without `--allow-destructive` |
+| `PFLIGHT_IRREVERSIBLE` | info | Migration declares `-- confiture:irreversible <reason>`: `migrate down` runs but does not restore what the reasons name (`details.irreversible`) |
 | `PFLIGHT_NON_TRANSACTIONAL` | warning | Migration contains a statement that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) |
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
+| `PFLIGHT_TVIEW_BASE_COLUMN` | error | `--against`: the migration drops a table or changes a column a registered pg_tviews TVIEW reads, which PostgreSQL refuses while the TVIEW exists |
 | `PFLIGHT_INVALID_INDEX` | warning | `--against`: a `CREATE INDEX … IF NOT EXISTS` names an index the database holds INVALID (a failed concurrent build), which the statement skips (#689) |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
 

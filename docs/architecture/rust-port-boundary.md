@@ -213,6 +213,7 @@ module moves, not when one grows.
 | `import_checker.py` | Python-bound |
 | `mcp_http.py` | Python-bound |
 | `mcp_server.py` | Python-bound |
+| `migration_down.py` | Python-bound |
 | `migration_reads.py` | Python-bound |
 
 <!-- END GENERATED: port-boundary -->
