@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Internal
+
+- **Lockfile refresh** (#752): `uv.lock` regenerated on 1.40.0; `Cargo.lock` was already
+  current. Notable moves are `ty` 0.0.89 → 0.0.91, `sqlglot` 30.23.0 → 30.24.0, `fastapi`
+  0.144.0 → 0.162.0 and `python-dateutil` 2.9 → 3.0, which only the docs build reaches
+  (through `mkdocs`' `ghp-import`); `mkdocs build --strict` passes on it.
+
 ## [1.40.0] - 2026-10-25
 
 ### Added
