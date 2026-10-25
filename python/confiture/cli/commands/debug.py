@@ -26,9 +26,7 @@ def debug_cte(
     database_url: str = database_url_option(...),
     sql: str | None = typer.Option(None, "--sql", "-s", help="SQL query to debug"),
     file: Path | None = typer.Option(None, "--file", help="SQL file to debug"),
-    max_rows: int = typer.Option(
-        20, "--max-rows", "-n", help="Max rows per CTE step (default: 20)"
-    ),
+    max_rows: int = typer.Option(20, "--max-rows", "-n", help="Max rows per CTE step"),
     format_type: str = format_option("table", "json"),
     stop_on_error: bool = typer.Option(
         True, "--stop-on-error/--continue-on-error", help="Stop at first failing CTE"

@@ -192,7 +192,7 @@ def lint(
     replica_safe: ReplicaSafeOpt = False,
     migrations_dir: Path = migrations_dir_option(
         help="Migrations directory the migration-tree rules read — replica_001, "
-        "own_001, own_002, acl_001 (default: db/migrations)"
+        "own_001, own_002, acl_001"
     ),
     overrides_dir: OverridesDirOpt = None,
     server_url: ServerUrlOpt = None,

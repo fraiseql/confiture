@@ -108,9 +108,7 @@ def _validate_prep_seed(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
-SeedsDirOpt = Annotated[
-    Path, typer.Option("--seeds-dir", help="Directory containing seed files (default: db/seeds)")
-]
+SeedsDirOpt = Annotated[Path, typer.Option("--seeds-dir", help="Directory containing seed files")]
 AllEnvsOpt = Annotated[bool, typer.Option("--all", help="Validate all environments (default: off)")]
 FixOpt = Annotated[
     bool, typer.Option("--fix", help="Automatically fix issues where possible (default: off)")
@@ -124,7 +122,7 @@ PrepSeedOpt = Annotated[
 ]
 PrepSeedLevelOpt = Annotated[
     int,
-    typer.Option("--level", "-l", help="Prep-seed validation level 1-5 (default: 3)", min=1, max=5),
+    typer.Option("--level", "-l", help="Prep-seed validation level 1-5", min=1, max=5),
 ]
 StaticOnlyOpt = Annotated[
     bool, typer.Option("--static-only", help="Run only Levels 1-3, no database (default: off)")
@@ -391,7 +389,7 @@ CopyThresholdOpt = Annotated[
     int,
     typer.Option(
         "--copy-threshold",
-        help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
+        help="With --copy-format: a seed file of at least this many INSERT rows loads with COPY",
     ),
 ]
 ProfileOpt = Annotated[
@@ -581,16 +579,16 @@ seed_app.command("drift")(seed_drift)
 def seed_generate(
     table: str = typer.Argument(..., help="Table name to generate seed data for"),
     database_url: str = database_url_option(...),
-    schema: str = typer.Option("public", "--schema", "-s", help="Schema name (default: public)"),
+    schema: str = typer.Option("public", "--schema", "-s", help="Schema name"),
     seed_env: str = typer.Option(
         "development",
         "--seed-env",
-        help="Seed directory under db/seeds/ to write into (default: development)",
+        help="Seed directory under db/seeds/ to write into",
     ),
     output_dir: Path = typer.Option(
-        Path("db/seeds"), "--output-dir", "-o", help="Seeds output directory (default: db/seeds)"
+        Path("db/seeds"), "--output-dir", "-o", help="Seeds output directory"
     ),
-    row_count: int = typer.Option(10, "--rows", "-n", help="Number of stub rows (default: 10)"),
+    row_count: int = typer.Option(10, "--rows", "-n", help="Number of stub rows"),
     overwrite: bool = typer.Option(
         False, "--overwrite", help="Overwrite existing seed file (default: off)"
     ),
