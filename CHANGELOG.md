@@ -60,8 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reversible` for plain views, `lock_risky` when a materialized view or a TVIEW is rebuilt. Drift
   is unchanged: the diff keeps each rebuilt view's redefinition and index changes, and the generated
   migration writes the recreate in their place. A column change no view reads generates exactly what
-  it did. A database side carries no grants or comments, so a migration diffed from a live database
-  does not write them again. The `every-change` diff goldens moved (one view added to the fixture).
+  it did. The `every-change` diff goldens moved (one view added to the fixture).
 - ⚠️ **A view, materialized view or TVIEW dropped and created again in one file is tiered as the
   replacement it is** (#765). The change-set classifier pairs a `DROP VIEW`, `DROP MATERIALIZED
   VIEW` or `pg_tviews_drop()` with a later creation of the same kind, by the name as written: the
@@ -112,6 +111,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fraiseql-semis for generated data, and a unit test pins the stub's text.
 
 ### Fixed
+
+- **A column change under views orders the rebuild with the views it adds, and keeps what the
+  drop takes** (#787). A recreated view that read a view only the new tree defines was created
+  before it, and the migration failed; the views a migration adds that a recreated one reads,
+  directly or through one another, are now created with the recreate in the new tree's
+  dependency order (the recreate is split around them; an added view no recreated one reads keeps
+  its place). And a migration diffed from a live database wrote no grants, comment or owner for
+  the views it rebuilt, in the up or the down: a database side now carries each view's,
+  materialized view's and TVIEW's, read from the catalog (`live_catalog.attached`: `ALTER … OWNER
+  TO`, `COMMENT ON … IS`, one `GRANT` per grantee, the owner's own privileges left out), as does a
+  `--scratch-url` side, which kept none of the tree's. Grants, comments and owners are not
+  compared, so a recreated view now gets back what the drop took — the other side's statements —
+  then what its own side writes, each statement once; a diff between two trees that write the
+  same ones generates what it did.
 
 - **fraiseql-semis is linked and versioned in the docs** (#770). The README, *Building on
   confiture*, the prep-seed validation guide and `examples/08-generated-seeds` link the PyPI

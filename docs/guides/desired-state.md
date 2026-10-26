@@ -130,16 +130,16 @@ PostgreSQL refuses `ALTER COLUMN … TYPE` and `DROP COLUMN` on a column a view 
 column change has such views, the migration drops them before any table is edited — readers
 first: a view on the view, a materialized view or a TVIEW (`pg_tviews_drop()`) before the view it
 reads — and creates them again from the new tree once every table is edited, each after the views
-it reads, with a materialized view's or a TVIEW's indexes, and the `GRANT`, `COMMENT ON` and
-`OWNER TO` statements the tree writes on them. The down file does the same with the old tree's
-definitions.
+it reads, with a materialized view's or a TVIEW's indexes. A view the migration adds that a
+recreated one reads is created first, in the same order. Grants, comments and owners are not
+compared, so a recreated view keeps the ones it had, then takes the `GRANT`, `COMMENT ON` and
+`OWNER TO` statements the new tree writes on it; a database side reads the ones it had from the
+catalog. The down file does the same with the old tree's definitions.
 
 A view is rebuilt when it names the column — bare or after a range — or reads every column (`*`,
 the whole row, `USING`, a `NATURAL` join), and so is every view that reads a rebuilt one. A view
 that reads only other columns of the table is left alone. The rebuild is tiered as a replacement:
 `reversible` for plain views, `lock_risky` when a materialized view or a TVIEW recomputes its rows.
-A diff from a live database carries no grants or comments, so the migration does not write them
-again; diff from the tree when they matter.
 
 ## Changes the rows can refuse: the backfill placeholder
 

@@ -31,6 +31,7 @@ from confiture.core.schema_change import (
     ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
+    Dependent,
     DependentsDropped,
     DependentsRecreated,
     EnumTypeAdded,
@@ -57,6 +58,7 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.schema_model import SchemaModel, Table, ref_for
+from confiture.core.view_dependents import DEPENDENT_KINDS, with_what_they_read
 
 #: Where a definition kind is created, by what it needs to exist first: a routine
 #: may name a table's row type, a view a routine, a trigger its function. A kind
@@ -266,10 +268,51 @@ def _written_by_a_rebuild(changes: Sequence[SchemaChange]) -> list[SchemaChange]
     ]
 
 
+def _with_the_views_they_read(changes: list[SchemaChange]) -> list[SchemaChange]:
+    """*changes*, each added view a recreated one reads moved into the recreate (#787).
+
+    The recreate runs before the views a migration adds, which may read it. One it
+    reads itself is created in its place instead, in the new tree's dependency
+    order, and the recreate is split around it. Nothing moves when the read graph
+    cannot place every recreated view.
+    """
+    for rebuild in [c for c in changes if isinstance(c, DependentsRecreated)]:
+        added = {
+            c.ref: c
+            for c in changes
+            if isinstance(c, ObjectAdded) and c.ref.kind in DEPENDENT_KINDS
+        }
+        recreated = {d.ref: d for d in rebuild.dependents}
+        objects = {ref: [d.obj] for ref, d in recreated.items()}
+        objects |= {ref: [c.obj] for ref, c in added.items()}
+        sequence = with_what_they_read(objects, recreated, added)
+        moved = {ref for ref in sequence if ref in added}
+        if not moved or not recreated.keys() <= set(sequence):
+            continue
+        block: list[SchemaChange] = []
+        run: list[Dependent] = []
+        for ref in sequence:
+            if ref in recreated:
+                run.append(recreated[ref])
+                continue
+            if run:
+                block.append(DependentsRecreated(tuple(run)))
+                run = []
+            block.append(added[ref])
+        if run:
+            block.append(DependentsRecreated(tuple(run)))
+        kept = [c for c in changes if not (isinstance(c, ObjectAdded) and c.ref in moved)]
+        at = kept.index(rebuild)
+        changes = [*kept[:at], *block, *kept[at + 1 :]]
+    return changes
+
+
 def apply_order(changes: Sequence[SchemaChange]) -> list[SchemaChange]:
     """*changes* in an order PostgreSQL accepts, the differ's wherever it already does.
 
-    What a recreated view writes already is left out (:func:`_written_by_a_rebuild`).
+    What a recreated view writes already is left out (:func:`_written_by_a_rebuild`),
+    and a view it reads that the migration adds is created with it
+    (:func:`_with_the_views_they_read`).
     """
     ranked = sorted(_written_by_a_rebuild(changes), key=_rank)
     added = [c.table for c in ranked if isinstance(c, TableAdded)]
@@ -294,4 +337,4 @@ def apply_order(changes: Sequence[SchemaChange]) -> list[SchemaChange]:
             ordered.append(TableDropped(dropping.pop(0)))
         else:
             ordered.append(change)
-    return ordered
+    return _with_the_views_they_read(ordered)
