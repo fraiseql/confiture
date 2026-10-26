@@ -3847,7 +3847,12 @@ confiture seed convert [OPTIONS]
 
 ### `confiture seed generate`
 
-Generate a seed SQL stub for a PostgreSQL table.
+Write a commented-out `INSERT` stub for a PostgreSQL table: the columns a writer
+supplies and one placeholder per value, to fill by hand. It writes stubs, never
+data, whatever is installed. To generate seed data, use a generator built on
+`confiture.platform`, such as
+[fraiseql-semis](https://pypi.org/project/fraiseql-semis/)
+([source](https://github.com/fraiseql/semis)).
 
 <!-- BEGIN GENERATED: cli confiture seed generate -->
 
@@ -3861,7 +3866,7 @@ confiture seed generate [OPTIONS] {table}
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `table` | str | yes | Table name to generate seed data for |
+| `table` | str | yes | Table to write a seed stub for |
 
 **Options**
 
