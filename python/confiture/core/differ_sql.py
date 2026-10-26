@@ -312,7 +312,24 @@ def _not_null_check(table: RelationName, column: str) -> str:
     Not ``<table>_<column>_not_null``: PostgreSQL 18 gives the column's own NOT NULL
     constraint that name, and dropping the CHECK by it would read as dropping that.
     """
-    return quote_identifier(f"{table.name}_{column}_not_null_check")
+    return f"{table.name}_{column}_not_null_check"
+
+
+def _add_not_valid(table: RelationName, name: str, body: str) -> str:
+    """``ADD CONSTRAINT … NOT VALID``, after the same name dropped if it exists, then ``VALIDATE``.
+
+    A file that runs outside a transaction commits each statement: when the
+    ``VALIDATE`` fails on a row, the ``ADD`` has committed, and the run that
+    follows the fix would fail on it. PostgreSQL has no ``ADD CONSTRAINT IF NOT
+    EXISTS``; the drop before it is the change set's replacement, paired as written
+    (#785).
+    """
+    target, constraint = relation(table), quote_identifier(name)
+    return (
+        f"ALTER TABLE {target} DROP CONSTRAINT IF EXISTS {constraint};\n"
+        f"ALTER TABLE {target} ADD {named(name, body)} NOT VALID;\n"
+        f"ALTER TABLE {target} VALIDATE CONSTRAINT {constraint};\n"
+    )
 
 
 def _tighten(table: RelationName, column: str) -> str:
@@ -323,10 +340,9 @@ def _tighten(table: RelationName, column: str) -> str:
     """
     target, check = relation(table), _not_null_check(table, column)
     return (
-        f"ALTER TABLE {target} ADD CONSTRAINT {check} CHECK ({quote_identifier(column)} IS NOT NULL) NOT VALID;\n"
-        f"ALTER TABLE {target} VALIDATE CONSTRAINT {check};\n"
+        _add_not_valid(table, check, f"CHECK ({quote_identifier(column)} IS NOT NULL)")
         + _nullability(table, column, nullable=False)
-        + f"ALTER TABLE {target} DROP CONSTRAINT {check};\n"
+        + f"ALTER TABLE {target} DROP CONSTRAINT {quote_identifier(check)};\n"
     )
 
 
@@ -350,12 +366,17 @@ def _filled_by_nothing(column: Column) -> bool:
 
 
 def _add_column(table: RelationName, column: Column) -> str:
-    """``ADD COLUMN``; a ``NOT NULL`` one nothing fills is added nullable, filled, then tightened."""
+    """``ADD COLUMN``; a ``NOT NULL`` one nothing fills is added nullable, filled, then tightened.
+
+    The nullable column is added ``IF NOT EXISTS``: when the tightening fails on a
+    row outside a transaction, the run after the fix meets the column (#785).
+    """
     if not _filled_by_nothing(column):
         return f"ALTER TABLE {relation(table)} ADD COLUMN {column_element(column)};\n"
     nullable = replace(column, not_null=False)
-    return f"ALTER TABLE {relation(table)} ADD COLUMN {column_element(nullable)};\n" + (
-        _fill_then_tighten(table, column.folded)
+    return (
+        f"ALTER TABLE {relation(table)} ADD COLUMN IF NOT EXISTS {column_element(nullable)};\n"
+        + (_fill_then_tighten(table, column.folded))
     )
 
 
@@ -633,10 +654,7 @@ def _add_check(change: CheckConstraintAdded) -> str:
     fill = backfill_gate.placeholder(_constraint_target(change.table, change.constraint), rows)
     if not name:
         return fill + f"ALTER TABLE {relation(change.table)} ADD {body};\n"
-    return fill + (
-        f"ALTER TABLE {relation(change.table)} ADD {named(name, body)} NOT VALID;\n"
-        f"ALTER TABLE {relation(change.table)} VALIDATE CONSTRAINT {quote_identifier(name)};\n"
-    )
+    return fill + _add_not_valid(change.table, name, body)
 
 
 def _drop_constraint(

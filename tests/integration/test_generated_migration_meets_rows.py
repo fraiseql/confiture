@@ -166,3 +166,39 @@ def test_a_python_migration_is_refused_too(fresh_database: str, tmp_path: Path) 
     assert code == 5, payload
     assert payload["error"]["code"] == "VALID_010", payload
     assert "tb_user.email" in payload["error"]["message"]
+
+
+#: The cases whose placeholder is followed by a constraint added ``NOT VALID`` and validated.
+_VALIDATED = ("check", "not_null_column", "set_not_null")
+_INDEX = "CREATE INDEX ix_tb_user_id ON tb_user (id);\n"
+
+
+@pytest.mark.parametrize("case_name", _VALIDATED)
+def test_a_non_transactional_migration_runs_again_once_the_rows_are_fixed(
+    case_name: str, fresh_database: str, tmp_path: Path
+) -> None:
+    """Outside a transaction each statement commits; a retry after a failed VALIDATE applies (#785).
+
+    The added index is written ``CONCURRENTLY``, so the file runs outside a
+    transaction. The author's backfill misses the seeded row, ``VALIDATE`` fails
+    after the ``ADD`` has committed, and once the row is fixed the same file runs
+    to the end.
+    """
+    case = CASES[case_name]
+    old, new = _trees(case_name, case)
+    new += _INDEX
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(old)
+        conn.execute(case.seed)
+    config, migrations = _project(tmp_path, fresh_database, old, new)
+    assert "CONCURRENTLY" in _up_file(migrations).read_text()
+    _fill(migrations, "-- confiture:backfill none")
+
+    code, payload = _cli("up", migrations, config)
+    assert code != 0, payload
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(case.fill)
+
+    code, payload = _cli("up", migrations, config)
+    assert code == 0, payload
+    assert _drift(fresh_database, new) == []

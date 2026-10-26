@@ -62,6 +62,7 @@ class TestACheckConstraintIsGeneratedAsItsExpression:
         assert sql == placeholder(
             "tenant.t.ck", "the rows of tenant.t that fail CHECK (id > 0)"
         ) + (
+            "ALTER TABLE tenant.t DROP CONSTRAINT IF EXISTS ck;\n"
             "ALTER TABLE tenant.t ADD CONSTRAINT ck CHECK (id > 0) NOT VALID;\n"
             "ALTER TABLE tenant.t VALIDATE CONSTRAINT ck;\n"
         )

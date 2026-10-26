@@ -129,7 +129,7 @@ class TestMigrationGenerator:
 
         # Up should add column
         assert "ALTER TABLE users" in content
-        assert "ADD COLUMN email" in content
+        assert "ADD COLUMN IF NOT EXISTS email" in content
 
         # Down should drop column
         assert "DROP COLUMN email" in content

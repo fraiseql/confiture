@@ -179,8 +179,13 @@ def test_a_change_of_enforcement_replaces_the_constraint(old: str, new: str, wri
     for change in changes:
         if isinstance(change, ForeignKeyAdded | CheckConstraintAdded):
             sql = DifferSQLGenerator().generate_up(change) or ""
-            stmt = pglast.parse_sql(sql)[0].stmt
-            read = read_constraint(stmt.cmds[0].def_)
+            (add,) = (
+                cmd
+                for raw in pglast.parse_sql(sql)
+                for cmd in raw.stmt.cmds
+                if getattr(cmd, "def_", None) is not None
+            )
+            read = read_constraint(add.def_)
             assert isinstance(read, Constraint)
             assert read.enforced is written
 
