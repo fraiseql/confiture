@@ -260,7 +260,9 @@ for table in dependency_order(model):
 `confiture schema dump-model` writes the same model as byte-stable JSON. Its consumers:
 [fraisier](https://github.com/fraiseql/fraisier), which drives confiture at deploy time
 through the [adapter contract](docs/reference/fraisier-adapter-contract.md), and
-fraiseql-semis (in development), which generates seed data on the seam. See
+[fraiseql-semis](https://pypi.org/project/fraiseql-semis/)
+([source](https://github.com/fraiseql/semis); this README was written against 0.3.0),
+which generates seed data on the seam. See
 [Building on confiture](docs/guides/building-on-confiture.md) and the
 [platform API reference](docs/reference/platform-api.md).
 
