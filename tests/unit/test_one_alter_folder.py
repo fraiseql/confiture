@@ -41,6 +41,10 @@ ALLOWED: dict[str, str] = {
         "asks what risk tier the operation carries, which is a judgement about "
         "applying it rather than a statement about the schema it leaves behind"
     ),
+    "core/change_set/rebuilt.py": (
+        "asks whether a constraint a migration drops is added again by name further down, "
+        "which makes the drop a replacement the change set tiers as the add (#785)"
+    ),
     "core/migration_scope.py": (
         "asks which constraints an earlier statement of a migration added, and whether an "
         "`ATTACH`/`INHERIT` joins a relation it created to one that existed — the context a "

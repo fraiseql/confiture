@@ -43,7 +43,7 @@ class TestAnAddedColumnKeepsItsDeclaration:
         sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, ColumnAdded))
         assert _parses(sql)
         # NOT NULL with nothing to fill it: added nullable, then tightened (#766).
-        assert sql.startswith("ALTER TABLE tenant.t ADD COLUMN x INTEGER;\n")
+        assert sql.startswith("ALTER TABLE tenant.t ADD COLUMN IF NOT EXISTS x INTEGER;\n")
 
     def test_no_column_is_invented_as_text(self) -> None:
         """``text`` was the fallback for a change with no ``details``, which is
