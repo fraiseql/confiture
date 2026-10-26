@@ -50,16 +50,16 @@ def config_option(
         if default is None:
             help = "Configuration file (optional)"
         elif default == CONFITURE_YAML:
-            help = f"Configuration file (default: {CONFITURE_YAML}); --env {_ENV_LOOKUP}"
+            help = f"Configuration file; --env {_ENV_LOOKUP}"
         else:
-            help = f"Configuration file (default: {default})"
+            help = "Configuration file"
     return _option(default, _names("--config", "-c", short_form=short, aliases=()), help, **kwargs)
 
 
 def env_option(default: str | None = "local", *, help: str | None = None, **kwargs: Any) -> Any:
     """``--env/-e``: an environment name, read as ``db/environments/<name>.yaml``."""
     if help is None:
-        suffix = f" (default: {default})" if default else ", instead of --config"
+        suffix = "" if default else ", instead of --config"
         help = f"Environment name: {_ENV_LOOKUP}{suffix}"
     return _option(default, ("--env", "-e"), help, **kwargs)
 
@@ -79,17 +79,18 @@ def migrations_dir_option(
     return _option(
         default,
         ("--migrations-dir",),
-        help or f"Migrations directory (default: {default})",
+        help or "Migrations directory",
         **kwargs,
     )
 
 
-def scratch_url_option() -> Any:
+def scratch_url_option(help: str | None = None) -> Any:
     """``--scratch-url``: the server a tree is built on and read back from (``materialised``)."""
     return _option(
         None,
         ("--scratch-url",),
-        "Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, "
+        help
+        or "Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, "
         "index expressions and predicates and view bodies compare as PostgreSQL stores "
         "them (default: the environment's scratch_url; without one, they compare "
         "structurally)",
@@ -144,7 +145,7 @@ def format_option(*allowed: str, default: str | None = None, help: str | None = 
         "--format",
         "-f",
         callback=_validate,
-        help=help or f"Output format: {' or '.join(allowed)} (default: {chosen_default})",
+        help=help or f"Output format: {' or '.join(allowed)}",
     )
 
 
@@ -177,14 +178,17 @@ def mode_option(*modes: str, help: str) -> Any:
             )
         return value
 
-    return typer.Option(
-        modes[0], "--mode", callback=_validate, help=f"{help} (default: {modes[0]})"
-    )
+    return typer.Option(modes[0], "--mode", callback=_validate, help=help)
 
 
 #: ``--project-dir`` for the commands that read a project tree (``build``, ``lint``).
 ProjectDirOpt = Annotated[
-    Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
+    Path,
+    typer.Option(
+        "--project-dir",
+        help="Project directory (default: current directory)",
+        show_default=False,
+    ),
 ]
 
 

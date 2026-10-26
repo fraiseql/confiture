@@ -123,6 +123,11 @@ ALTER TABLE users DROP COLUMN IF EXISTS bio;
 ```
 
 **Note**: Both `.up.sql` and `.down.sql` files are needed for reversible migrations.
+A Python migration's `down()` is read from its source (never imported): one that does nothing —
+absent, or only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError` — is
+refused by `migrate down`, `migrate down-to` and `migrate up --require-reversible` (exit 8,
+`ROLLBACK_600`), and `migrate preflight` reports it as `PFLIGHT_DOWN_EMPTY`. A `down()` with
+statements is run as written; preflight says it did not check it (`PFLIGHT_DOWN_UNVERIFIED`).
 
 ---
 

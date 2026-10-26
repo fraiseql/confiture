@@ -124,6 +124,10 @@ TREES: tuple[Tree, ...] = (
     # added and rebuilt on one both trees hold (#690).
     Tree("matview-indexes.old", files=("tests/fixtures/matview_indexes/old.sql",), drift=False),
     Tree("matview-indexes.new", files=("tests/fixtures/matview_indexes/new.sql",), drift=False),
+    # A pg_tviews TVIEW's indexes: carried by a TVIEW added, and around one
+    # redefined, each drop before pg_tviews_create_or_replace() and each add after.
+    Tree("tview-indexes.old", files=("tests/fixtures/tview_indexes/old.sql",), drift=False),
+    Tree("tview-indexes.new", files=("tests/fixtures/tview_indexes/new.sql",), drift=False),
 )
 
 PAIRS: tuple[tuple[str, str, str], ...] = (
@@ -134,6 +138,7 @@ PAIRS: tuple[tuple[str, str, str], ...] = (
     ),
     ("every-change", "every-change.old", "every-change.new"),
     ("matview-indexes", "matview-indexes.old", "matview-indexes.new"),
+    ("tview-indexes", "tview-indexes.old", "tview-indexes.new"),
 )
 
 _VERSION = re.compile(r"\b\d{14}(?=_golden\b)|(?<=-- Version: )\d{14}\b")

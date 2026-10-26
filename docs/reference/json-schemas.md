@@ -495,6 +495,15 @@ Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issue
 > declared but not required, so older payloads stay valid. See the
 > [fraisier adapter contract](./fraisier-adapter-contract.md#per-change-risk-tier-change_set).
 
+> **New in 1.40.0 (#754).** Both preflight payloads carry `reversible`: `true` iff
+> `migrate down` can undo every checked migration, `false` when any of
+> `PFLIGHT_MISSING_DOWN`, `PFLIGHT_DOWN_EMPTY`, `PFLIGHT_DOWN_UNVERIFIED`,
+> `PFLIGHT_IRREVERSIBLE`, `PFLIGHT_DESTRUCTIVE_GATED`, `PFLIGHT_NON_TRANSACTIONAL`
+> or `PFLIGHT_UNPARSEABLE` is in `issues[]`, or a `change_set` entry's tier is not
+> `additive`, `reversible` or `lock_risky` (an absent tier included). A consumer treats
+> its absence as `false`.
+> See the [fraisier adapter contract](./fraisier-adapter-contract.md#can-migrate-down-undo-it-reversible).
+
 ### `confiture migrate preflight --against <url> --format json`
 
 [migrate-preflight-against.schema.json](./json-schemas/migrate-preflight-against.schema.json)
@@ -503,7 +512,7 @@ Structured preflight report (#148): `{ok, summary, issues[]}`, where each `issue
 > envelope as the no-`--against` path — one schema, one parser. The legacy
 > `{static, against, hints}` shape is gone.
 
-Static findings + replica-forward-compat lints + execution-replay results, unified into one `issues[]`. A migration that fails to replay against the `--against` database appears as a `PFLIGHT_REPLAY_FAILED` issue, with the database error in `details.error`; the run exits 7 (via `preflight_exit_code`). Run-level metadata that is not a finding — `db_consumed` — rides in `summary`. `summary.migrations_checked` is the number of migrations *replayed* (the pending set). An unreachable `--against` URL is a connection failure → the [error envelope](./json-schemas/error-envelope.schema.json) with `CONFIG_006` (exit 3).
+Static findings + replica-forward-compat lints + execution-replay results, unified into one `issues[]`. A migration that fails to replay against the `--against` database appears as a `PFLIGHT_REPLAY_FAILED` issue, with the database error in `details.error` — so does one `migrate up` would refuse to load (no `.down.sql`), with the loader's message; the run exits 7 (via `preflight_exit_code`). Run-level metadata that is not a finding — `db_consumed` — rides in `summary`. `summary.migrations_checked` is the number of migrations *replayed* (the pending set). An unreachable `--against` URL, or a connection lost mid-run, is a connection failure → the [error envelope](./json-schemas/error-envelope.schema.json) with `CONFIG_006` (exit 3); no other failure is (#722).
 
 ```json
 {
@@ -664,6 +673,8 @@ or a live database, keys sorted so the same model is the same bytes.
 [test-db-ram-setup.schema.json](./json-schemas/test-db-ram-setup.schema.json) — `{tablespace, location, owner, recreated, action_required, dropped_databases[]}` after (re)creating a tmpfs tablespace. When confiture cannot hand the location to the server's OS user, nothing is created: `action_required` is `true`, `action_command` names the privileged step, and the command exits 5.
 ### `confiture seed apply --format json`
 [seed-apply.schema.json](./json-schemas/seed-apply.schema.json) — `{total, succeeded, failed, failed_files[], success, seed_profile}`: the seed files selected, how many applied, the paths below the seeds directory of those that failed (only under `--continue-on-error`, which exits 0), and the `--profile` applied or `null`. A file that fails without `--continue-on-error` rolls the run back and emits the [error envelope](./json-schemas/error-envelope.schema.json) (`SEED_001`) instead.
+### `confiture seed drift --format json`
+[seed-drift.schema.json](./json-schemas/seed-drift.schema.json) — `{seed_side, against, compared, has_drift, complete, scope[], tables[], not_compared[], skipped[], unused[]}`. `scope[]` is what is compared: each table, its `key` and `key_basis`, its `mode` and compared `columns` (a foreign key to a generated key reads `fk_x -> parent.key`). `tables[]` is what was found: `seed_only`, `live_only` and `changed` keys, and the `accepted` ones. Exit 1 on drift or an unused `seed_drift` entry, 2 when a table in `not_compared[]` could not be compared, 3 (the [error envelope](./json-schemas/error-envelope.schema.json), `CONFIG_006`) when a database did not answer. With `--list-scope`, `compared` is false and nothing is read.
 ### `confiture seed generate --format json`
 [seed-generate.schema.json](./json-schemas/seed-generate.schema.json) — `{table, output_path, row_count, column_count, success, error}`: the stub written, or, with `success: false` and exit 1, why none was (the table not found, the file already there without `--overwrite`).
 ### `confiture seed validate --format json`
@@ -739,6 +750,3 @@ sub-schemas:
   fixtures in `tests/fixtures/preflight-contract/`
 * `DependentAnalysis` — the optional dependent-objects analysis, referenced by
   both `migrate-preflight.schema.json` and `migrate-preflight-against.schema.json`
-* `StaticPreflight` — the legacy `PreflightResult.to_dict()` shape. **Unused
-  since 0.21.0 (#151)** — the `--against` `static` block it described was folded
-  into the unified `issues[]`. Retained for back-reference only.

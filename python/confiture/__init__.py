@@ -129,6 +129,8 @@ __all__ = [
     "export_all",
     # Schema export
     "generate_schema",
+    # Migration files
+    "load_migration_class",
     "register_strategy",
 ]
 
@@ -141,6 +143,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "ProductionSyncer": ("confiture.core.syncer", "ProductionSyncer"),
     "SchemaToSchemaMigrator": ("confiture.core.schema_to_schema", "SchemaToSchemaMigrator"),
     "MigratorSession": ("confiture.core.migrator", "MigratorSession"),
+    "load_migration_class": ("confiture.core._migrator.loader", "load_migration_class"),
     "Environment": ("confiture.config.environment", "Environment"),
     "SchemaSnapshotGenerator": ("confiture.core.schema_snapshot", "SchemaSnapshotGenerator"),
     "BaselineDetector": ("confiture.core.baseline_detector", "BaselineDetector"),

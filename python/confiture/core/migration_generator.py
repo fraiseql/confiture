@@ -106,6 +106,12 @@ class MigrationGenerator:
     ) -> Path:
         """Generate migration file from schema diff.
 
+        The class runs in the mode ``migrate up`` gives the same diff's SQL pair:
+        when the up holds a statement no transaction may hold (``CREATE``/``DROP
+        INDEX CONCURRENTLY``) or one whose effect a later statement may not use
+        before commit (``ALTER TYPE … ADD VALUE``), it declares ``transactional =
+        False``, and each ``execute`` then commits as it runs.
+
         Args:
             diff: Schema diff containing changes
             name: Name for the migration (snake_case)
@@ -197,13 +203,31 @@ class MigrationGenerator:
     def _plain(self, changes: list[SchemaChange]) -> bool:
         """Whether the files create the relations they prove new plainly: the up runs in one transaction.
 
-        The predicate is the one ``migrate up`` runs on the up file to choose
-        autocommit, asked of the up as rendered re-appliably; creating plainly
-        changes no statement it reads. In one transaction PostgreSQL proves each
-        created relation new and a failure rolls the file back. Outside one a
+        Asked through :meth:`_one_transaction` of the up as rendered
+        re-appliably; creating plainly changes no statement it reads. A text
+        PostgreSQL's parser rejects is not one transaction. In one transaction
+        PostgreSQL proves each created relation new and a failure rolls the
+        file back. Outside one a
         failure leaves what already committed and records nothing, so the retry
         runs the file from the top and every create keeps ``IF NOT EXISTS``.
         The down runs in the up's mode, so it follows the same answer.
+        """
+        return self._one_transaction(changes) is True
+
+    def _declaring(self, change: SchemaChange, statement: str, *, down: bool, plain: bool) -> str:
+        """*statement* under one ``-- confiture:creates`` line per relation it creates plainly."""
+        created = self._sql_gen.creates(change, down=down, plain_creates=plain)
+        return "".join(f"{creates_line(name)}\n" for name in created) + statement
+
+    def _one_transaction(self, changes: list[SchemaChange]) -> bool | None:
+        """Whether the up runs in one transaction, by the rule ``migrate up`` applies to it.
+
+        Asked of the up as the migration executes it, each change's statement
+        terminated and joined; ``runs_in_one_transaction`` is the predicate the
+        runner reads from a ``.up.sql`` (``sql_file_migration._detect_transactional``
+        is this question's twin there). ``None`` when PostgreSQL's parser rejects
+        the text: the caller keeps its own default, and ``migrate up`` reports the
+        statement when it runs.
         """
         up = "\n".join(
             _terminated(sql) for change in changes if (sql := self._change_to_up_sql(change))
@@ -211,12 +235,7 @@ class MigrationGenerator:
         try:
             return runs_in_one_transaction(up)
         except pglast.parser.ParseError:
-            return False
-
-    def _declaring(self, change: SchemaChange, statement: str, *, down: bool, plain: bool) -> str:
-        """*statement* under one ``-- confiture:creates`` line per relation it creates plainly."""
-        created = self._sql_gen.creates(change, down=down, plain_creates=plain)
-        return "".join(f"{creates_line(name)}\n" for name in created) + statement
+            return None
 
     def _gate(self, diff: SchemaDiff, policy: str) -> bool:
         """Whether the up side falls under the gate, and refuse it when the policy forbids."""
@@ -424,7 +443,7 @@ class {class_name}(Migration):
 
     version = "{version}"
     name = "{name}"
-{destructive}
+{destructive}{transactional}
     def up(self) -> None:
         """Apply migration."""
 {up_statements}
@@ -441,6 +460,12 @@ class {class_name}(Migration):
             destructive=(
                 "    destructive = True  # data is lost: migrate up needs --allow-destructive\n"
                 if gated
+                else ""
+            ),
+            transactional=(
+                "    transactional = False  # a statement here cannot run in a transaction:"
+                " migrate up runs it in autocommit\n"
+                if self._one_transaction(changes) is False
                 else ""
             ),
             up_statements=up_statements,

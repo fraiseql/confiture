@@ -70,6 +70,7 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.schema_model import (
+    DEFINED_OTHER_KINDS,
     OTHER_OBJECT_KINDS,
     SCHEMALESS_KINDS,
     TVIEW_OPTIONS,
@@ -82,6 +83,7 @@ from confiture.core.schema_model import (
     SchemaModel,
     Signature,
     Table,
+    TView,
     View,
     ref_for,
     routine_ref,
@@ -92,6 +94,7 @@ from confiture.core.schema_read import SchemaRead, read_segments, read_text
 from confiture.core.schema_sources import materialised_side
 from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
+from confiture.core.view_body_drift import viewdef_hash
 from confiture.exceptions import ConfigurationError, SchemaError
 from confiture.exceptions import ValidationError as InvalidOption
 
@@ -125,6 +128,8 @@ class DriftType(Enum):
     MISSING_TVIEW = "missing_tview"
     EXTRA_TVIEW = "extra_tview"
     TVIEW_OPTION_MISMATCH = "tview_option_mismatch"
+    OBJECT_DEFINITION_MISMATCH = "object_definition_mismatch"
+    VIEW_DEFINITION_MISMATCH = "view_definition_mismatch"
     MISSING_OBJECT = "missing_object"
     EXTRA_OBJECT = "extra_object"
     MISSING_GRANT = "missing_grant"
@@ -296,6 +301,18 @@ _OBJECT_DRIFT_TYPES: dict[str, tuple[DriftType, DriftType]] = {
     # One generic pair for every kind no typed section holds: ``subject.kind`` says
     # which, and a severity that does not vary by kind needs no wire name per kind.
     **dict.fromkeys(OTHER_OBJECT_KINDS, (DriftType.MISSING_OBJECT, DriftType.EXTRA_OBJECT)),
+}
+
+#: What a redefinition (``ObjectReplaced``) is, by the object's kind: a TVIEW's is one
+#: ``tview_option_mismatch`` per option the tree pins; a view's or a matview's one
+#: ``view_definition_mismatch`` (#719), which only the materialised tier finds, since
+#: only there are both queries PostgreSQL's; a domain's, a type's, a policy's or a
+#: rule's one ``object_definition_mismatch`` (#708), ``subject.kind`` saying which.
+#: Every other kind's is no finding (:data:`UNRENDERED_REDEFINITIONS`).
+REDEFINED_DRIFT_TYPES: dict[str, DriftType] = {
+    "tview": DriftType.TVIEW_OPTION_MISMATCH,
+    **dict.fromkeys(("view", "matview"), DriftType.VIEW_DEFINITION_MISMATCH),
+    **dict.fromkeys(DEFINED_OTHER_KINDS, DriftType.OBJECT_DEFINITION_MISMATCH),
 }
 
 
@@ -509,21 +526,31 @@ _CONSTRAINT_KEYWORDS = {
 }
 
 
-def _named(table: Table | View) -> str:
-    """``schema.table``: how a finding names a table or a materialized view."""
+def _named(table: Table | View | TView) -> str:
+    """``schema.table``: how a finding names a table, a materialized view or a TVIEW."""
     return f"{table.schema or DEFAULT_SCHEMA}.{table.name}"
 
 
-def _matviews(model: SchemaModel) -> dict[tuple[str, str, str], View]:
-    """*model*'s materialized views, keyed as drift routes the index changes on them."""
+def _indexed_relations(model: SchemaModel) -> dict[tuple[str, str, str], View | TView]:
+    """*model*'s materialized views and TVIEWs, keyed as drift routes the index changes on them.
+
+    A TVIEW whose indexes were not read (``None``) is left out: it says nothing of them.
+    """
     return {
-        ("matview", view.schema or DEFAULT_SCHEMA, view.name): view
-        for view in model.views.values()
-        if view.materialized
+        **{
+            ("matview", view.schema or DEFAULT_SCHEMA, view.name): view
+            for view in model.views.values()
+            if view.materialized
+        },
+        **{
+            ("tview", tview.schema or DEFAULT_SCHEMA, tview.name): tview
+            for tview in model.tviews.values()
+            if tview.indexes is not None
+        },
     }
 
 
-def _subject(table: Table | View, name: str | None = None) -> DriftSubject:
+def _subject(table: Table | View | TView, name: str | None = None) -> DriftSubject:
     """A finding on *table*, or on the column, index or constraint *name* in it."""
     return DriftSubject(table.schema or DEFAULT_SCHEMA, table.name, name)
 
@@ -559,10 +586,11 @@ _MATERIALISED = replace(MATERIALISED, author="new")
 #: Every change the comparison makes, as the finding drift reports for it — or,
 #: for a change drift has no finding for, why. A constraint dropped and added under
 #: one name is one ``constraint_mismatch``; an object's kind picks its pair of
-#: ``_OBJECT_DRIFT_TYPES``; a TVIEW redefined is one ``tview_option_mismatch`` per
-#: option the tree pins; the column order's severity is ``column_order_severity``.
-#: An index change on a materialized view is an index finding on it, as on a table;
-#: a matview redefined (its query, under the materialised fidelity) is none.
+#: ``_OBJECT_DRIFT_TYPES``, and a redefined object's kind its finding in
+#: ``REDEFINED_DRIFT_TYPES``; the column order's severity is ``column_order_severity``.
+#: An index change on a materialized view or a TVIEW is an index finding on it, as on
+#: a table, and so is each index change a redefined matview carries, beside the
+#: redefinition's own ``view_definition_mismatch``.
 def _missing_index_severity(change: SchemaChange) -> DriftSeverity:
     """A missing unique index is a missing constraint, valid or not; any other a warning (#689)."""
     assert isinstance(change, IndexAdded)
@@ -614,7 +642,20 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
     SequenceDropped: "drift reports no sequence",
     ObjectAdded: (None, DriftSeverity.CRITICAL),
     ObjectDropped: (None, DriftSeverity.INFO),
-    ObjectReplaced: (DriftType.TVIEW_OPTION_MISMATCH, DriftSeverity.WARNING),
+    ObjectReplaced: (None, DriftSeverity.WARNING),
+}
+
+#: Each kind whose redefinition (``ObjectReplaced``) drift has no finding for, and
+#: why. Against a database these and :data:`REDEFINED_DRIFT_TYPES`' are the only
+#: kinds redefined: a trigger is compared by existence under every parity rule,
+#: and a database reads its other objects by existence, but for a domain, a type,
+#: a policy and a rule.
+UNRENDERED_REDEFINITIONS: dict[str, str] = {
+    **dict.fromkeys(
+        ("function", "procedure", "aggregate"),
+        "a changed body is no drift kind; compare bodies with "
+        "`migrate validate --check-signatures --check-body`",
+    ),
 }
 
 _CONSTRAINT_ADDED = (
@@ -691,6 +732,9 @@ class _Findings:
         for change in changes:
             if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
                 objects.append(change)
+                carried = change.index_changes if isinstance(change, ObjectReplaced) else ()
+                for index in carried:
+                    on_table[(index.relation_kind, *index.table.identity)].append(index)
             elif isinstance(change, TableAdded | TableDropped):
                 on_table[("", "", "")].append(change)
             elif isinstance(change, _ON_TABLE) and (
@@ -704,15 +748,17 @@ class _Findings:
         for key in sorted(expected.keys() & actual.keys(), key=lambda k: _named(expected[k])):
             report.tables_checked += 1
             self._table(expected[key], actual[key], on_table.get(key, []), report)
-        self._matview_indexes(on_table, report)
+        self._relation_indexes(on_table, report)
         self._objects(objects, report)
 
-    def _matview_indexes(
+    def _relation_indexes(
         self, on_relation: dict[tuple[str, str, str], list[SchemaChange]], report: DriftReport
     ) -> None:
-        """The index findings on each materialized view both models hold, as a table's are."""
-        expected, actual = _matviews(self.expected), _matviews(self.actual)
-        for key in sorted(expected.keys() & actual.keys(), key=lambda k: _named(expected[k])):
+        """The index findings on each matview and TVIEW both models hold, as a table's are."""
+        expected, actual = _indexed_relations(self.expected), _indexed_relations(self.actual)
+        for key in sorted(
+            expected.keys() & actual.keys(), key=lambda k: (k[0] == "tview", _named(expected[k]))
+        ):
             self._indexes(expected[key], actual[key], on_relation.get(key, []), report)
 
     def _tables(self, changes: list[SchemaChange], report: DriftReport) -> None:
@@ -814,24 +860,26 @@ class _Findings:
 
     def _indexes(
         self,
-        expected: Table | View,
-        actual: Table | View,
+        expected: Table | View | TView,
+        actual: Table | View | TView,
         changes: list[SchemaChange],
         report: DriftReport,
     ) -> None:
         """A declared index the database lacks, and an index it has that nothing declares.
 
-        On a table or a materialized view alike: the comparison is the engine's.
+        On a table, a materialized view or a TVIEW alike: the comparison is the
+        engine's. A TVIEW's are the user's; pg_tviews' own are never extra.
 
         An index PostgreSQL created to back a constraint is the constraint's, never
         extra; one the DDL left unnamed is the live one that says the same thing.
         """
         table = _named(expected)
+        declared = expected.indexes or ()
         added = [c for c in changes if isinstance(c, IndexAdded)]
         dropped = [c for c in changes if isinstance(c, IndexDropped)]
         invalid = {c.index.name for c in dropped if not c.index.valid}
         extra = sorted(dropped, key=lambda c: c.index.name or "")
-        report.indexes_checked += len(expected.indexes) + len(extra)
+        report.indexes_checked += len(declared) + len(extra)
         missing: list[tuple[str, str | None, IndexAdded]] = [
             (c.index.name, c.index.name, c)
             for c in sorted(added, key=lambda c: c.index.name or "")
@@ -839,9 +887,9 @@ class _Findings:
         ]
         unnamed = [c for c in added if not c.index.name]
         missing += [
-            (_index_label(expected.indexes[at]), None, change)
+            (_index_label(declared[at]), None, change)
             for at, change in sorted(
-                zip(_nth(expected.indexes, [c.index for c in unnamed]), unnamed, strict=True),
+                zip(_nth(declared, [c.index for c in unnamed]), unnamed, strict=True),
                 key=lambda pair: pair[0],
             )
         ]
@@ -958,9 +1006,10 @@ class _Findings:
         silence from a section nobody asked the catalogue about is not absence.
 
         A matview whose indexes differ is not redefined: its index findings are
-        :meth:`_matview_indexes`'. Only a matview whose query also differs, under
-        the materialised fidelity, is one ``ObjectReplaced``, which is no finding
-        here, so its index differences go unreported with it.
+        :meth:`_matview_indexes`'. A view or matview whose query differs, under the
+        materialised fidelity, is one ``ObjectReplaced``: a ``view_definition_mismatch``
+        (#719), and a matview's index findings are still :meth:`_matview_indexes`',
+        from the index changes it carries.
         """
         sections = frozenset(
             section
@@ -1029,6 +1078,61 @@ class _Findings:
         )
         for ref in redefined:
             report.drift_items.extend(_tview_options(ref, self.expected, self.actual))
+        defined = sorted(
+            (
+                c.ref
+                for c in changes
+                if isinstance(c, ObjectReplaced) and c.ref.kind in DEFINED_OTHER_KINDS
+            ),
+            key=lambda ref: (ref.kind, ref.schema, ref.name),
+        )
+        report.drift_items.extend(self._redefined_other(ref) for ref in defined)
+        views = sorted(
+            (
+                c.ref
+                for c in changes
+                if isinstance(c, ObjectReplaced) and c.ref.kind in {"view", "matview"}
+            ),
+            key=lambda ref: (ref.schema, ref.name),
+        )
+        report.drift_items.extend(self._redefined_view(ref) for ref in views)
+
+    def _redefined_view(self, ref: ObjectRef) -> DriftItem:
+        """A view or matview whose query the database holds otherwise (#719).
+
+        Only the materialised tier finds one, where both queries are PostgreSQL's
+        deparse. A query can be long, so each side is named by the hash
+        ``migrate validate --check-body-views`` prints for it, and that check's
+        ``--show-diff`` prints the two queries.
+        """
+        declared, live = self.expected.views[ref], self.actual.views[ref]
+        named = f"{ref.schema}.{ref.name}"
+        return DriftItem(
+            drift_type=REDEFINED_DRIFT_TYPES[ref.kind],
+            severity=DriftSeverity.WARNING,
+            object_name=named,
+            subject=DriftSubject(ref.schema, declared.name),
+            expected=viewdef_hash(declared.definition or ""),
+            actual=viewdef_hash(live.definition or ""),
+            message=(
+                f"{_kind_label(ref.kind)} '{named}' is defined differently in database; "
+                "`migrate validate --check-body-views --show-diff` prints both queries"
+            ),
+        )
+
+    def _redefined_other(self, ref: ObjectRef) -> DriftItem:
+        """A domain, a type, a policy or a rule the database defines otherwise (#708)."""
+        declared, live = self.expected.other_objects[ref], self.actual.other_objects[ref]
+        obj = _other(ref, declared)
+        return DriftItem(
+            drift_type=REDEFINED_DRIFT_TYPES[ref.kind],
+            severity=DriftSeverity.WARNING,
+            object_name=obj.written,
+            subject=obj.subject,
+            expected=declared.definition,
+            actual=live.definition,
+            message=f"{_kind_label(ref.kind)} '{obj.written}' is defined differently in database",
+        )
 
 
 def _column_finding(
@@ -1345,9 +1449,8 @@ class SchemaDriftDetector:
             raise FileNotFoundError(f"Schema file not found: {schema_file_path}")
 
         source = load_desired_state(schema_file_path)
-        expected = expected_schema(
-            _read_expected(lambda: read_segments(source.segments())), default_schema
-        )
+        read = _read_expected(lambda: read_segments(source.segments()))
+        expected = expected_schema(read, default_schema)
         actual = self.get_live_schema(expected.schemas, objects=True)
         # Before a scratch build, which would fail on the index rather than name it.
         refuse_undeclared_relations(
@@ -1359,7 +1462,7 @@ class SchemaDriftDetector:
             built = materialised_side(
                 source.read(),
                 self.scratch_url,
-                declared=expected.model,
+                read=read,
                 schemas=sorted(expected.schemas),
                 default_schema=default_schema,
             )

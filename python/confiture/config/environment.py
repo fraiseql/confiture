@@ -283,12 +283,16 @@ class BackfillConfig(BaseModel):
     max_lock_ms: int | None = None
 
 
+#: Where the grant sweep is when ``migration.grant_dir`` does not say.
+DEFAULT_GRANT_DIR = "db/7_grant"
+
+
 class MigrationConfig(BaseModel):
     """Migration configuration options.
 
     Attributes:
         rebuild_threshold: Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50).
-        grant_dir: Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``).
+        grant_dir: Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read, relative to the directory the command runs in (default: ``db/7_grant``).
         allow_unsafe_under_replication: Downgrade replica-unsafe preflight findings to warnings even when ``infrastructure.replicas`` are declared.
         strict_mode: Whether to fail on warnings/notices (default: False)
         destructive: What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run.
@@ -314,7 +318,7 @@ class MigrationConfig(BaseModel):
     live_snapshot: bool = False
     tracking_table: str = "tb_confiture"
     rebuild_threshold: int = 5
-    grant_dir: str = "db/7_grant"
+    grant_dir: str = DEFAULT_GRANT_DIR
     # Issue #139 — replica-aware forward-compatibility lint. When True, unsafe
     # operations are downgraded from errors to warnings even if replicas are
     # declared. RISK: you accept that a single-step DDL change may surface
@@ -634,16 +638,19 @@ class LintSettings(BaseModel):
 
     ``build_003`` subtracts the objects a body references from the objects the
     build creates, and the build is not the only thing that creates objects: a
-    migration does, and so does an extension. A live database answers for both
-    when one is reachable; ``ignore_objects`` and ``search_path`` are what a
-    project uses when none is. ``status_words`` belongs to ``tree_008``, which
-    reads names rather than SQL.
+    migration does, and so does an extension installed outside the tree. A live
+    database answers for both when one is reachable; ``ignore_objects`` and
+    ``search_path`` are what a project uses when none is. An extension the
+    build itself creates (``CREATE EXTENSION`` in the tree) is answered by a
+    scratch database on ``scratch_url``, and needs no entry here.
+    ``status_words`` belongs to ``tree_008``, which reads names rather than SQL.
 
     Attributes:
         ignore_objects: ``fnmatch`` globs over ``schema.name``. A reference
             matching one is never reported as unresolved — the escape hatch
             for an object created outside the DDL tree
-            (``public.gen_random_uuid``, ``pg_stat_statements*``).
+            (``public.gen_random_uuid`` from an extension the platform installs,
+            ``pg_stat_statements*``).
         search_path: The schemas an unqualified *relation* in a body is looked
             for in, in order. Empty (the default) means an unqualified name is
             not judged at all: without knowing what resolves it, every
@@ -900,6 +907,93 @@ def _normalize_acls(data: dict[str, Any]) -> None:
 _PROJECT_FACTS = ("tenancy", "soft_delete", "translations")
 
 
+class SeedDriftTable(BaseModel):
+    """How ``confiture seed drift`` compares one seeded table (``seed_drift.tables.<schema.table>``).
+
+    Attributes:
+        key: The columns a row is matched by across the two databases, when the
+            table has no key every seed statement writes (a pure join table whose
+            surrogate keys differ per environment).
+        mode: ``full`` (default) reports rows only the live database holds; ``subset``
+            does not, for a table the live database legitimately holds more of (the
+            seed samples it). Seed-only and changed rows are reported either way.
+        skip: Leave the table out of the comparison, for ids generated per environment.
+        reason: Why the table is ``subset`` or skipped; required for either.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: list[str] | None = Field(default=None, min_length=1)
+    mode: Literal["full", "subset"] = "full"
+    skip: bool = False
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _an_opt_out_says_why(self) -> SeedDriftTable:
+        if (self.skip or self.mode == "subset") and not (self.reason or "").strip():
+            raise ValueError("a seed_drift table that is skipped or subset needs a reason")
+        return self
+
+
+class SeedDriftAccepted(BaseModel):
+    """One accepted difference between the seed and one live database.
+
+    Attributes:
+        table: The table compared, ``schema.table`` (a staging table's final table).
+        key: The row's key values, in key order, as the report prints them; ``null`` for a NULL part.
+        reason: Why this difference is accepted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    table: str
+    key: list[str | None] = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+#: A PostgreSQL duration ``seed_drift`` accepts: a number, then a unit PostgreSQL reads.
+_DURATION = re.compile(r"\s*([0-9]+)\s*(ms|s|min|h)?\s*")
+
+
+class SeedDriftSettings(BaseModel):
+    """The ``seed_drift:`` block: how ``confiture seed drift`` compares seeded rows (#743).
+
+    Every table the seed tree writes is compared unless a ``tables`` entry says
+    otherwise, and every opt-out says why. An entry that matches nothing in a run
+    is itself reported, so an exception cannot outlive the table it was for.
+
+    Attributes:
+        tables: Per-table settings, keyed ``schema.table`` (``key``, ``mode``, ``skip``, ``reason``).
+        accepted: Accepted row differences, keyed by the ``--against`` environment
+            they are accepted for: a difference accepted in production is not one in staging.
+        max_rows: A live table with more rows than this (``pg_class.reltuples``) is not read
+            whole; it is reported not compared, and ``mode: subset`` reads only the seed's keys.
+        statement_timeout: The longest one statement may run on either side (a positive duration: ``30s``, ``500ms``, ``2min``).
+        lock_timeout: The longest a read may wait for a lock on either side, kept short so a migration's lock is not queued behind.
+        prep_seed_schema: The schema staging tables are seeded into before a resolver moves their rows.
+        catalog_schema: Where a staging table's rows land when no resolver or schema says otherwise.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tables: dict[str, SeedDriftTable] = Field(default_factory=dict)
+    accepted: dict[str, list[SeedDriftAccepted]] = Field(default_factory=dict)
+    max_rows: int = Field(default=100_000, gt=0)
+    statement_timeout: str = "30s"
+    lock_timeout: str = "5s"
+    prep_seed_schema: str = "prep_seed"
+    catalog_schema: str = "catalog"
+
+    @field_validator("statement_timeout", "lock_timeout")
+    @classmethod
+    def _a_positive_duration(cls, value: str) -> str:
+        """``0`` turns a PostgreSQL timeout off, which a read of production must not do."""
+        match = _DURATION.fullmatch(value)
+        if match is None or int(match.group(1)) == 0:
+            raise ValueError(f"must be a positive duration such as 30s or 500ms, not {value!r}")
+        return value
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -918,13 +1012,14 @@ class Environment(BaseModel):
         lint: What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build.
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
-        scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally.
+        scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide (``null`` reports their references as unchecked), and ``confiture seed drift --build`` builds the seed side there.
         include_dirs: Directories to include when building schema (supports both string and dict formats)
         superuser_post_dirs: Directories routed to the post-schema superuser phase in build_split()
         exclude_dirs: Directories to exclude from schema build
         build: Build configuration options
         migration: Migration configuration options (includes tracking_table)
         seed: Seed data application configuration
+        seed_drift: How ``confiture seed drift`` compares the seeded rows of a seed-built database with a live one (keys, ``subset``/``skip`` tables, accepted differences).
     """
 
     # `database_url` may embed a password: pydantic must not echo rejected input
@@ -974,6 +1069,8 @@ class Environment(BaseModel):
     # Issue #246 — what ``build_003`` resolves references against when the
     # build inventory and a live database cannot answer.
     lint: LintSettings = Field(default_factory=LintSettings)
+    # Issue #743 — what ``confiture seed drift`` compares, and what it accepts.
+    seed_drift: SeedDriftSettings = Field(default_factory=SeedDriftSettings)
 
     @property
     def database(self) -> DatabaseConfig:

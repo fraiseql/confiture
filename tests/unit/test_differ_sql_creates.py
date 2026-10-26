@@ -98,7 +98,7 @@ def test_creates_spells_the_created_object_not_the_change() -> None:
     assert gen.creates(change, down=True, plain_creates=True) == ("mv",)
 
 
-def test_creates_is_empty_when_the_renderer_warns() -> None:
+def test_creates_is_empty_for_an_object_with_no_definition() -> None:
     empty = DDLObject(ref=ref("matview", "mv"), definition="", create_sql="")
     change = ObjectAdded(empty.ref, empty)
     assert DifferSQLGenerator().creates(change, plain_creates=True) == ()

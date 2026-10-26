@@ -18,7 +18,7 @@ import psycopg
 import pytest
 from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
-from confiture.core.temp_database import _maintenance_url, _replace_dbname
+from confiture.core.temp_database import _replace_dbname, maintenance_url
 from confiture.core.test_db import TemplateState, TestDbProvisioner
 
 pytestmark = pytest.mark.integration
@@ -33,7 +33,7 @@ def _server_url() -> str:
 
 
 def _drop_like(prefix: str) -> None:
-    with psycopg.connect(_maintenance_url(_server_url()), autocommit=True) as conn:
+    with psycopg.connect(maintenance_url(_server_url()), autocommit=True) as conn:
         rows = conn.execute(
             "SELECT datname FROM pg_database WHERE datname LIKE %s", (prefix + "%",)
         ).fetchall()
@@ -49,7 +49,7 @@ def _drop_like(prefix: str) -> None:
 def clean_server() -> Iterator[None]:
     url = _server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True):
+        with psycopg.connect(maintenance_url(url), autocommit=True):
             pass
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")

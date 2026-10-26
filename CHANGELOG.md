@@ -14,6 +14,558 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **⚠️ A generated migration that runs in one transaction creates its new tables and
+  materialized views plainly, and says so.** `migrate diff --generate` (the `.up.sql`/`.down.sql`
+  pair and the `.py` form) writes `CREATE TABLE` / `CREATE MATERIALIZED VIEW` without `IF NOT
+  EXISTS` for a relation the change creates — `ADD_TABLE`, `ADD_MATVIEW`, `REPLACE_MATVIEW` both
+  ways, and the down of `DROP_TABLE` and `DROP_MATVIEW` — under one `-- confiture:creates
+  <relation>` line, so PostgreSQL proves the relation new. "Runs in one transaction" is the
+  test `migrate up` uses; a file with a concurrent index or an enum label runs in autocommit,
+  where a failure records no ledger row and the retry runs the file from the top, so it is
+  unchanged: `IF NOT EXISTS`, no directive. The down follows the up's mode. Applying such a
+  migration over a database that already holds the relation — `migrate up --force`, `psql -f`,
+  `build` then `migrate up` without a baseline, `--auto-detect-baseline` detecting a level too
+  low — now fails with `42P07` and rolls back. The regression is narrow: those paths already
+  failed on a generated `ADD COLUMN`, `DROP TABLE` or `CREATE TYPE`. Two migrations creating the
+  same relation now fail on the second. The safe paths are `migrate rebuild`, `migrate baseline`
+  and `--auto-detect-baseline` ([Legacy bootstrap](docs/guides/legacy-bootstrap.md)). Tiers,
+  the replica verdict and `window_safe` are unchanged, as are the diff wire and the model wire.
+  The FraiseQL desired-state contract (`tests/contract/test_desired_state_fixture.py`) is
+  unchanged: its fixture carries a concurrent index, so its expected migration keeps `IF NOT
+  EXISTS`.
+- **`migrate validate --idempotent` accepts a plain create the file declares, and `migrate fix
+  --idempotent` leaves it.** A `CREATE TABLE` under `-- confiture:creates <relation>` is not a
+  `CREATE_TABLE` finding; the relation is matched as written (`app.t` declares `app.t`, not
+  `t`), and a line naming no relation of one or two parts declares nothing. The payloads and
+  `--list-patterns` are unchanged. `migrate preflight` never reads the directive.
+- **The `42P07` advice starts from the database's state** (`TABLE_ALREADY_EXISTS`,
+  `docs/error-reference.md`): `migrate status`, then `migrate baseline` for a database built
+  from DDL; `IF NOT EXISTS` only for a hand-written migration that must re-run.
+
+## [1.41.0] - 2026-10-25
+
+### Added
+
+- **`build_004` orders a reference against the `CREATE EXTENSION` that creates it** (#747). A
+  `LANGUAGE sql` body, a default or a `CHECK` calling `public.text2ltree` in a file before the
+  file running `CREATE EXTENSION ltree SCHEMA public` fails the build with "function
+  public.text2ltree(text) does not exist", and `confiture lint` said nothing: the build's
+  inventory holds no extension routines. With a scratch server the scratch database
+  `build_003`'s extension tier builds is now asked after each `CREATE EXTENSION`, so each name is
+  placed at the statement that creates it, and the finding names the extension. One scratch
+  database answers both rules. Without a scratch server, a reference made before an extension
+  whose written `SCHEMA` it could mean is not ordered, and a `degraded` entry for `build_004` says
+  how many and which extension, rather than a guessed finding.
+
+### Changed
+
+- **A file under a seed directory that only creates schema objects is schema** (#748). A file is a
+  seed when a directory on its path holds `seed` or `seeds` as a word, so the prep-seed layout the
+  guide teaches — staging tables in `db/schema/prep_seed/`, as in examples 06 and 08 — had its
+  `CREATE TABLE`s filed as seeds: `read_schema(env=…)` and every reader built on it did not see
+  them, and `migrate rebuild --seed`, `test-db` and sequential builds applied them after the whole
+  schema. A file there whose every statement creates a persistent schema object (a table, index,
+  view, routine, type, sequence, schema, trigger or extension, or a `COMMENT ON` one) is now schema
+  wherever it sits. Anything else stays a seed: a row written, a `TEMP` table, `CREATE TABLE … AS`,
+  an `ALTER TABLE … DISABLE TRIGGER`, a `SET`, a file the parser rejects. Only a statement that
+  opens with `CREATE` or `COMMENT` is parsed, so a large seed file costs one token.
+- **`build --schema-only` leaves out seed files one by one.** It used to drop the `include_dirs`
+  entries whose own path was a seed directory and build every file of the others, so a seed
+  directory nested inside a schema entry was built into a schema-only output. It now asks the same
+  question as every other reader; an entry that selects only seed files is still left out whole.
+- **`sync`, `ProductionSyncer` and `migrate schema-to-schema` open an environment through its
+  `ssh_tunnel`** (#750). Four places answered "environment name, config file or URL" for a
+  database, and only `seed drift --against` honoured the tunnel: `sync --from production` connected
+  straight to `database_url` (with its `${TUNNEL_LOCAL_PORT}` unfilled) and failed, or reached
+  another host. One resolver, `core.connection.resolve_target`, now answers for all four, and each
+  opens what it returns through `open_connection`:
+  - a PostgreSQL URL is opened as given; a value ending in `.yaml`/`.yml` is a config file (now
+    accepted by `sync` and `seed drift` too); anything else is an environment name;
+  - a value that is none of these is `CONFIG_003`, and is not echoed;
+  - an environment with no config file is `CONFIG_001` everywhere. `schema-to-schema` used to say
+    `CONFIG_004`; a missing `.yaml` file is still `CONFIG_004`. Both exit 5.
+  - an environment is read for its connection (`database_url`, `ssh_tunnel`) only, as
+    `schema-to-schema` read it: `sync` and `seed drift` no longer refuse an environment whose
+    `include_dirs` are not on the machine that connects.
+  - `ProductionSyncer(source, target)` takes a name, a config file, a URL, an `Environment` or a
+    `DatabaseConfig`. A checkpoint file names each side as a report does (a URL masked, an
+    environment by name).
+  - a database that does not answer is `CONFIG_006` naming it as a report does, from all four
+    (`schema-to-schema` did; `sync` and `seed drift` did not say which side).
+- **A scratch database is a copy of `template0`, not `template1`** (#749). Every database
+  confiture creates to build a tree into and read back — `drift`/`migrate diff` with a scratch
+  server, `lint`'s extension tier and `body` rule, `seed drift --build`, `migrate squash` — was a
+  copy of the server's `template1`, so whatever a server keeps there (a PostGIS image ships PostGIS
+  in it) answered for the build: `build_003` could resolve `public.st_makepoint` for a tree that
+  never creates it, and a materialised side could hold objects the tree does not declare. A tree
+  that relied on `template1`'s extensions without its own `CREATE EXTENSION` now fails its scratch
+  build, as it fails on a fresh server. `test-db` (your own test databases) is unchanged.
+
+### Fixed
+
+- **A release ships wheels for the declared CPythons only.** The macOS and Windows builds
+  ran maturin with `--find-interpreter`, which also found the CPython 3.15 the hosted runner
+  carries, so 1.40.0 uploaded `cp315` wheels for an interpreter confiture does not declare.
+  maturin is now given setup-python's interpreter by path, and Publish's validate job refuses
+  any wheel whose tag is not declared, as it already refused a missing one. The `cp315` files
+  already on PyPI are left in place.
+- **`--help` re-wraps a paragraph instead of breaking it where the docstring did** (#751). Typer
+  keeps every line break of a command's docstring after its first paragraph, and Rich wrapped
+  inside each source line, so on a terminal narrower than the source a sentence broke twice
+  ("…Every table" / "the seed" / "tree writes…"). This was every command, not only `seed drift`.
+  The lines of a sentence are now joined once, when the command tree is built; headings, list
+  items, examples, column-aligned lines and `\b` blocks keep their layout.
+- **An option prints its default once.** 140 options wrote `(default: x)` in their help beside
+  Typer's own `[default: x]`. The hand-written copy is gone wherever Typer shows the default;
+  `--project-dir` keeps "(default: current directory)" and no longer also shows `[default: .]`.
+
+### Internal
+
+- **Lockfile refresh** (#752): `uv.lock` regenerated on 1.40.0; `Cargo.lock` was already
+  current. Notable moves are `ty` 0.0.89 → 0.0.91, `sqlglot` 30.23.0 → 30.24.0, `fastapi`
+  0.144.0 → 0.162.0 and `python-dateutil` 2.9 → 3.0, which only the docs build reaches
+  (through `mkdocs`' `ghp-import`); `mkdocs build --strict` passes on it.
+
+## [1.40.0] - 2026-10-25
+
+### Added
+
+- **`migrate preflight` says what `migrate down` cannot undo** (#754). Both preflight payloads
+  (with and without `--against`) carry a top-level **`reversible`** boolean. It is `true` only when
+  `migrate down` can undo every checked migration. A consumer treats its absence as `false`. It is
+  built from `issues[]` and `change_set` the way `window_safe` is. It is `false` when any of the
+  codes below is present, or when a `change_set` entry is not `additive`, `reversible` or
+  `lock_risky` (an entry with no tier counts). New issue codes, each with `migration` set to the
+  version:
+  - `PFLIGHT_IRREVERSIBLE` (info): the migration declares `-- confiture:irreversible <reason>`
+    (`details.irreversible`). It is reported whether or not the file is destructive-gated. Before,
+    the reasons reached the wire only inside `PFLIGHT_DESTRUCTIVE_GATED`.
+  - `PFLIGHT_DOWN_EMPTY` (warning): a `.py` migration whose `down()` does nothing. That means it is
+    absent, or holds only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError`.
+    confiture reads this from the source with `ast`, never by importing it.
+  - `PFLIGHT_DOWN_UNVERIFIED` (info): any other `.py` migration. `details.down` is `present` or
+    `unknown` (another base class may supply the `down()`). A `.py` migration used to be assumed
+    reversible with nothing on the wire.
+
+  These are preflight report codes: **`confiture --exit-codes-json` is unchanged**. Only
+  `PFLIGHT_DOWN_EMPTY` can move preflight's exit code, and only under `--strict`, where every `.py`
+  migration already fails on `PFLIGHT_REPLICA_UNCLASSIFIED`. The adapter contract has a new section,
+  "Can `migrate down` undo it?". The codebook in `docs/reference/error-codes.md` now lists every
+  `PFLIGHT_*` code, and a test keeps it complete.
+
+### Changed
+
+- **A Python migration whose `down()` does nothing is refused, not run** (#754). `migrate down`
+  (with or without `--dry-run`), `migrate down-to` and `migrate up --require-reversible` now refuse
+  a rollback that reaches one, before anything runs: `ROLLBACK_600`, exit 8, an existing code.
+  Before, `migrate down` ran the no-op, deleted the ledger row and reported success. `migrate down`
+  also refuses a missing `.down.sql` up front. Before, it failed while loading that migration, after
+  rolling back any newer migration. A `down()` confiture cannot place (`unknown`) is never refused.
+- **Every `PFLIGHT_REPLICA_*` issue carries the migration's version in `migration`** (#754).
+  `PFLIGHT_REPLICA_UNCLASSIFIED` wrote `null`. The classified codes wrote the table name, which is
+  now in `details.table`.
+
+### Removed
+
+- The `StaticPreflight` definition in `_preflight_defs.schema.json`. No schema has referenced it and
+  no command has emitted it since 0.21.0 (#151). `PreflightResult.to_dict()` remains for the library
+  API.
+
+## [1.39.0] - 2026-10-19
+
+### Added
+
+- **`confiture seed drift`** (#743): compare the reference rows the seed tree writes with what a live
+  database holds, so a seed change that ships without a migration stops reaching the rebuilt
+  environments only. Every table the seed tree writes is compared, a staging table through its
+  resolver. Rows are matched by a key the seed itself writes (never a surrogate PostgreSQL generates),
+  and a foreign key to a generated key is compared through the parent's stable key. The report lists
+  rows only the seed holds, rows only the live side holds, and rows whose columns differ. `--build`
+  builds the seed side from the tree on a scratch server (never `database_url`); `--list-scope` says
+  what would be compared without reading a database. The live side is read in a read-only transaction
+  with timeouts. Opt-outs (`seed_drift.tables`, `seed_drift.accepted` per `--against` environment)
+  each need a reason, and one that matches nothing is reported. A column whose name says it holds a
+  credential or personal data is compared as a digest and never printed. Exit 0/1/2/3/5 as the
+  registry defines them: 2, not 3, is "could not compare" (and wins over 1, drift), because 3 is a
+  database that did not answer. `docs/guides/seed-drift.md`.
+
+### Changed
+
+- **pglast ≥ 8.7** (#732; the lockfiles are refreshed too). pglast 8.6/8.7's printer writes fewer
+  redundant parentheses: `(data -> 'a') ->> 'b'` is now `data -> 'a' ->> 'b'`, and the parentheses a
+  `COLLATE` needs are kept. Both spellings parse to the same tree and PostgreSQL stores them alike. A
+  migration generated before and after the upgrade can therefore differ in spelling, not in meaning,
+  and so can `schema dump-model`'s wire; every payload's `parser` key now reads `8.7`. The floor is
+  8.7 so that every install writes the same bytes.
+- **Release CI names a dependency that has no wheel** (`scripts/check_dependency_wheels.py`). A fresh install
+  takes each dependency's newest release whatever `uv.lock` pins. pglast 8.7 went up as an sdist only
+  on 2026-10-18, so for some hours an install compiled C, and failed without a compiler. Pull requests
+  now get a warning naming the dependency, the version and the platform (at the oldest glibc and macOS
+  confiture's own wheels support), and Publish refuses to upload.
+
+### Fixed
+
+- **The seed reader names every table a statement writes** (#743). An `INSERT … SELECT`,
+  `INSERT … DEFAULT VALUES`, `UPDATE` or `MERGE` in a seed file now says which table it writes,
+  though its rows are not read. A data-modifying CTE (`WITH a AS (INSERT …) SELECT …`) is no longer
+  read as a plain `SELECT`: prep-seed level 1 reports its `INSERT` as `SEED_NOT_CHECKED` (severity
+  info, so no exit changes), a new finding for a seed tree that has one. Those rows were never checked.
+- **`build_003` and the extensions the build creates** (#741). A `CREATE EXTENSION ltree
+  SCHEMA public` in the tree creates `public.text2ltree`, and a `SECURITY DEFINER` function
+  that pins its `search_path` must call it qualified. `build_003` used to report every such
+  call as "no file in the build creates it". Now, with a scratch server (`--server-url`, else
+  the environment's `scratch_url`, never its `database_url`), a throwaway database holding
+  only the build's extensions says what they provide: a real routine resolves, and a typo is
+  still a finding. With no scratch server, those references are one `degraded` entry
+  naming each extension and its `file:line`, not findings. Only an extension with a written
+  `SCHEMA` clause counts then; a finding that one with no `SCHEMA` clause might answer stays,
+  and says how to clear it. A parameterless `CREATE LANGUAGE` counts as the extension
+  PostgreSQL makes of it. `docs/reference/lint-rules.md` § "An extension the build creates".
+- `--require-complete` now exits 2 on a run that cannot check an extension's references
+  (the new `degraded` entry), where such a run used to exit by `--fail-on`. A run whose live
+  database did not answer, but whose scratch server answered every name left, is complete.
+- A `--baseline` that recorded these findings lists them under `fixed`;
+  `--write-baseline` drops them.
+
+## [1.38.0] - 2026-10-17
+
+### Added
+
+- **`confiture.load_migration_class`** (#737): the public name for turning a migration
+  file (`.py`, or `.up.sql` with its `.down.sql`) into its `Migration` class. It is the
+  loader `migrate up` uses, the same function object, so a tool that read a migration
+  through `confiture.core.connection.load_migration_class` before 1.16.0 (#341) has a
+  supported import again. `docs/api/migrator.md` § "Loading a migration file".
+- **fraiseql is a known consumer** (#737). `tests/contract/` pins the six `confiture migrate`
+  command lines fraiseql v2 runs: their flags, `--format json`, and the DSN it hands `up`,
+  `down` and `status` as `CONFITURE_DATABASE_URL` under `--no-config`. Each row cites
+  fraiseql's own `file:line`. `docs/operations/release-trains.md` names fraiseql among
+  the consumers told before a release, and a test fails on a pinned consumer the page
+  does not name.
+- **fraiseql v1's library surface is pinned** (#737). fraiseql-python's `migrate` commands
+  run through `Migrator.from_config` → `MigratorSession`. `tests/contract/test_consumer_symbols.py`
+  pins the names, parameters and result fields they use, each citing its line in fraiseql's
+  `migrate.py`. `tests/contract/test_fraiseql_session_contract.py` pins three behaviours:
+  a directory can mix `.py` and `.up.sql` migrations, a failed `up` returns its failure
+  rather than raising, and `status` raises when the server can't be reached.
+
+## [1.37.0] - 2026-10-16
+
+**confiture reads pg_tviews' read contract 2.** ⚠️ confiture requires pg_tviews
+0.1.0-beta.30 and refuses an earlier one with `CONFIG_014`: upgrade the extension
+(`ALTER EXTENSION pg_tviews UPDATE`, then `SELECT * FROM tviews.pg_tviews_reregister_all()`
+once) before deploying this confiture.
+
+### Changed
+
+- **pg_tviews read contract 2** (#714). `tviews.contract_version()` 2 moved every policy
+  column of `tviews.registry` (`logged`, `uncascaded_policy`, `uncascaded_table_policies`,
+  `function_reads`, `time_refresh`) into `options`, which now holds every option with its
+  default filled. The live side reads a registry row by name through `options`, ignoring
+  columns and keys it does not know. `CONTRACT_VERSION` is 2 and `MINIMUM_PG_TVIEWS`
+  `0.1.0-beta.30`, the first release to offer it. A contract-1 pg_tviews is refused with
+  `CONFIG_014`, and its hint names the upgrade.
+- **A TVIEW is LOGGED by default.** pg_tviews' settings are gone and its defaults fixed:
+  `logged: true`, fillfactor 85, policy `error`. A tree that pins nothing is LOGGED, and
+  `logged: false` (`CREATE UNLOGGED TABLE`, `SET UNLOGGED`, `"logged": false`) is the pin
+  drift compares. `tview_002` now names a TVIEW pinned UNLOGGED where replicas are
+  declared, not every TVIEW that does not pin LOGGED.
+- **A generated `pg_tviews_create_or_replace()` passes every option the tree writes.**
+  Under contract 2 an option a call leaves out is at its default, also on an existing
+  TVIEW. The keys confiture does not compare (`data_gin_index`, `group_keys`, `typename`,
+  `indexes`, the storage keys) are carried as written in the new
+  `TView.other_options`, which is never compared. Before this, they were dropped, and a
+  generated migration would have reset them: measured on pg_tviews main, an aggregate
+  TVIEW came back `rebuilt` as a plain one. A call written from a database passes back
+  every key the registry holds, the contract's round trip (`unchanged`).
+- **Calls read as contract 2 writes them.** The name parameter is `tview` (it was
+  `tview_name`). `pg_tviews_create(tview, query, options)` takes options third, like
+  `pg_tviews_create_or_replace()`. `pg_tviews_create_aggregate()` is gone: an aggregate
+  TVIEW is `pg_tviews_create()` with `group_keys`.
+- The schema model's wire gains `tviews[].other_options` (an object; additive, and a
+  model written before reads as carrying none). `schema-model.schema.json` and the
+  `tview-indexes` model goldens are refreshed for it.
+- The `pg-tviews` CI leg builds pg_tviews at the commit of the signed v0.1.0-beta.30 tag (`9e0d70b4`).
+
+## [1.36.1] - 2026-10-12
+
+**`--scratch-url` compares a TVIEW tree as TVIEWs.** A tree that declared TVIEWs without
+creating pg_tviews itself was built on the scratch server as plain tables, and drift reported
+each TVIEW of a database built from that same tree as a critical `missing_table`. The scratch
+database now gets the extension, or the comparison is refused with `CONFIG_014`.
+
+### Fixed
+
+- **`--scratch-url` builds a TVIEW tree with pg_tviews** (#730). The materialised tier builds
+  the tree into an empty scratch database, and a `CREATE TABLE tv_x AS` built without the
+  extension is a plain table. A tree that declared TVIEWs without running `CREATE EXTENSION
+  pg_tviews` itself was therefore compared as tables: `confiture drift --scratch-url` reported a
+  critical `missing_table` for each TVIEW of a database built from that very tree, and
+  `migrate diff --scratch-url` read them the same way. The scratch database now gets pg_tviews
+  first. A scratch server that doesn't offer pg_tviews refuses such a tree with `CONFIG_014`
+  (exit 5) rather than comparing it wrong.
+
+## [1.36.0] - 2026-10-11
+
+**A TVIEW's indexes are compared like a table's, and a redefinition is seen against a
+database.** ⚠️ confiture requires pg_tviews 0.1.0-beta.27, whose registry names the indexes
+it manages: an index the tree writes on a TVIEW is generated, carried through a redefinition
+and drift-checked (`missing_index`, `extra_index`), `DIFFER_410` refuses one under a name
+pg_tviews owns, and ⚠️ `DIFFER_407` is retired. A redefined view or materialized view is the
+new drift kind `view_definition_mismatch`; a redefined domain, type, policy or rule is seen
+against a database too. ⚠️ Exit 3 now means only an unreachable database: the migrate family
+and `GEN_001` exit 1. The git checks find migrations where `migrate up` runs them, `acl_001`
+and the ACL checks read the project `migrate up` runs, `migrate preflight --against` calls
+only a connection failure one, and `--scratch-url` reaches `--check-live-drift`.
+
+### Added
+
+- **`DIFFER_409` (exit 5): a definition change with no statement is refused.** A side that is
+  compared and never generated from (`stated_side`, `slot_side`) carries objects with an empty
+  statement. Rendered by the migration generator, such a change used to be a `-- WARNING: no
+  definition captured` comment going up, an `IndexError` coming down or on a drop, and, for a
+  materialized view being redefined, a `DROP MATERIALIZED VIEW` with no `CREATE` after it. It is
+  now refused whole, in both directions. No command reaches it; it guards the next caller that
+  would.
+- **`ObjectReplaced.index_changes`** (platform seam): a redefined materialized view carries
+  how its indexes differ from the dropped one's, compared by the one index comparison under
+  the comparison's own policy, for a reader that asks about the indexes rather than the
+  recreate. It is not a change of the diff: `migrate diff`, its SQL, order, tiers and wire are
+  unchanged.
+- **A TVIEW's indexes are compared, carried and drift-checked like a table's.** An index the
+  tree writes on a pg_tviews TVIEW is the TVIEW's (`TView.indexes`): `migrate diff` writes an
+  index added, dropped or changed on one as `CREATE/DROP INDEX CONCURRENTLY` (the change's wire
+  carries `details.relation_kind: "tview"`), a TVIEW added is created with its indexes after
+  `pg_tviews_create_or_replace()` and a TVIEW dropped gets them back in its down. Around a
+  redefinition every index drop runs before `pg_tviews_create_or_replace()` and every add after
+  it — the replace may add the column the index names, and pg_tviews refuses to rebuild over an
+  INVALID index — and the down undoes it in reverse. Drift reports `missing_index` (critical
+  when unique, valid or not) and `extra_index` on a TVIEW, the kinds and severities a table's
+  get. Read from a database, a TVIEW's indexes are the user's: pg_tviews' own, which its
+  registry names (`tviews.registry.managed_indexes`, `TView.managed_indexes`), and those a
+  constraint uses are never compared and never `extra_index`. `--require-migration` notices an
+  index edit on a TVIEW, and the baseline detector counts a TVIEW's indexes.
+- **`DIFFER_410`** (error, exit 5, from `migrate diff --from db` and `confiture drift`): the tree
+  writes an index under the name of one pg_tviews created on that TVIEW, and it is another
+  index. pg_tviews skipped the tree's `CREATE INDEX IF NOT EXISTS`, so the database does not
+  hold it; rename the index. An index that is exactly pg_tviews' own is adopted by pg_tviews,
+  and confiture takes it as pg_tviews': no change, no drift.
+- ⚠️ **A redefined view or materialized view is `view_definition_mismatch` (warning), a new
+  drift kind (#719).** At the materialised tier (`scratch_url` / `--scratch-url`), where both
+  queries are PostgreSQL's deparse, a view or matview whose query the database holds otherwise
+  used to be no drift item at all: the engine found the redefinition and drift dropped it
+  (`UNRENDERED_REDEFINITIONS`). It is now one finding per view, `subject.relation` the view.
+  `expected` and `actual` are the two queries' hashes, the `source_hash` and `db_hash` that
+  `migrate validate --check-body-views` reports; that check's `--show-diff` prints the queries.
+  A redefined matview's index findings are still reported beside it. At the structural tier a
+  view's query is not compared, so nothing changes there. A gate that escalates by drift kind
+  can escalate it; the kind is in `_common.schema.json`'s enum.
+
+### Changed
+
+- **⚠️ Exit 3 is a connection failure only: the migrate family exits 1** (#727). Exit 3's
+  class is `db_unreachable`, yet a failed migration, a duplicate version or an embedded
+  `COMMIT` exited 3 beside `CONFIG_006`, so a deploy tool branching on the class read them as
+  an unreachable database. They now exit 1 (`internal_error`); `confiture --exit-codes-json`
+  changes accordingly. Old → new:
+
+  | Code | Old | New |
+  |---|:-:|:-:|
+  | `MIGR_001`, `MIGR_004`, `MIGR_100`, `MIGR_102`, `MIGR_106`, `MIGR_107`, `MIGR_108` | 3 | 1 |
+  | `GEN_001` | 3 | 1 |
+
+  `migrate rebuild`, which called every failure `MIGR_001`, now keeps a confiture error's own
+  code and reports a refused connection as `CONFIG_006` (exit 3). A wrapper that read exit 3
+  as "migration failed" reads exit 1 instead.
+- **⚠️ confiture requires pg_tviews 0.1.0-beta.27**, whose registry publishes
+  `managed_indexes` (fraiseql/pg_tviews#219); `tviews.contract_version()` stays 1. The column
+  is the gate, not the version a build reports. On pg_tviews 0.1.0-beta.26, `migrate up` of a
+  migration that creates or drops a TVIEW, `migrate preflight --against`, the seam's
+  `require_supported_pg_tviews_on` (a deploy tool's doctor check), `confiture drift`,
+  `migrate diff --from db`, `schema dump-model` and `introspect` refuse with `CONFIG_014`
+  (exit 5). Upgrade the extension **out of band, before the deploy**
+  (`ALTER EXTENSION pg_tviews UPDATE`): a migration that upgrades it beside a TVIEW migration
+  is refused with the rest, since the check runs before anything is applied. pg_tviews
+  0.1.0-beta.27 also revokes `EXECUTE` from `PUBLIC` on its bulk functions and has per-TVIEW
+  functions require ownership; confiture calls none of them.
+- The diff wire's `details.relation_kind` takes `tview` beside `matview`; the schema model's
+  `TView` gains `indexes` and `managed_indexes` (a model written before reads as holding none).
+
+### Removed
+
+- **⚠️ `DIFFER_407` is retired** ("an index on a TVIEW is not compared", a warning, exit 0,
+  since 1.35.0). A TVIEW's indexes are compared now, so nothing emits it; its number is never
+  reused (`confiture.error_codes.RETIRED_CODES`). A consumer matching `DIFFER_407` in
+  `warnings[]` sees an index change instead.
+
+### Fixed
+
+- **`DIFFER_406`'s remedy names `order`** (#721). It said to compose the fragment into
+  `include_dirs` "after the file that creates it", but where an entry is listed sequences
+  nothing: entries build by `order`, then by path, so a fragment listed after its tables still
+  built before them, and the same `DIFFER_406` came back. The remedy now says to give the
+  fragment's entry a higher `order` than the entry that creates the relation; the
+  desired-state guide says the same.
+- **⚠️ `confiture lint`'s `acl_001` reads `--migrations-dir`** (#717). It read
+  `db/migrations` under the project whatever the flag said, while `replica_001`, `own_001` and
+  `own_002` read the directory it named: a project whose migrations live elsewhere had every
+  granted table reported, or, with no `db/migrations`, no `acl_001` and no word. It now reads
+  the same directory, and a migrations directory that does not exist is reported as `acl_001`
+  degraded (`degraded[]` in the JSON) instead of a clean result. `SchemaLinter` takes a
+  `migrations_dir` (default `db/migrations`, project-relative).
+- **⚠️ `--check-acls` and `--check-ownership-coverage` read the project `migrate up` runs**
+  (#715). `acl_001` resolved `migration.grant_dir` (default `db/7_grant`) beside the config
+  file, so from the layout `confiture init` writes (`db/environments/local.yaml`) it looked in
+  `db/environments/db/7_grant`, dropped the sweep without a word, and reported every table
+  granted only there as missing its grant. The sweep is now read relative to the directory you
+  run in, as `--migrations-dir` and `--require-grant-migration`'s grant directory are; one the
+  config names that does not exist is reported as `acl_001` degraded (text, and `degraded[]`
+  in the JSON). `acl_001`, `own_001`, `own_002` and `migrate fix --ownership` walked the
+  migrations directory recursively; they now read the files `migrate up` runs, directly in
+  the directory, so a file nested below it (`db/migrations/archive/`), which is never
+  applied, is neither linted nor fixed. `--check-acls` also loaded
+  `db/environments/local.yaml` whatever `--config` named, and failed with `CONFIG_001` in a
+  project that has none; it reads only the config it is given. ⚠️ Run from somewhere other
+  than the project, a sweep that was found beside the config is now found relative to the
+  working directory instead.
+- **⚠️ A redefined domain, composite or range type, policy or rule is seen against a
+  database** (#708). The live reader held these kinds by existence alone, so changing one in
+  the tree was no change to `migrate diff --from db` and no drift, with or without
+  `--scratch-url`. A database's domains, types, policies and rules are now read whole, and a
+  redefinition is a change (`REPLACE_DOMAIN`, …) and a new drift kind,
+  **`object_definition_mismatch`** (warning; `subject.kind` says which, `expected` / `actual`
+  the two definitions). Without a scratch server an expression in one (a CHECK, a DEFAULT, a
+  policy's USING or WITH CHECK, a rule's action) is compared only for presence, as a table's
+  CHECK is; with one, as PostgreSQL stores it. ⚠️ Drift that passed can now report a warning,
+  and `migrate diff --from db --generate` writes a migration asking you to write the change; a
+  redefined domain or policy was published as "not drift" in `_common.schema.json`, which now
+  says otherwise. `extra_objects` and DIFFER_404 are unchanged for every other kind.
+- **⚠️ The git checks find migrations where `migrate up` runs them** (#709).
+  `--require-migration`, `--require-migration-bodies`, `--list-unmigrated-bodies` and
+  `--require-grant-migration` matched changed files against `db/migrations/` (and
+  `db/7_grant/`) relative to the repository root, and the first three ignored
+  `--migrations-dir`. A project below its repository's root had every schema change reported
+  as unaccompanied, its function checks never saw the branch's `DROP FUNCTION`, and its grant
+  changes went unchecked (passed with no migration). A changed file now counts when
+  `migrate up` would run it: directly in `--migrations-dir` (relative to the directory you run
+  in), named `*.up.sql` or `*.py`; the grant directory is read the same way. ⚠️ Stricter in two
+  cases that passed before: a migration the branch **deleted** no longer accompanies a change,
+  and neither does a file nested below the migrations directory, which `migrate up` never
+  runs.
+- **⚠️ A generated Python migration runs in the mode its SQL needs** (#698). The positional
+  `migrate diff OLD NEW --generate` writes a Python class that never declared `transactional`,
+  so a diff adding or dropping an index ran `CREATE`/`DROP INDEX CONCURRENTLY` inside a
+  transaction and `migrate up` failed ("cannot run inside a transaction block"), and a diff
+  adding an enum label that a later statement uses (a default moved to it) failed with
+  `55P04`. The class now declares `transactional = False` when `runs_in_one_transaction`, the
+  rule `migrate up` applies to a `.up.sql`, says its up needs it, so the two forms of one diff
+  run in one mode. ⚠️ For newly generated files only:
+  - such a migration is no longer atomic: each statement commits as it runs, as its SQL pair
+    already did. A failure leaves the earlier statements committed and records no ledger row,
+    and the next `migrate up` runs the file from the top: drop any INVALID index and finish or
+    revert the applied statements before re-running;
+  - a migration that only adds an enum label (no index), which applied atomically and was
+    rehearsed by `--dry-run-execute` and `preflight --against` before, is now non-atomic and
+    skipped by both. `preflight --against` counts a skipped migration as passed, and static
+    `migrate preflight` never reads a Python migration's mode, so neither reports the skip as
+    an issue.
+- **`--require-migration`'s function checks read the trees the build reads, from the fork
+  point** (#700). The `DROP FUNCTION` check for a changed parameter type and
+  `--require-migration-bodies`' body check compared every changed `.sql` file in the
+  repository with itself at the two refs. They now compare the routines of the two trees
+  the gate's DDL half reads (the environment's selection at each ref, whole), already
+  parsed, so nothing is read twice.
+  - ⚠️ A routine in a file the build does not select (an `exclude` pattern, a directory
+    outside `include_dirs`, a test fixture or a seed directory) no longer fails the gate.
+  - ⚠️ A routine retyped or re-bodied while it moves between files is now reported, as the
+    same edit in place always was; so is one a later file drops and recreates.
+  - An overload added beside a kept one is no longer reported as a retype of it, and a
+    bare `DROP FUNCTION f;` excuses a retype only when `f` had one overload (PostgreSQL
+    refuses it otherwise).
+  - An unparseable `.sql` anywhere in the changeset no longer turns both checks off, and a
+    migration is read from the repository, not the current directory.
+  - ⚠️ `--require-migration` (and `--list-unmigrated-bodies`) compare from the merge base
+    of `--base-ref` and HEAD, as `--staged` and the migration list already did: on a branch
+    behind `main`, `has_ddl_changes` and `ddl_changes` no longer include what `main`
+    changed after the fork.
+  - `FunctionSignatureChecker` and `FunctionBodyChecker` (not part of `confiture.platform`)
+    take each tree's routines instead of a repository and a file list.
+- **A range type's constructors are not read as routines.** `CREATE TYPE … AS RANGE` makes
+  PostgreSQL create the type's constructor functions and its multirange's, recorded as the
+  type's implicit dependents; the live reader listed them as routines. A database holding a
+  range type the tree declares was then no longer "no change" from it: `migrate diff --from
+  db` proposed `DROP FUNCTION` for each of them (five per range type), `--scratch-url`
+  proposed creating them (`LANGUAGE internal`), and drift reported them as `extra_routine`
+  (info) when the tree declares a routine in that schema. All three now see nothing. A live
+  model (`schema dump-model` from a database, a baseline snapshot built on a scratch server)
+  holds five fewer routines per range type.
+- **`migrate diff --scratch-url --generate` writes the objects the catalog reads by existence
+  alone** (#699). With a scratch server the tree is built there and read back, and the catalog
+  says a domain, a composite or range type, an aggregate, a policy, a rule (and every other kind
+  no typed section holds) exists, not how it is made. Such an object the tree added was a
+  `DIFFER_404` warning instead of a change, so the generated migration left it out and a column
+  typed with a new domain failed to apply. The materialised side now carries the tree's own
+  statement for each of them: its existence is compared, and the migration creates it as it does
+  without a scratch server. The side also carries the tree's read notes: two definitions of one
+  object are `DIFFER_402` under `--scratch-url` too, and ⚠️ a name that needs quotes is refused
+  (`DIFFER_403`, exit 5) where `--scratch-url` used to generate it. `warnings[]` loses the
+  `DIFFER_404` entries for objects the tree declares. A domain, type or policy redefined between
+  the database and the tree is still not seen, at either fidelity.
+- **Text `migrate diff` prints its warnings.** `warnings[]` (`DIFFER_402`, `DIFFER_404`, …) was
+  in the JSON payload only; text output now lists each with its code, and no longer says
+  "Schemas are identical" while one stands. `build`, `migrate diff` and the git accompaniment
+  check render a warning through one printer, so the accompaniment check's duplicate-definition
+  line now carries its code (`DIFFER_402 …`).
+- **⚠️ `confiture drift --scratch-url` reports the indexes of a materialized view whose query
+  also drifted** (#701). At the materialised tier such a matview is one redefinition, and drift
+  said nothing about it: a matview that had lost its unique index exited 0 with
+  `has_drift: false`, where the structural tier reported a critical `missing_index`. Its index
+  differences are now reported as any matview's are — `missing_index` (critical when unique),
+  `extra_index`, the INVALID rebuild pair — at either tier. `--check-live-drift` with
+  `scratch_url` in the environment is the same check, so a gate green before can fail. No new
+  drift kind and no severity moved; `indexes_checked` grows by one per extra or INVALID index
+  reported. The changed query itself is still no drift item (`migrate validate
+  --check-body-views`).
+- **A view whose query a model does not hold is the same view at the structural tier.** Where
+  view queries compare by presence (`view_definitions`), a view read without its query
+  (`definition=None`, as a hand-built model or `live_catalog.views()` holds it) against one with
+  a query was a redefinition. It is now the same view, as the rule says. confiture's own live
+  read always fetches the query, so drift and `migrate diff` were not affected.
+- **`migrate validate --scratch-url` reaches `--check-live-drift`** (#723). The flag reached
+  `--check-body-views` and `--check-body-replay` only; `--check-live-drift` read the
+  environment's `scratch_url` alone, so a gate passing the flag stayed at the structural tier
+  without a word, where `confiture drift --scratch-url` compared at the materialised one. The
+  flag now wins over the environment's key, as it does for `confiture drift`.
+- **⚠️ `migrate preflight --against` calls only a connection failure one** (#722). Every
+  error in the replay session was reported as `CONFIG_006` "Connection to --against URL
+  failed", exit 3, which a deploy tool reads as "database unreachable". A pending migration
+  `migrate up` refuses to load (no `.down.sql`) ended the run that way; it is now that
+  migration's `PFLIGHT_REPLAY_FAILED` (exit 7), with the loader's message in
+  `details.error`, beside the static `PFLIGHT_MISSING_DOWN`, and the rest of the pending set is
+  still replayed. With a DSN and no `--scope`, a database with no ledger crashed the same way
+  (`relation "tb_confiture" does not exist` as `CONFIG_006`); it now has everything pending,
+  as `--scope pending` says, and a ledger only in another schema is `CONFIG_015`. A refused
+  or lost connection is still `CONFIG_006` (exit 3); a confiture error keeps its own code; an
+  error no one foresaw is reported as itself (exit 1). `MigratorSession.run_against` returns
+  a refused migration as a failed entry instead of raising.
+
+## [1.35.0] - 2026-10-10
+
+**Every index the desired state declares reaches the migration and the drift gate, or is
+refused by name.** An index on a relation the desired state does not declare is carried
+between two trees (`DIFFER_405`) and refused against a database or a tree that declares the
+relation (`DIFFER_406`); `migrate diff --to-env` diffs an environment's build, which is how a
+generated fragment is composed into a tree. ⚠️ An INVALID index is rebuilt, not taken as
+present, and a missing unique index is critical drift; a materialized view's indexes are
+compared, carried and drift-checked like a table's. `migrate preflight --scope pending` judges
+only what the ledger has not applied; `VALIDATE CONSTRAINT` is classified (⚠️ `lock_risky` in
+the transaction that adds the constraint, so a generated foreign key is `lock_risky`). A git
+ref is read through the build's own selection, closing a `--require-migration` that passed
+with no migration. New lint rules `treekey_001`/`treekey_002` (on by default) and the
+`ancestry` style family (off).
+
 ### Added
 
 - **`treekey_001` and `treekey_002`: a TVIEW's chain walks a pg_treekey tree in a spelling
@@ -25,7 +577,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the tree meets is `full_refresh` (its `uncascaded_tables` entry, else `uncascaded_policy`);
   under `warn` the finding says the rows go stale, under `error` that pg_tviews refuses the
   TVIEW. Every other unnest of the path is traced and not reported. On by default, family
-  `treekey`.
+  `treekey`. ⚠️ A project that lints with `--fail-on warning` may now fail: silence them with
+  `--ignore treekey_001,treekey_002`, or adopt them with `--baseline`.
 - **`ancestry_001` and `ancestry_002`: any view walking a tree, as a style** (#676). The
   judgement of `treekey.lint_views()` — a `WITH RECURSIVE` over the parent key, `unnest` or
   `string_to_array` over the path — on every view, materialized view and TVIEW that reads a
@@ -59,36 +612,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`PFLIGHT_INVALID_INDEX`** (warning, `migrate preflight --against`): a pending `CREATE INDEX
   … IF NOT EXISTS` names an index the database holds INVALID, which the statement would skip.
   `live_catalog.invalid_indexes()` lists them.
-
-### Changed
-
-- **⚠️ A generated migration that runs in one transaction creates its new tables and
-  materialized views plainly, and says so.** `migrate diff --generate` (the `.up.sql`/`.down.sql`
-  pair and the `.py` form) writes `CREATE TABLE` / `CREATE MATERIALIZED VIEW` without `IF NOT
-  EXISTS` for a relation the change creates — `ADD_TABLE`, `ADD_MATVIEW`, `REPLACE_MATVIEW` both
-  ways, and the down of `DROP_TABLE` and `DROP_MATVIEW` — under one `-- confiture:creates
-  <relation>` line, so PostgreSQL proves the relation new. "Runs in one transaction" is the
-  test `migrate up` uses; a file with a concurrent index or an enum label runs in autocommit,
-  where a failure records no ledger row and the retry runs the file from the top, so it is
-  unchanged: `IF NOT EXISTS`, no directive. The down follows the up's mode. Applying such a
-  migration over a database that already holds the relation — `migrate up --force`, `psql -f`,
-  `build` then `migrate up` without a baseline, `--auto-detect-baseline` detecting a level too
-  low — now fails with `42P07` and rolls back. The regression is narrow: those paths already
-  failed on a generated `ADD COLUMN`, `DROP TABLE` or `CREATE TYPE`. Two migrations creating the
-  same relation now fail on the second. The safe paths are `migrate rebuild`, `migrate baseline`
-  and `--auto-detect-baseline` ([Legacy bootstrap](docs/guides/legacy-bootstrap.md)). Tiers,
-  the replica verdict and `window_safe` are unchanged, as are the diff wire and the model wire.
-  The FraiseQL desired-state contract (`tests/contract/test_desired_state_fixture.py`) is
-  unchanged: its fixture carries a concurrent index, so its expected migration keeps `IF NOT
-  EXISTS`.
-- **`migrate validate --idempotent` accepts a plain create the file declares, and `migrate fix
-  --idempotent` leaves it.** A `CREATE TABLE` under `-- confiture:creates <relation>` is not a
-  `CREATE_TABLE` finding; the relation is matched as written (`app.t` declares `app.t`, not
-  `t`), and a line naming no relation of one or two parts declares nothing. The payloads and
-  `--list-patterns` are unchanged. `migrate preflight` never reads the directive.
-- **The `42P07` advice starts from the database's state** (`TABLE_ALREADY_EXISTS`,
-  `docs/error-reference.md`): `migrate status`, then `migrate baseline` for a database built
-  from DDL; `IF NOT EXISTS` only for a hand-written migration that must re-run.
 
 ### Fixed
 

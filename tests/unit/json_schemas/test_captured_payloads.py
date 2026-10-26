@@ -32,6 +32,8 @@ SCHEMAS = REPO / "python" / "confiture" / "schemas"
 
 #: Captured payload → the schema its command publishes.
 CAPTURED = {
+    "seed-drift.json": "seed-drift.schema.json",
+    "seed-drift-list-scope.json": "seed-drift.schema.json",
     "migrate-up.json": "migrate-up.schema.json",
     "migrate-down.json": "migrate-down.schema.json",
     "migrate-reinit.json": "migrate-reinit.schema.json",

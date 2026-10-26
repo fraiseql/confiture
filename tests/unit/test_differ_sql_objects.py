@@ -11,7 +11,9 @@ import pytest
 from confiture.core.ddl_objects import OBJECT_KEYWORD, REPLACE_IS_AUTHORS_WORK, DDLObject
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
-from confiture.core.schema_change import ObjectAdded
+from confiture.core.schema_change import ObjectAdded, ObjectDropped, ObjectReplaced
+from confiture.core.schema_model import ref_for
+from confiture.exceptions import DifferError
 from tests.unit._schema_changes import ref
 
 BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
@@ -185,15 +187,12 @@ class TestMaterializedViewDDL:
         assert type(stmt).__name__ == "CreateTableAsStmt"
         assert not stmt.if_not_exists
 
-    def test_a_matview_with_no_captured_definition_still_warns(self):
-        """A database side carries no definition: either mode writes the warning, no statement."""
+    @pytest.mark.parametrize("plain", [False, True])
+    def test_a_matview_with_no_statement_is_refused_in_either_mode(self, plain: bool):
         empty = DDLObject(ref=ref("matview", "mv_user"), definition="", create_sql="")
-        change = ObjectAdded(empty.ref, empty)
-        gen = DifferSQLGenerator()
-        for plain in (False, True):
-            sql = gen.generate_up(change, plain_creates=plain)
-            assert sql.startswith("-- WARNING: no definition captured")
-            assert _statements(sql) == []
+        with pytest.raises(DifferError) as refused:
+            DifferSQLGenerator().generate_up(ObjectAdded(empty.ref, empty), plain_creates=plain)
+        assert refused.value.error_code == "DIFFER_409"
 
 
 MV = "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user, name FROM tb_user;\n"
@@ -237,6 +236,21 @@ class TestMaterializedViewIndexes:
         assert _kinds(sql) == ["DropStmt", "CreateTableAsStmt", "IndexStmt"]
         assert [i.idxname for i in _indexes_of(sql)] == ["ix_mv_user_name"]
 
+    def test_carried_index_changes_do_not_reach_the_sql(self):
+        """The recreate writes the index sets whole; the changes it carries are a reader's.
+
+        ``ix_mv_user_name`` goes and ``ux_mv_user`` comes, so the change carries both
+        index changes, and its up and down are still the statements without them.
+        """
+        from dataclasses import replace
+
+        change = change_of(MV + MV_NAME, MV_OTHER + MV_UNIQUE, "REPLACE_MATVIEW")
+        assert len(change.index_changes) == 2
+        bare = replace(change, index_changes=())
+        generator = DifferSQLGenerator()
+        for render in (generator.generate_up, generator.generate_down):
+            assert _statements(render(change)) == _statements(render(bare))
+
     def test_drop_matview_down_recreates_its_indexes(self):
         change = change_of(MV + MV_UNIQUE, "", "DROP_MATVIEW")
         assert _kinds(DifferSQLGenerator().generate_up(change)) == ["DropStmt"]
@@ -256,7 +270,7 @@ class TestTViewDDL:
 
     ``tviews.pg_tviews_create_or_replace()`` creates, replaces in place or rebuilds,
     and returns ``unchanged`` when applied again; ``tviews.pg_tviews_drop(…,
-    if_exists => true)`` drops. Both are pg_tviews' read contract 1, so the
+    if_exists => true)`` drops. Both are pg_tviews' read contract, so the
     migration re-applies and never guesses at a ``CREATE TABLE … AS``.
     """
 
@@ -355,6 +369,43 @@ class TestTViewDDL:
         change = change_of("", f"CREATE TABLE tv_user AS {select};", "ADD_TVIEW")
         ((_, positional, _),) = self._calls(DifferSQLGenerator().generate_up(change))
         assert positional[1] == self._query(select)
+
+
+TV = "CREATE TABLE tv_user AS SELECT pk_user, name FROM tb_user;\n"
+TV_NAME = "CREATE INDEX ix_tv_user_name ON tv_user (name);\n"
+TV_UNIQUE = "CREATE UNIQUE INDEX ux_tv_user ON tv_user (pk_user);\n"
+
+
+class TestTViewIndexes:
+    """A TVIEW is created with its indexes, after ``pg_tviews_create_or_replace()``."""
+
+    def test_add_tview_creates_its_indexes_after_it(self):
+        change = change_of("", TV + TV_UNIQUE + TV_NAME, "ADD_TVIEW")
+        sql = DifferSQLGenerator().generate_up(change)
+        assert _kinds(sql) == ["SelectStmt", "IndexStmt", "IndexStmt"]
+        indexes = _indexes_of(sql)
+        assert [i.idxname for i in indexes] == ["ux_tv_user", "ix_tv_user_name"]
+        assert all(i.relation.relname == "tv_user" for i in indexes)
+        assert all(not i.concurrent and i.if_not_exists for i in indexes)
+        assert _kinds(DifferSQLGenerator().generate_down(change)) == ["SelectStmt"]
+
+    def test_drop_tview_down_recreates_its_indexes(self):
+        change = change_of(TV + TV_NAME, "", "DROP_TVIEW")
+        assert _kinds(DifferSQLGenerator().generate_up(change)) == ["SelectStmt"]
+        sql = DifferSQLGenerator().generate_down(change)
+        assert _kinds(sql) == ["SelectStmt", "IndexStmt"]
+        assert [i.idxname for i in _indexes_of(sql)] == ["ix_tv_user_name"]
+
+    def test_a_tview_index_change_is_concurrent(self):
+        change = change_of(TV, TV + TV_NAME, "ADD_INDEX")
+        (index,) = _indexes_of(DifferSQLGenerator().generate_up(change))
+        assert (index.idxname, index.concurrent, index.if_not_exists) == (
+            "ix_tv_user_name",
+            True,
+            True,
+        )
+        (drop,) = _statements(DifferSQLGenerator().generate_down(change))
+        assert (type(drop).__name__, drop.concurrent) == ("DropStmt", True)
 
 
 class TestTheMigrationIsNotShort:
@@ -616,3 +667,56 @@ class TestOnlyTheDerivedKindsDeriveSQL:
                     seen += 1
         assert seen == 2 * len(extras), f"expected one change per case, saw {seen}"
         assert rendered == DERIVED_KINDS
+
+
+#: The kinds a change renders from its statement, each with no statement at all —
+#: what a side that is compared and never generated from carries (``stated_side``).
+UNSTATED = ["domain", "type", "policy", "trigger", "view", "matview", "function", "aggregate"]
+
+
+def _unstated(kind: str) -> DDLObject:
+    return DDLObject(ref_for(kind, None, "t.x" if kind in {"policy", "trigger"} else "x"), "", "")
+
+
+def _refused(render, change) -> None:
+    with pytest.raises(DifferError) as refused:
+        render(change)
+    assert refused.value.error_code == "DIFFER_409"
+
+
+class TestAChangeWithNoStatementIsRefused:
+    """A change carrying no statement is refused, in both directions, never half-written."""
+
+    @pytest.mark.parametrize("kind", UNSTATED)
+    def test_creating_it(self, kind: str) -> None:
+        obj = _unstated(kind)
+        _refused(DifferSQLGenerator().generate_up, ObjectAdded(obj.ref, obj))
+
+    @pytest.mark.parametrize("kind", UNSTATED)
+    def test_undoing_its_creation(self, kind: str) -> None:
+        obj = _unstated(kind)
+        _refused(DifferSQLGenerator().generate_down, ObjectAdded(obj.ref, obj))
+
+    @pytest.mark.parametrize("kind", UNSTATED)
+    def test_dropping_it(self, kind: str) -> None:
+        obj = _unstated(kind)
+        _refused(DifferSQLGenerator().generate_up, ObjectDropped(obj.ref, obj))
+
+    @pytest.mark.parametrize("kind", ["view", "matview", "function"])
+    @pytest.mark.parametrize("direction", ["generate_up", "generate_down"])
+    def test_replacing_it(self, kind: str, direction: str) -> None:
+        obj = _unstated(kind)
+        _refused(getattr(DifferSQLGenerator(), direction), ObjectReplaced(obj.ref, obj, obj))
+
+    def test_a_tview_is_created_from_its_statement(self) -> None:
+        obj = _unstated("tview")
+        _refused(DifferSQLGenerator().generate_up, ObjectAdded(obj.ref, obj))
+
+    def test_a_tview_is_dropped_by_name(self) -> None:
+        obj = _unstated("tview")
+        down = DifferSQLGenerator().generate_down(ObjectAdded(obj.ref, obj))
+        assert down is not None and "pg_tviews_drop" in down
+
+    def test_a_kind_whose_redefinition_is_the_authors_renders_nothing(self) -> None:
+        obj = _unstated("domain")
+        assert DifferSQLGenerator().generate_up(ObjectReplaced(obj.ref, obj, obj)) is None

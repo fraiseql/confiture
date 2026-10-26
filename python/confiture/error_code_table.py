@@ -80,12 +80,12 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "strategy"
         ),
     },
-    # ========== MIGR (100-199): Migration execution errors → exit code 3 ==========
+    # ========== MIGR (100-199): Migration execution errors → exit code 1 ==========
     {
         "code": "MIGR_100",
         "message_template": "Migration {version} not found",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Check the migration version and ensure the file exists",
     },
     {
@@ -99,14 +99,14 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "code": "MIGR_102",
         "message_template": "Migration file corrupted: {file}",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Regenerate or restore the migration file",
     },
     {
         "code": "MIGR_106",
         "message_template": "Duplicate migration version: {version}",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": (
             "Multiple migration files share the same version number. Rename files "
             "to use unique version prefixes. Run 'confiture migrate validate' to "
@@ -120,7 +120,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "in its body, breaking confiture's transaction envelope"
         ),
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": (
             "Remove any explicit COMMIT or ROLLBACK from the migration body. "
             "Confiture manages the outer transaction; embedded transaction "
@@ -136,7 +136,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "commit=False (inside a SAVEPOINT)"
         ),
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": (
             "A non-transactional migration commits the current transaction and "
             "runs in autocommit, so it cannot be tested inside a SAVEPOINT. "
@@ -254,22 +254,10 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Declare the relation in the desired schema, before the index — compose the "
-            "fragment into the environment's include_dirs, after the file that creates it — "
-            "or remove the index"
-        ),
-    },
-    {
-        "code": "DIFFER_407",
-        "message_template": (
-            "Index '{index}' is on TVIEW {tview}: migrate diff does not carry it and drift "
-            "does not check it yet"
-        ),
-        "severity": "warning",
-        "exit_code": 0,
-        "resolution_hint": (
-            "Keep it in the schema (the build creates it, and pg_tviews keeps it across a "
-            "rebuild); write any change to it in a migration by hand"
+            "Declare the relation in the desired schema, before the index — give the "
+            "fragment's include_dirs entry a higher `order` than the entry that creates the "
+            "relation (entries build by `order`, then by path; where an entry is listed "
+            "sequences nothing) — or remove the index"
         ),
     },
     {
@@ -283,6 +271,33 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": (
             "Move the index after the statement that creates its relation; confiture lint "
             "reports it as build_004"
+        ),
+    },
+    {
+        "code": "DIFFER_409",
+        "message_template": (
+            "{change} '{identity}' carries no statement: the side it came from is compared, "
+            "never generated from"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Generate from a side read from a tree (Side.of) or a database (database_side); "
+            "a stated or slot side is compared, never generated from"
+        ),
+    },
+    {
+        "code": "DIFFER_410",
+        "message_template": (
+            "Index '{index}' on TVIEW {tview} has the name of an index pg_tviews created on "
+            "it, and is another index: pg_tviews skipped its CREATE INDEX, so the database "
+            "does not hold it"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Rename the index in the schema: pg_tviews reserves the names of its own indexes "
+            "on a TVIEW (tviews.registry.managed_indexes)"
         ),
     },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
@@ -349,7 +364,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         ),
         "severity": "error",
         "exit_code": 5,
-        "resolution_hint": ("Install a pglast release confiture supports (pglast>=8.5)"),
+        "resolution_hint": ("Install a pglast release confiture supports (pglast>=8.7)"),
     },
     {
         "code": "CONFIG_012",
@@ -379,10 +394,11 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Run pg_tviews 0.1.0-beta.26 or later, whose `tviews.contract_version()` is the "
-            "contract confiture reads and whose registry holds every column it reads; an "
-            "extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' "
-            "scripts/migrate-from-0.1.0.sql"
+            "Run pg_tviews 0.1.0-beta.30 or later, whose `tviews.contract_version()` is the "
+            "contract confiture reads (2) and whose registry holds every column it reads: "
+            "from an earlier beta, ALTER EXTENSION pg_tviews UPDATE, then SELECT * FROM "
+            "tviews.pg_tviews_reregister_all(); an extension created by 0.1.0-beta.19 or "
+            "earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql"
         ),
     },
     {
@@ -405,14 +421,14 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "code": "MIGR_001",
         "message_template": "Migration error",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Check migration files and database state",
     },
     {
         "code": "MIGR_004",
         "message_template": "Migration file already exists",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Use --force flag to overwrite existing file",
     },
     {
@@ -569,7 +585,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "code": "GEN_001",
         "message_template": "External generator error",
         "severity": "error",
-        "exit_code": 3,
+        "exit_code": 1,
         "resolution_hint": "Check the external generator command and its output",
     },
     {

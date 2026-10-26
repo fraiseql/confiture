@@ -23,7 +23,7 @@ from confiture.core.progress import ProgressManager
 
 # The seed-path rule lives in core.seed.paths; re-exported for callers that
 # imported it from here.
-from confiture.core.seed.paths import _SEED_DIR_RE, is_seed_path  # noqa: F401
+from confiture.core.seed.paths import _SEED_DIR_RE, is_seed_file, is_seed_path  # noqa: F401
 from confiture.core.validation.comment_validator import CommentValidator
 from confiture.exceptions import SchemaError
 from confiture.models.results import SplitBuildResult
@@ -545,7 +545,10 @@ class SchemaBuilder:
         ``-`` separator (see :data:`_SEED_DIR_RE`). This recognises
         ordering-prefixed layouts such as ``30_seed_backend`` / ``seed_common``
         / ``10-seeds`` that an exact ``== "seed"`` match would miss, while still
-        rejecting look-alikes like ``seedling`` and ``proceeds``.
+        rejecting look-alikes like ``seedling`` and ``proceeds``. A file there
+        that only creates schema objects is schema all the same (the prep-seed
+        layout's ``prep_seed/`` staging tables, #748): see
+        :func:`~confiture.core.seed.paths.is_seed_file`.
 
         The env config's ``include_dirs`` deliberately does *not* drive this:
         ``SeedConfig`` has no seed-directory concept, so seeds are identified by
@@ -564,7 +567,24 @@ class SchemaBuilder:
         Returns:
             True if a path component at/below the include root is a seed directory
         """
-        return is_seed_path(file_path, anchor=self.base_dir.parent)
+        return is_seed_file(file_path, anchor=self.base_dir.parent)
+
+    def leave_out_seed_entries(self) -> None:
+        """``build --schema-only``: drop each ``include_dirs`` entry that selects only seed files.
+
+        An entry on a seed path that selects a file creating only schema objects
+        stays (that file is schema, #748); the seed files beside it are left out
+        one by one, as :meth:`categorize_sql_files` sorts them.
+        """
+        self.include_configs = [cfg for cfg in self.include_configs if not self._seeds_only(cfg)]
+        self.include_dirs = [cfg["path"] for cfg in self.include_configs]
+        if self.include_dirs:
+            self.base_dir = self.find_common_parent(self.include_dirs)
+
+    def _seeds_only(self, config: dict[str, Any]) -> bool:
+        if not is_seed_path(config["path"], anchor=self.base_dir.parent):
+            return False
+        return all(self._is_seed_file(found.path) for found in self._select_entry(config))
 
     def is_seed_file(self, file_path: Path) -> bool:
         """Public spelling of :meth:`_is_seed_file`."""

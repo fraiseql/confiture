@@ -109,7 +109,7 @@ $ confiture migrate up
 ✗ MigrationError: relation "users" already exists
   Migration: 001_create_users
   Hint: If the schema already exists, run `confiture migrate baseline --through <last-applied-version>` first.
-exit 3
+exit 1
 ```
 
 Solution: run `migrate baseline` with the highest version that's actually been applied.

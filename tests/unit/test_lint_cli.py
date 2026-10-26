@@ -54,7 +54,9 @@ class TestLintCommand:
         result = runner.invoke(app, ["lint", "--env", "production"])
 
         assert result.exit_code == 0
-        mock_linter_class.assert_called_with(env="production", project_dir=Path(), config=ANY)
+        mock_linter_class.assert_called_with(
+            env="production", project_dir=Path(), config=ANY, migrations_dir=Path("db/migrations")
+        )
 
     @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_with_errors_fail_on_error(self, mock_linter_class):

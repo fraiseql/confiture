@@ -134,9 +134,9 @@ class ObjectRef:
         return self.display
 
 
-#: The kind of relation an index is on, as the model keys it: a table, or a
-#: materialized view (``View.indexes``).
-RelationKind = Literal["table", "matview"]
+#: The kind of relation an index is on, as the model keys it: a table, a
+#: materialized view (``View.indexes``) or a pg_tviews TVIEW (``TView.indexes``).
+RelationKind = Literal["table", "matview", "tview"]
 
 
 def ref_for(kind: str, schema: str | None, name: str) -> ObjectRef:
@@ -295,7 +295,7 @@ class Constraint:
 
 @dataclass(frozen=True)
 class Index:
-    """An index on one table or materialized view.
+    """An index on one table, materialized view or TVIEW.
 
     ``columns`` holds each key as written — a column name or a rendered
     expression. ``method`` is the access method; PostgreSQL's grammar fills in
@@ -580,6 +580,19 @@ class TView:
     ``uncascaded_tables`` is each table's own ``uncascaded_policy``, which overrides
     the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
     call's ``options`` alone, ``()`` pinning none, sorted by table.
+
+    ``indexes`` are the TVIEW's own, compared as a table's are: every index a tree
+    writes on it, or, read from a database, every index on its table but those
+    pg_tviews created (``tviews.registry.managed_indexes``) and those a constraint
+    uses, pg_tviews' rule; ``None`` where they were not read. ``managed_indexes``
+    are pg_tviews' own, read from the database alone and never compared: a tree
+    that writes one of them exactly writes what pg_tviews adopts as its own.
+
+    ``other_options`` are the ``options`` keys the model does not compare
+    (``data_gin_index``, ``group_keys``, ``typename``, …), as written: the tree's
+    call's, or every one the registry holds. Under pg_tviews' read contract 2 an
+    option a call leaves out is at its default, also on an existing TVIEW, so the
+    call a migration writes passes them back; they are never compared.
     """
 
     name: str
@@ -591,6 +604,9 @@ class TView:
     time_refresh: str | None = None
     function_reads: tuple[FunctionRead, ...] | None = None
     uncascaded_tables: tuple[UncascadedTable, ...] | None = None
+    indexes: tuple[Index, ...] | None = ()
+    managed_indexes: tuple[Index, ...] = field(default=(), compare=False)
+    other_options: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
     @property
     def entity(self) -> str:
@@ -681,7 +697,9 @@ class OtherObject:
     ``name`` are its identity as ``ObjectRef`` keys it (schema folded and
     defaulted, a policy or rule named ``table.name``); ``definition`` is what
     decides whether it changed, ``None`` from a reader that read only that it
-    exists (``Coverage`` says which).
+    exists. The depth is the object's: a database's model reads the kinds of
+    :data:`DEFINED_OTHER_KINDS` whole in a section ``Coverage`` calls
+    ``existence``, and two objects are compared by definition when both hold one.
     """
 
     kind: str
@@ -710,6 +728,11 @@ OTHER_OBJECT_KINDS = (
     "operator_family",
     "access_method",
 )
+
+#: The kinds of :data:`OTHER_OBJECT_KINDS` both readers read whole (#708): a tree from
+#: its statement, a database from its catalog. Every other kind a database holds by
+#: existence alone (``OtherObject.definition`` ``None``), so it is compared by existence.
+DEFINED_OTHER_KINDS = frozenset({"domain", "type", "policy", "rule"})
 
 #: The kinds of :data:`OTHER_OBJECT_KINDS` that live in no schema; their
 #: ``OtherObject.schema`` is the default schema their identity folds to, not a place.
@@ -977,9 +1000,12 @@ def _keyed[T](
 def _tview_from(data: dict[str, Any]) -> TView:
     reads = data.get("function_reads")
     tables = data.get("uncascaded_tables")
+    indexes = data.get("indexes", ())
     return TView(
         **{
             **data,
+            "indexes": None if indexes is None else tuple(map(_index_from, indexes)),
+            "managed_indexes": tuple(map(_index_from, data.get("managed_indexes", ()))),
             "function_reads": None
             if reads is None
             else tuple(FunctionRead(r["function"], tuple(r["tables"])) for r in reads),
@@ -1020,7 +1046,8 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
     )
 
 
-def _primary_key(table: Table) -> tuple[str, ...]:
+def primary_key(table: Table) -> tuple[str, ...]:
+    """The columns of *table*'s primary key, declared at table level or on a column; empty for none."""
     declared = table.constraints_of("primary_key")
     if declared:
         return declared[0].columns
@@ -1035,7 +1062,7 @@ def with_referenced_keys(model: SchemaModel) -> SchemaModel:
     either way. A target the model does not hold, or one with no primary key,
     leaves the key as written.
     """
-    keys = {table.relation.identity: _primary_key(table) for table in model.tables.values()}
+    keys = {table.relation.identity: primary_key(table) for table in model.tables.values()}
 
     def resolved(constraint: Constraint) -> Constraint:
         if constraint.kind != "foreign_key" or constraint.ref_columns:
@@ -1106,8 +1133,8 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "`integer`). signature_key is the identity compared"
     ),
     "tview_defaults": (
-        "a TVIEW option the tree does not pin is pg_tviews' to choose, and the registry "
-        "holds every key: a stock pg_tviews creates a TVIEW unlogged with fillfactor 85, "
+        "a TVIEW option the tree does not pin is at pg_tviews' default, and the registry "
+        "holds every key: pg_tviews creates a TVIEW LOGGED with fillfactor 85, "
         "uncascaded_policy error, no function_reads and no uncascaded_tables, so those "
         "values are no pin, on either side"
     ),
@@ -1246,9 +1273,13 @@ def parity_routine(routine: Routine, rules: frozenset[str] = ALL_PARITY_RULES) -
 
 
 def parity_view(view: View, rules: frozenset[str] = ALL_PARITY_RULES) -> View:
-    """*view* as *rules* compare it: that its query exists, and its own indexes."""
+    """*view* as *rules* compare it: that its query exists, and its own indexes.
+
+    Under ``view_definitions`` a view always has a query, so one a reader did not
+    fetch (``definition=None``) compares as present too, never as another query.
+    """
     definition = view.definition
-    if definition is not None and "view_definitions" in rules:
+    if "view_definitions" in rules:
         definition = _EXPRESSION
     return replace(
         view,
@@ -1258,23 +1289,34 @@ def parity_view(view: View, rules: frozenset[str] = ALL_PARITY_RULES) -> View:
     )
 
 
-#: The fillfactor a stock pg_tviews creates a TVIEW with (``pg_tviews.fillfactor``);
-#: ``pg_tviews.unlogged_by_default`` is on, so it is created unlogged.
+#: The fillfactor pg_tviews creates a TVIEW with when its options name none: a
+#: documented default of read contract 2, which no setting changes. A TVIEW is
+#: LOGGED by default, so ``logged: false`` is the pin.
 _TVIEW_DEFAULT_FILLFACTOR = 85
 
-#: The policy a stock pg_tviews stores for a TVIEW whose create named none: its
-#: ``pg_tviews.uncascaded_policy`` default, ``error`` from 0.1.0-beta.25.
+#: The policy pg_tviews stores for a TVIEW whose options name none (contract 2).
 _TVIEW_DEFAULT_UNCASCADED_POLICY = "error"
 
 
 def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TView:
-    """*tview* as *rules* compare it: an option pg_tviews chose by default is no pin."""
-    tview = replace(tview, schema=_fold_schema(tview.schema, rules))
+    """*tview* as *rules* compare it: an option pg_tviews chose by default is no pin.
+
+    Its indexes are compared as a table's are; pg_tviews' own are not the TVIEW's.
+    """
+    indexes = tview.indexes
+    if indexes is not None:
+        indexes = _in_order([seen for _, seen in parity_indexes(indexes, rules)], rules)
+    tview = replace(
+        tview,
+        schema=_fold_schema(tview.schema, rules),
+        indexes=indexes,
+        managed_indexes=(),
+    )
     if "tview_defaults" not in rules:
         return tview
     return replace(
         tview,
-        logged=True if tview.logged else None,
+        logged=False if tview.logged is False else None,
         fillfactor=None if tview.fillfactor == _TVIEW_DEFAULT_FILLFACTOR else tview.fillfactor,
         uncascaded_policy=None
         if tview.uncascaded_policy == _TVIEW_DEFAULT_UNCASCADED_POLICY

@@ -472,7 +472,7 @@
               "type": "UUID",
               "nullable": true,
               "default": null,
-              "generated": "CAST((data -> 'author') ->> 'id' AS uuid)",
+              "generated": "CAST(data -> 'author' ->> 'id' AS uuid)",
               "generated_kind": "stored"
             },
             {
@@ -717,7 +717,7 @@
     "ok": true,
     "command": "diff",
     "parser": {
-      "pglast": "8.5",
+      "pglast": "8.7",
       "pg_major": 18
     }
   }

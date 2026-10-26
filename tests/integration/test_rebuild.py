@@ -196,6 +196,7 @@ def test_a_schema_that_cannot_be_built_drops_nothing(project: Path, db: psycopg.
         ["migrate", "rebuild", "-c", "confiture.yaml", "-y", "--drop-schemas", "--format", "json"],
     )
 
-    assert result.exit_code == exit_code_of("MIGR_001"), result.output
+    assert result.exit_code == exit_code_of("REBUILD_001"), result.output
+    assert json.loads(result.stdout)["error"]["code"] == "REBUILD_001"
     assert _schemas(db) == {"legacy", "public"}
     assert _columns(db, "widgets") == ["id"]

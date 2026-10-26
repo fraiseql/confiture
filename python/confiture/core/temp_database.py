@@ -38,7 +38,7 @@ def _rebuild_with_path(server_url: str, path: str) -> str:
     return rebuilt
 
 
-def _maintenance_url(server_url: str) -> str:
+def maintenance_url(server_url: str) -> str:
     """Replace the database component of *server_url* with ``postgres``.
 
     The maintenance DB is used to issue ``CREATE DATABASE`` / ``DROP DATABASE``
@@ -86,7 +86,8 @@ def force_drop_database(conn: psycopg.Connection, db_name: str) -> None:
 class TempDatabase:
     """Context manager that creates a throwaway PostgreSQL database.
 
-    On enter, creates a uniquely-named database and returns a connection URL.
+    On enter, creates a uniquely-named database, a copy of ``template0``, and
+    returns a connection URL.
     On exit, drops the database unconditionally (``DROP DATABASE … WITH (FORCE)``).
 
     The context manager connects to the ``postgres`` maintenance database —
@@ -106,7 +107,7 @@ class TempDatabase:
     def __init__(self, server_url: str) -> None:
         self._server_url = server_url
         self._db_name = f"confiture_tmp_{uuid.uuid4().hex[:8]}"
-        self._maintenance_url = _maintenance_url(server_url)
+        self._maintenance_url = maintenance_url(server_url)
         self._maintenance_conn: psycopg.Connection | None = None
 
     def __enter__(self) -> str:
@@ -120,7 +121,9 @@ class TempDatabase:
                 ),
             ) from exc
 
-        self._maintenance_conn.execute(t"CREATE DATABASE {self._db_name:i}")
+        # template0, never template1: whatever a server keeps in template1 (PostGIS, a
+        # table) is not something the build creates, and must not answer for it (#749).
+        self._maintenance_conn.execute(t"CREATE DATABASE {self._db_name:i} TEMPLATE template0")
         return _replace_dbname(self._server_url, self._db_name)
 
     def __exit__(

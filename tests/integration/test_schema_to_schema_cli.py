@@ -411,10 +411,10 @@ def test_a_source_that_resolves_to_nothing_is_a_configuration_error(
         ],
     )
 
-    assert result.exit_code == exit_code_of("CONFIG_004"), result.output
+    assert result.exit_code == exit_code_of("CONFIG_001"), result.output
     payload = _json(result.stdout)
     assert payload["ok"] is False
-    assert payload["error"]["code"] == "CONFIG_004"
+    assert payload["error"]["code"] == "CONFIG_001"
     assert "db/environments/old_production.yaml" in payload["error"]["message"]
     assert _foreign_servers(target) == {}
 

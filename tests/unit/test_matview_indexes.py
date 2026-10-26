@@ -8,16 +8,20 @@ redefined carries its whole index set on its own change instead, so its indexes
 are created with it and never ranked before it exists.
 """
 
+import re
 from dataclasses import replace
 
+import pytest
+
 from confiture.core.differ import (
+    EXACT,
     MATERIALISED,
     SchemaDiffer,
     Side,
     slot_side,
     stated_side,
 )
-from confiture.core.drift import DriftReport, DriftSeverity, _Findings
+from confiture.core.drift import DriftReport, DriftSeverity, DriftType, _Findings
 from confiture.core.schema_change import (
     IndexAdded,
     IndexDropped,
@@ -173,20 +177,87 @@ def test_a_side_that_did_not_read_views_compares_no_matview_index() -> None:
     assert _index_changes(changes) == []
 
 
-def test_a_redefined_matview_under_materialised_hides_a_lost_unique_index() -> None:
-    """A known limit: drift renders no redefined matview, so its lost index goes unsaid."""
-    actual, expected = _database(TABLE + VIEW), _database(TABLE + OTHER_VIEW + UNIQUE)
-    expected = replace(expected, model=replace(expected.model, source="author"))
-    policy = replace(MATERIALISED, author="new")
-    changes = SchemaDiffer().compare_sides(actual, expected, policy).changes
-    (change,) = changes
-    assert isinstance(change, ObjectReplaced)
-    assert [i.name for i in change.new_indexes] == ["ux_mv"]
+def _author(sql: str) -> Side:
+    """A tree as drift states it: the author's side of a materialised comparison."""
+    return stated_side(replace(read_text(sql).catalogued, source="author"))
+
+
+def _stored(sql: str) -> Side:
+    """A database holding *sql*, its views' queries as text: what ``migrate diff`` reads."""
+    read = read_text(sql)
+    return Side(replace(read.catalogued, source="catalog"), read.declared.objects)
+
+
+def _drift(database: Side, tree: Side) -> DriftReport:
+    """Drift at the materialised tier: *tree* is the author's side, *database* the catalog."""
+    changes = SchemaDiffer().compare_sides(database, tree, replace(MATERIALISED, author="new"))
     report = DriftReport(database_name="db", expected_schema_source="tree")
-    _Findings(expected.model, actual.model, DriftSeverity.WARNING).render(
-        changes, report, column_order=False
+    _Findings(tree.model, database.model, DriftSeverity.WARNING).render(
+        changes.changes, report, column_order=False
     )
-    assert report.drift_items == []
+    return report
+
+
+def test_a_redefined_matview_under_materialised_reports_a_lost_unique_index() -> None:
+    """Its query and its unique index both differ: the index is still a finding (#701)."""
+    report = _drift(_database(TABLE + VIEW), _author(TABLE + OTHER_VIEW + UNIQUE))
+    (item,) = [i for i in report.drift_items if i.drift_type is DriftType.MISSING_INDEX]
+    assert (item.drift_type, item.severity) == (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL)
+    assert item.object_name == "public.mv.ux_mv"
+    assert item.subject is not None
+    assert item.subject.relation == "mv"
+    assert report.indexes_checked == 1
+
+
+def test_a_redefined_matview_with_an_invalid_live_index_is_the_critical_pair() -> None:
+    database = _database(TABLE + VIEW + UNIQUE, valid=False)
+    report = _drift(database, _author(TABLE + OTHER_VIEW + UNIQUE))
+    found = [(i.drift_type, i.severity) for i in report.drift_items]
+    assert found == [
+        (DriftType.MISSING_INDEX, DriftSeverity.CRITICAL),
+        (DriftType.EXTRA_INDEX, DriftSeverity.INFO),
+        (DriftType.VIEW_DEFINITION_MISMATCH, DriftSeverity.WARNING),
+    ]
+    assert "INVALID" in report.drift_items[0].message
+
+
+def test_a_redefined_matview_alone_is_a_view_definition_mismatch() -> None:
+    """The query itself differs: one warning, each side's query named by its hash (#719)."""
+    report = _drift(_database(TABLE + VIEW + UNIQUE), _author(TABLE + OTHER_VIEW + UNIQUE))
+    (item,) = report.drift_items
+    assert (item.drift_type, item.severity) == (
+        DriftType.VIEW_DEFINITION_MISMATCH,
+        DriftSeverity.WARNING,
+    )
+    assert item.drift_type.value == "view_definition_mismatch"
+    assert item.subject is not None
+    assert (item.subject.schema, item.subject.relation) == ("public", "mv")
+    assert item.object_name == "public.mv"
+    assert re.fullmatch(r"[0-9a-f]{12}", item.expected)
+    assert re.fullmatch(r"[0-9a-f]{12}", item.actual)
+    assert item.expected != item.actual
+    assert "--check-body-views --show-diff" in item.message
+
+
+def test_a_redefined_view_is_a_view_definition_mismatch() -> None:
+    """A plain view's query is compared as a matview's is."""
+    view = "CREATE VIEW v AS SELECT id, n FROM tb_item;\n"
+    other = "CREATE VIEW v AS SELECT id FROM tb_item WHERE n > 0;\n"
+    (item,) = _drift(_database(TABLE + view), _author(TABLE + other)).drift_items
+    assert item.drift_type is DriftType.VIEW_DEFINITION_MISMATCH
+    assert item.object_name == "public.v"
+    assert "View 'public.v'" in item.message
+
+
+def test_the_hashes_are_the_body_checks_hashes() -> None:
+    """``expected``/``actual`` are ``--check-body-views``' ``source_hash``/``db_hash``."""
+    from confiture.core.view_body_drift import viewdef_hash
+
+    report = _drift(_database(TABLE + VIEW), _author(TABLE + OTHER_VIEW))
+    (item,) = report.drift_items
+    tree, database = read_text(TABLE + OTHER_VIEW), read_text(TABLE + VIEW)
+    assert item.expected == viewdef_hash(tree.catalogued.views[MV].definition or "")
+    assert item.actual == viewdef_hash(database.catalogued.views[MV].definition or "")
 
 
 def test_a_side_with_the_statement_and_no_model_entry_carries_no_indexes() -> None:
@@ -197,3 +268,102 @@ def test_a_side_with_the_statement_and_no_model_entry_carries_no_indexes() -> No
     (change,) = changes.changes
     assert isinstance(change, ObjectAdded)
     assert change.indexes == ()
+
+
+# A matview redefined is one change; how its indexes differ rides on it, for a
+# reader that asks about the indexes rather than the recreate.
+
+#: The index sets a redefined matview may go from and to, and what they are.
+INDEX_SHAPES = {
+    "unique-dropped": (UNIQUE, "", [("IndexDropped", "ux_mv")]),
+    "index-added": ("", ON_N, [("IndexAdded", "ix_mv")]),
+    "keys-changed": (ON_N, ON_ID, [("IndexDropped", "ix_mv"), ("IndexAdded", "ix_mv")]),
+}
+
+
+def _materialised(database: str, tree: str) -> list[SchemaChange]:
+    policy = replace(MATERIALISED, author="new")
+    return SchemaDiffer().compare_sides(_database(database), _author(tree), policy).changes
+
+
+def _replaced(changes: list[SchemaChange]) -> ObjectReplaced:
+    (change,) = changes
+    assert isinstance(change, ObjectReplaced)
+    return change
+
+
+def test_a_redefined_matview_carries_its_index_changes() -> None:
+    change = _replaced(_materialised(TABLE + VIEW, TABLE + OTHER_VIEW + UNIQUE))
+    (index_change,) = change.index_changes
+    assert isinstance(index_change, IndexAdded)
+    assert index_change.relation_kind == "matview"
+    assert index_change.index.name == "ux_mv"
+    assert index_change.ref == MV
+
+
+def test_a_redefined_matview_with_an_invalid_live_index_carries_the_rebuild_pair() -> None:
+    database = _database(TABLE + VIEW + UNIQUE, valid=False)
+    policy = replace(MATERIALISED, author="new")
+    changes = SchemaDiffer().compare_sides(database, _author(TABLE + OTHER_VIEW + UNIQUE), policy)
+    change = _replaced(changes.changes)
+    assert _index_changes(list(change.index_changes)) == [
+        ("IndexDropped", "ux_mv"),
+        ("IndexAdded", "ux_mv"),
+    ]
+
+
+def test_a_redefined_matview_whose_indexes_did_not_change_carries_none() -> None:
+    change = _replaced(_materialised(TABLE + VIEW + UNIQUE, TABLE + OTHER_VIEW + UNIQUE))
+    assert change.index_changes == ()
+
+
+#: Each policy that can redefine a matview, and the two sides it compares.
+REDEFINING = {
+    "materialised": lambda old, new: SchemaDiffer().compare_sides(
+        _database(old), _author(new), replace(MATERIALISED, author="new")
+    ),
+    "author": lambda old, new: SchemaDiffer().compare_sides(
+        Side.of(read_text(old)), Side.of(read_text(new))
+    ),
+    "exact": lambda old, new: SchemaDiffer().compare_sides(_stored(old), _stored(new)),
+}
+
+
+@pytest.mark.parametrize("shape", sorted(INDEX_SHAPES))
+@pytest.mark.parametrize("policy", sorted(REDEFINING))
+def test_the_carried_changes_are_the_paired_comparisons(policy: str, shape: str) -> None:
+    """A redefined matview's index changes are what the same indexes on a paired one are."""
+    old, new, expected = INDEX_SHAPES[shape]
+    compare = REDEFINING[policy]
+    paired = compare(TABLE + VIEW + old, TABLE + VIEW + new).changes
+    change = _replaced(compare(TABLE + VIEW + old, TABLE + OTHER_VIEW + new).changes)
+    assert _index_changes(paired) == expected
+    assert list(change.index_changes) == paired
+
+
+def test_the_catalogued_policy_redefines_no_matview() -> None:
+    """Its rules leave a matview's query only as existing: the matview is paired."""
+    changes = (
+        SchemaDiffer()
+        .compare_sides(_database(TABLE + VIEW), _tree(TABLE + OTHER_VIEW + UNIQUE))
+        .changes
+    )
+    assert _index_changes(changes) == [("IndexAdded", "ux_mv")]
+    assert not [c for c in changes if isinstance(c, ObjectReplaced)]
+
+
+def test_a_body_comparison_carries_no_index_changes() -> None:
+    """Two slot sides compare a matview's query alone: no model, no index to compare."""
+    before = {MV: read_text(TABLE + VIEW + UNIQUE).declared.objects[MV]}
+    after = {MV: read_text(TABLE + OTHER_VIEW).declared.objects[MV]}
+    changes = SchemaDiffer().compare_sides(
+        slot_side("views", before), slot_side("views", after), EXACT
+    )
+    change = _replaced(changes.changes)
+    assert change.index_changes == ()
+
+
+def test_the_carried_changes_are_not_on_the_wire() -> None:
+    change = _replaced(_materialised(TABLE + VIEW, TABLE + OTHER_VIEW + UNIQUE))
+    assert change.index_changes
+    assert change.to_wire() == replace(change, index_changes=()).to_wire()

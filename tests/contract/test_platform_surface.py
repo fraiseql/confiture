@@ -289,6 +289,9 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("time_refresh", "str | None"),
         ("function_reads", "tuple[FunctionRead, ...] | None"),
         ("uncascaded_tables", "tuple[UncascadedTable, ...] | None"),
+        ("indexes", "tuple[Index, ...] | None"),
+        ("managed_indexes", "tuple[Index, ...]"),
+        ("other_options", "Mapping[str, Any]"),
     ),
     "FunctionRead": (("function", "str"), ("tables", "tuple[str, ...]")),
     "UncascadedTable": (("table", "str"), ("policy", "str")),
@@ -448,6 +451,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("new", "DDLObject"),
         ("old_indexes", "tuple[Index, ...]"),
         ("new_indexes", "tuple[Index, ...]"),
+        ("index_changes", "tuple[IndexAdded | IndexDropped, ...]"),
     ),
 }
 

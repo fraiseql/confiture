@@ -50,7 +50,7 @@ class TestMigrateUpDuplicateBlocking:
     """Test that migrate up refuses to run with duplicate versions."""
 
     def test_migrate_up_blocks_on_duplicates(self, tmp_path, test_db_url):
-        """migrate up should exit 3 when duplicate versions exist."""
+        """migrate up should exit 1 when duplicate versions exist."""
         config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -70,7 +70,7 @@ class TestMigrateUpDuplicateBlocking:
             ],
         )
 
-        assert result.exit_code == 3
+        assert result.exit_code == 1
         # Error messages are now written to stderr for deployment automation.
         # The test verifies the correct exit code; the error message content
         # is verified in unit tests.
@@ -110,7 +110,7 @@ class TestMigrateBaselineDuplicateBlocking:
     """Test that migrate baseline refuses to run with duplicate versions."""
 
     def test_baseline_blocks_on_duplicates(self, tmp_path, test_db_url):
-        """migrate baseline should exit 3 when duplicate versions exist."""
+        """migrate baseline should exit 1 when duplicate versions exist."""
         config_file = _make_config_file(tmp_path, test_db_url)
         migrations_dir = tmp_path / "db" / "migrations"
         migrations_dir.mkdir(parents=True)
@@ -132,7 +132,7 @@ class TestMigrateBaselineDuplicateBlocking:
             ],
         )
 
-        assert result.exit_code == 3
+        assert result.exit_code == 1
         # Error messages are now written to stderr for deployment automation.
         # The test verifies the correct exit code; the error message content
         # is verified in unit tests.

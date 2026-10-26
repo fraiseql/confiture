@@ -12,7 +12,7 @@ and the one question that needs one: which migrations a ledger has not applied
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pglast.parser
 
@@ -26,10 +26,15 @@ from confiture.core.destructive import irreversible_reasons, is_gated
 from confiture.core.expand_contract import StagedPlan, plannable
 from confiture.core.ledger import find_ledger_relations
 from confiture.core.migration_analyzer import MigrationAnalyzer
+from confiture.core.migration_down import read_python_down
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
+from confiture.core.risk_tier import RiskTier
 from confiture.core.sql_lexer import parse_file
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import MigrationPreflightInfo, PreflightIssue, PreflightResult
+
+if TYPE_CHECKING:
+    from confiture.core.change_set.models import ChangeEntry
 
 
 def invalid_index_issues(
@@ -152,6 +157,43 @@ def is_window_safe(issues: Iterable[PreflightIssue]) -> bool:
     )
 
 
+#: Issues that mean ``migrate down`` cannot be trusted to undo the migration they name:
+#: nothing to run (a missing ``.down.sql``, an empty ``down()``), a down confiture did not
+#: read (Python), one its author says restores less than the up removed (the
+#: irreversible marker, the destructive gate), a migration that can stop part way
+#: (autocommit) or that PostgreSQL's parser rejects.
+IRREVERSIBLE_CODES = frozenset(
+    {
+        "PFLIGHT_MISSING_DOWN",
+        "PFLIGHT_DOWN_EMPTY",
+        "PFLIGHT_DOWN_UNVERIFIED",
+        "PFLIGHT_IRREVERSIBLE",
+        "PFLIGHT_DESTRUCTIVE_GATED",
+        "PFLIGHT_NON_TRANSACTIONAL",
+        "PFLIGHT_UNPARSEABLE",
+    }
+)
+
+
+#: ``change_set`` tiers whose change a down restores. ``destructive`` and ``irreversible``
+#: lose data no down brings back; an unclassified change (no tier) is never assumed.
+UNDOABLE_TIERS = frozenset({RiskTier.ADDITIVE, RiskTier.REVERSIBLE, RiskTier.LOCK_RISKY})
+
+
+def is_reversible(issues: Iterable[PreflightIssue], changes: Iterable[ChangeEntry]) -> bool:
+    """Typed rollback verdict over a preflight issue set and its change set (#754).
+
+    ``True`` iff ``migrate down`` can undo every checked migration: none carries an
+    :data:`IRREVERSIBLE_CODES` issue, and every change is in :data:`UNDOABLE_TIERS`. It
+    answers what :func:`is_window_safe` does not — whether a failed deploy is rolled back
+    by ``migrate down`` or needs a restore — and a consumer treats its absence (older
+    confiture) as ``False``.
+    """
+    return not any(issue.code in IRREVERSIBLE_CODES for issue in issues) and all(
+        change.tier in UNDOABLE_TIERS for change in changes
+    )
+
+
 def preflight_exit_code(summary: dict[str, int], *, strict: bool) -> int:
     """Exit code for a completed preflight report (issue #148).
 
@@ -240,13 +282,14 @@ def run_preflight(
         if versions is not None and version not in versions:
             continue
         _, name = parse_migration_filename(py_file.name)
-        # Python migrations define down() in-class — assumed reversible
+        # A Python migration defines down() in-class; what it holds is read, never assumed
         infos.append(
             MigrationPreflightInfo(
                 version=version,
                 name=name,
                 has_down=True,
                 filename=py_file.name,
+                python_down=read_python_down(py_file).value,
             )
         )
 

@@ -216,8 +216,8 @@ class TestHandleCliError:
 
         exit_code = handle_cli_error(error)
 
-        # MIGR_100 should map to exit code 3
-        assert exit_code == 3
+        # MIGR_100 is an execution failure: exit 1, never 3's unreachable database
+        assert exit_code == 1
 
     def test_handle_generic_exception(self) -> None:
         """Test handling generic Python exceptions."""
@@ -232,7 +232,7 @@ class TestHandleCliError:
         """Test that different error codes map to correct exit codes."""
         test_cases = [
             ("CONFIG_001", 5),  # Configuration error (#146: config invalid → 5)
-            ("MIGR_100", 3),  # Migration error
+            ("MIGR_100", 1),  # Migration error
             ("SCHEMA_001", 4),  # Schema error
         ]
 

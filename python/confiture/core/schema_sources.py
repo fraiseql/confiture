@@ -13,7 +13,7 @@ as written, a database's as PostgreSQL writes them (``live_catalog.catalogued_ob
 Which rules the comparison applies follows from where each side came from.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -21,17 +21,24 @@ from typing import cast
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
 from confiture.core.ddl_walk import AS_WRITTEN
-from confiture.core.differ import SchemaDiffer, Side
+from confiture.core.differ import SchemaDiffer, Side, held_by_definition
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
-from confiture.core.live_catalog import catalogued_objects, read, user_schemas
+from confiture.core.live_catalog import catalogued_objects, user_schemas
+from confiture.core.live_catalog import read as read_catalog
 from confiture.core.live_catalog import (
     require_supported_pg_tviews_on as _require_supported_pg_tviews_on,
 )
 from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import TVIEW_OPTIONS, SchemaModel, ref_for
+from confiture.core.schema_model import (
+    DEFINED_OTHER_KINDS,
+    TVIEW_OPTIONS,
+    ObjectRef,
+    SchemaModel,
+    ref_for,
+)
 from confiture.core.schema_read import SchemaRead, Segment, read_segments
 from confiture.core.server_constants import server_constants
 from confiture.exceptions import SchemaError
@@ -179,7 +186,7 @@ def introspect(database: str | Connection, *, schemas: Sequence[str] | None = No
             wanted = user_schemas(conn)
         else:
             wanted = [schemas] if isinstance(schemas, str) else list(schemas)
-        return read(conn, schemas=wanted, routines=True, views=True, triggers=True)
+        return read_catalog(conn, schemas=wanted, routines=True, views=True, triggers=True)
 
 
 def require_supported_pg_tviews_on(database: str | Connection) -> None:
@@ -227,7 +234,7 @@ def database_side(
     """
     with connection_for(database) as conn:
         wanted = user_schemas(conn) if against is None else declared_schemas(against)
-        model = read(
+        model = read_catalog(
             conn, schemas=wanted, routines=True, views=True, triggers=True, other_objects=True
         )
         model = _the_projects(model, against, tracking_table)
@@ -239,43 +246,101 @@ def materialised_side(
     sql: str,
     scratch_url: str,
     *,
-    declared: SchemaModel,
+    read: SchemaRead,
     schemas: Sequence[str] | None = None,
     default_schema: str = DEFAULT_SCHEMA,
 ) -> Side:
     """The side a tree is once PostgreSQL holds it: built into a scratch database, read back.
 
-    *sql* is applied to a throwaway database on the writable server *scratch_url*
-    (``ExpectedSchemaDB``, dropped on the way out, whatever happens) with
-    *default_schema* first on its ``search_path``, and read as a database is
-    (:func:`database_side`) in *schemas* — the ones *declared* names when omitted.
-    Every expression on this side is then PostgreSQL's analysis of the tree's, so
-    it compares with a database's exactly (``differ.MATERIALISED``).
+    *sql* is *read*'s tree as one text. It is applied to a throwaway database on the
+    writable server *scratch_url* (``ExpectedSchemaDB``, dropped on the way out,
+    whatever happens) with *default_schema* first on its ``search_path``, and read
+    as a database is (:func:`database_side`) in *schemas* — the ones the tree
+    names when omitted. Every slot the catalog answers is then PostgreSQL's
+    analysis of the tree's, so it compares with a database's exactly
+    (``differ.MATERIALISED``).
 
-    What the catalog cannot say about the tree is taken from *declared*, the tree
-    as written: a TVIEW option it does not pin is pg_tviews' choice, not the
-    tree's, whatever the scratch registry holds.
+    What the catalog cannot say about the tree is taken from *read*:
+
+    - the statement that creates an object the catalog reads by existence alone
+      (a domain, a composite or range type, an aggregate, a policy, a rule, …):
+      its existence is compared, and a migration creates it as the tree wrote it;
+    - a TVIEW option the tree does not pin, which is pg_tviews' choice, not the
+      tree's, whatever the scratch registry holds;
+    - what the read had to say: two definitions of one object (``DIFFER_402``), a
+      name that needs quotes (``DIFFER_403``), an index written on a relation
+      the tree had not declared.
+
+    An object the tree wrote unqualified is found where the build put it, in
+    *default_schema*.
 
     Raises:
         SchemaError: when the scratch server cannot build the tree.
         ConfigurationError: ``CONFIG_014`` when the tree's TVIEWs need a pg_tviews
             the scratch server does not have in a version confiture reads.
     """
-    wanted = list(schemas) if schemas is not None else declared_schemas(declared)
+    wanted = list(schemas) if schemas is not None else declared_schemas(read.model)
     search_path = None if default_schema == DEFAULT_SCHEMA else default_schema
-    with ExpectedSchemaDB(scratch_url).from_source(schema_sql=sql, search_path=search_path) as conn:
-        model = read(
+    pg_tviews = bool(read.model.tviews) and not _creates_pg_tviews(read)
+    scratch = ExpectedSchemaDB(scratch_url).from_source(
+        schema_sql=sql, search_path=search_path, pg_tviews=pg_tviews
+    )
+    with scratch as conn:
+        model = read_catalog(
             conn, schemas=wanted, routines=True, views=True, triggers=True, other_objects=True
         )
-        model = _the_projects(model, declared, None)
+        model = _the_projects(model, read.model, None)
         objects = catalogued_objects(conn, model, wanted)
-    tviews = {
-        ref: replace(tview, **{key: getattr(declared.tviews[ref], key) for key in TVIEW_OPTIONS})
-        if ref in declared.tviews
-        else tview
-        for ref, tview in model.tviews.items()
+    return _with_the_trees(Side(model, objects), Side.of(read, held=True), default_schema)
+
+
+def _creates_pg_tviews(read: SchemaRead) -> bool:
+    """Whether the tree runs ``CREATE EXTENSION pg_tviews`` itself."""
+    return any(ref.kind == "extension" and ref.name == "pg_tviews" for ref in read.declared.objects)
+
+
+def _with_the_trees(side: Side, tree: Side, default_schema: str) -> Side:
+    """*side*, PostgreSQL's reading of *tree*, with what only *tree* can say.
+
+    A statement the catalog wrote is kept: it is PostgreSQL's reading. An object
+    the catalog holds and wrote none for takes the tree's statements, and a TVIEW
+    the tree's pinned options. A domain, a type, a policy and a rule take the
+    tree's statements too: they are compared by the model's definitions, which
+    are PostgreSQL's here, and the statement is what a migration carries, spelled
+    as the author spelled it (#708). *tree*'s notes are carried as they are.
+    """
+
+    def trees[V](held: Mapping[ObjectRef, V], ref: ObjectRef) -> V | None:
+        """What *tree* holds for *ref*; written unqualified, where the build put it."""
+        if ref in held or ref.schema != default_schema:
+            return held.get(ref)
+        return held.get(replace(ref, schema=DEFAULT_SCHEMA))
+
+    model = side.model
+    unstated = {
+        ref: statements
+        for ref in held_by_definition(model) - side.objects.keys()
+        if (statements := trees(tree.objects, ref))
     }
-    return Side(replace(model, tviews=tviews), objects)
+    authored = {
+        ref: statements
+        for ref in side.objects
+        if ref.kind in DEFINED_OTHER_KINDS and (statements := trees(tree.objects, ref))
+    }
+    tviews = {
+        ref: replace(view, **{key: getattr(declared, key) for key in TVIEW_OPTIONS})
+        if (declared := trees(tree.model.tviews, ref)) is not None
+        else view
+        for ref, view in model.tviews.items()
+    }
+    return replace(
+        side,
+        model=replace(model, tviews=tviews),
+        objects={**side.objects, **unstated, **authored},
+        warnings=tree.warnings,
+        quoted=tree.quoted,
+        dangling=tree.dangling,
+    )
 
 
 def _the_projects(

@@ -171,8 +171,10 @@ content (the same `MigrationAnalyzer` the static `preflight` check uses)
 and treats the migration as non-transactional automatically when it
 contains a statement PostgreSQL forbids inside a transaction —
 `CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`,
-`REINDEX … CONCURRENTLY`, `VACUUM`, `CLUSTER`, `ALTER TYPE … ADD VALUE`,
-`CREATE/DROP DATABASE`.  No declaration is needed (and none is possible):
+`REINDEX … CONCURRENTLY`, `VACUUM`, `CLUSTER`, `CREATE/DROP DATABASE` —
+or `ALTER TYPE … ADD VALUE`, whose new label PostgreSQL refuses to use
+before it commits (`55P04`), so a later statement in the same transaction
+could not.  No declaration is needed (and none is possible):
 
 ```sql
 -- 20260528121500_create_index_concurrently.up.sql
@@ -194,7 +196,10 @@ Non-transactional migrations:
   is then **consumed** (committed DDL cannot be rolled back) and must
   be reprovisioned before the next run.
 - Have no automatic rollback on failure under regular `migrate up` —
-  manual cleanup may be required.
+  manual cleanup may be required. A failure leaves the earlier statements
+  committed and records no ledger row, and the next `migrate up` runs the
+  file from the top: drop any INVALID index and finish or revert the
+  applied statements before re-running.
 
 A migration `migrate diff --generate` writes follows the same test. When the
 up file runs in one transaction, a table or materialized view it creates is
@@ -210,6 +215,15 @@ inside a transaction, set `transactional = False` on the migration
 class.  Never call `COMMIT` or `ROLLBACK` from inside a transactional
 migration body.
 
+
+### Generated Python migrations
+
+`migrate diff --generate` without `--from`/`--to` writes a Python
+migration. Its class declares `transactional = False` by the rule a
+`.up.sql` is auto-detected by, read from the up it writes, so the two forms
+of one diff run in the same mode. Each `self.execute` holds one statement
+PostgreSQL refuses in a transaction (a run of `ADD VALUE` is the one
+exception: those apply together), so autocommit runs each on its own.
 
 ### Non-transactional migrations run one statement at a time
 
@@ -237,7 +251,7 @@ non-transactional migration is an error, `MIGR_108`.
 |---------------|-----|
 | Group inserts/updates under a sub-rollback | `with self.connection.transaction(): …` |
 | Run `IF EXISTS`-style conditional DDL | `DO $$ … EXCEPTION WHEN … END $$` |
-| Run `CREATE INDEX CONCURRENTLY` | `transactional = False` (Python) — auto-detected in a `.up.sql` file |
+| Run `CREATE INDEX CONCURRENTLY` | `transactional = False` (Python; `migrate diff --generate` writes it) — auto-detected in a `.up.sql` file |
 | Run `VACUUM` / `REINDEX CONCURRENTLY` | `transactional = False` (Python) — auto-detected in a `.up.sql` file |
 | Test the migration without persisting | `migrate up --dry-run-execute` |
 | Test against a parallel database | `migrate preflight --against <db>` |

@@ -68,7 +68,7 @@ class SchemaSnapshotGenerator:
         model = read.catalogued
         if database_url is not None:
             sql = SchemaBuilder(env=env, project_dir=project_dir).build(schema_only=True)
-            model = materialised_side(sql, database_url, declared=read.model).model
+            model = materialised_side(sql, database_url, read=read).model
 
         self.snapshots_dir.mkdir(parents=True, exist_ok=True)
         snapshot_path = self.snapshots_dir / f"{version}_{name}.json"

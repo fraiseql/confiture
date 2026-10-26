@@ -1,6 +1,7 @@
 """Migration file discovery utilities."""
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -47,13 +48,31 @@ def discover_migration_files(migrations_dir: Path) -> list[Path]:
     """
     if not migrations_dir.exists():
         return []
-    py_files = [
-        f
-        for f in migrations_dir.glob("*.py")
-        if f.name != "__init__.py" and not f.name.startswith("_")
-    ]
+    py_files = [f for f in migrations_dir.glob("*.py") if is_migration_name(f.name)]
     sql_files = list(migrations_dir.glob("*.up.sql"))
     return sorted(py_files + sql_files, key=lambda f: _version_from_migration_filename(f.name))
+
+
+def is_migration_name(name: str) -> bool:
+    """Whether a file of this name is a migration: an ``.up.sql``, or a ``.py`` module.
+
+    A module named ``__init__.py`` or with a leading ``_`` is a helper, not a migration.
+    """
+    return name.endswith(".up.sql") or (name.endswith(".py") and not name.startswith("_"))
+
+
+def changed_migrations(changed: Iterable[Path], directory: str) -> list[Path]:
+    """The migrations among *changed*, paths named from the repository root.
+
+    *directory* is the migrations directory as a pathspec from the same root
+    (``git.root_relative``). The directory is listed flat, as the runner lists it, so
+    a file nested below it is not one of its migrations.
+    """
+    return [
+        path
+        for path in changed
+        if path.parent.as_posix() == directory and is_migration_name(path.name)
+    ]
 
 
 def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Path]]:

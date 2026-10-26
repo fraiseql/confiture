@@ -297,7 +297,9 @@ an access method: the kinds no typed section holds. `kind`, `schema` and
 `name` are its identity as `ObjectRef` keys it (schema folded and
 defaulted, a policy or rule named `table.name`); `definition` is what
 decides whether it changed, `None` from a reader that read only that it
-exists (`Coverage` says which).
+exists. The depth is the object's: a database's model reads the kinds of
+`DEFINED_OTHER_KINDS` whole in a section `Coverage` calls
+`existence`, and two objects are compared by definition when both hold one.
 
 | Field | Type | Default |
 |---|---|---|
@@ -501,7 +503,7 @@ constraint, and every one a server before 18 holds, is enforced.
 class Index
 ```
 
-An index on one table or materialized view.
+An index on one table, materialized view or TVIEW.
 
 `columns` holds each key as written — a column name or a rendered
 expression. `method` is the access method; PostgreSQL's grammar fills in
@@ -669,6 +671,19 @@ tables a non-immutable function reads (fraiseql/pg_tviews#193). Pinned by a
 the TVIEW's for a write to that table (fraiseql/pg_tviews#195): pinned by a
 call's `options` alone, `()` pinning none, sorted by table.
 
+`indexes` are the TVIEW's own, compared as a table's are: every index a tree
+writes on it, or, read from a database, every index on its table but those
+pg_tviews created (`tviews.registry.managed_indexes`) and those a constraint
+uses, pg_tviews' rule; `None` where they were not read. `managed_indexes`
+are pg_tviews' own, read from the database alone and never compared: a tree
+that writes one of them exactly writes what pg_tviews adopts as its own.
+
+`other_options` are the `options` keys the model does not compare
+(`data_gin_index`, `group_keys`, `typename`, …), as written: the tree's
+call's, or every one the registry holds. Under pg_tviews' read contract 2 an
+option a call leaves out is at its default, also on an existing TVIEW, so the
+call a migration writes passes them back; they are never compared.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
@@ -680,6 +695,9 @@ call's `options` alone, `()` pinning none, sorted by table.
 | `time_refresh` | `str \| None` | `None` |
 | `function_reads` | `tuple[FunctionRead, ...] \| None` | `None` |
 | `uncascaded_tables` | `tuple[UncascadedTable, ...] \| None` | `None` |
+| `indexes` | `tuple[Index, ...] \| None` | `()` |
+| `managed_indexes` | `tuple[Index, ...]` | `()` |
+| `other_options` | `Mapping[str, Any]` | empty |
 
 ### `FunctionRead`
 
@@ -775,7 +793,7 @@ to and closed here; a connection is the caller's.
 ### `MINIMUM_PG_TVIEWS`
 
 ```python
-MINIMUM_PG_TVIEWS = '0.1.0-beta.26'
+MINIMUM_PG_TVIEWS = '0.1.0-beta.30'
 ```
 
 ## What a writer may supply
@@ -1551,7 +1569,7 @@ class IndexAdded(_OnIndexed)
 An index only the new side holds on a relation both hold, or on one neither declares.
 
 `relation_kind` is `"matview"` for an index on a materialized view both
-sides hold. `table_declared` is false for an index on a table neither tree
+sides hold, `"tview"` for one on a TVIEW both hold. `table_declared` is false for an index on a table neither tree
 declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
@@ -1570,7 +1588,7 @@ class IndexDropped(_OnIndexed)
 An index only the old side holds on a relation both hold, or on one neither declares.
 
 `relation_kind` is `"matview"` for an index on a materialized view both
-sides hold. `table_declared` is false for an index on a table neither tree
+sides hold, `"tview"` for one on a TVIEW both hold. `table_declared` is false for an index on a table neither tree
 declares (#679): someone else's table, which the migration assumes exists.
 
 | Field | Type | Default |
@@ -1780,8 +1798,8 @@ class ObjectAdded(_ObjectChange)
 
 An object only the new tree defines.
 
-`indexes` are the ones a materialized view is created with, as a table's
-travel on `TableAdded`; `()` for every other kind.
+`indexes` are the ones a materialized view or a TVIEW is created with, as a
+table's travel on `TableAdded`; `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
@@ -1797,8 +1815,8 @@ class ObjectDropped(_ObjectChange)
 
 An object only the old tree defines.
 
-`indexes` are the ones a materialized view held, which its down creates
-again with it; `()` for every other kind.
+`indexes` are the ones a materialized view or a TVIEW held, which its down
+creates again with it; `()` for every other kind.
 
 | Field | Type | Default |
 |---|---|---|
@@ -1820,6 +1838,14 @@ object's shape moved. A materialized view is dropped and created again, so
 it carries its indexes: `new_indexes` are created after it, and its down
 creates the old one with `old_indexes`; both `()` for every other kind.
 
+`index_changes` is how the recreated matview's indexes differ from the
+dropped one's, by the one index comparison under the comparison's policy:
+what a reader that asks about the indexes rather than the recreate reads
+(drift, #701). They are not changes of the diff: the recreate writes
+`new_indexes` whole, so no SQL, order, tier or wire field reads them. A
+TVIEW's index changes will be top-level changes instead, because a TVIEW
+replaced in place keeps its user indexes.
+
 | Field | Type | Default |
 |---|---|---|
 | `ref` | `ObjectRef` | required |
@@ -1827,6 +1853,7 @@ creates the old one with `old_indexes`; both `()` for every other kind.
 | `new` | `DDLObject` | required |
 | `old_indexes` | `tuple[Index, ...]` | `()` |
 | `new_indexes` | `tuple[Index, ...]` | `()` |
+| `index_changes` | `tuple[IndexAdded \| IndexDropped, ...]` | `()` |
 
 ### `DDLObject`
 

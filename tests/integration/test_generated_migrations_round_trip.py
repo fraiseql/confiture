@@ -10,6 +10,10 @@ requires, with the destructive gate open so every derived statement is written.
 A file that runs in one transaction creates plainly and fails when applied over
 what it creates; one that does not keeps ``IF NOT EXISTS``, so a failed
 autocommit file retries from the top.
+
+A generated Python migration runs in the mode its SQL pair would, through
+``migrate up`` itself: the positional ``migrate diff OLD NEW --generate`` writes it,
+and the CLI applies it, takes it back and applies it again (#698).
 """
 
 from pathlib import Path
@@ -304,3 +308,85 @@ class TestAutocommitCreates:
         assert conn.execute(
             "SELECT indisvalid FROM pg_index WHERE indexrelid = 'ix_t_a'::regclass"
         ).fetchone() == (True,)
+
+
+class TestPythonMigrationUnderMigrateUp:
+    """The issue's reproduction: an enum label and a concurrent index, in one ``.py``."""
+
+    OLD = "CREATE TABLE t (id bigint PRIMARY KEY, c text);\nCREATE TYPE mood AS ENUM ('a');\n"
+    NEW = (
+        "CREATE TABLE t (id bigint PRIMARY KEY, c text);\n"
+        "CREATE INDEX idx_t_c ON t (c);\n"
+        "CREATE TYPE mood AS ENUM ('a', 'b');\n"
+    )
+
+    @staticmethod
+    def _run(*argv: str) -> None:
+        result = CliRunner().invoke(app, list(argv))
+        assert result.exit_code == 0, result.output
+
+    def _generated(self, tmp_path: Path, url: str, old: str, new: str) -> list[str]:
+        """*old* built into *url*, the ``.py`` generated; the ``migrate`` arguments that reach it."""
+        (tmp_path / "old.sql").write_text(old)
+        (tmp_path / "new.sql").write_text(new)
+        migrations = tmp_path / "migrations"
+        self._run(
+            "migrate", "diff", str(tmp_path / "old.sql"), str(tmp_path / "new.sql"),
+            "--generate", "--name", "step", "--migrations-dir", str(migrations),
+        )  # fmt: skip
+        assert [p.suffix for p in migrations.glob("*_step*")] == [".py"]
+        with psycopg.connect(url, autocommit=True) as conn:
+            _apply(conn, old)
+        return ["--migrations-dir", str(migrations), "-d", url, "--no-config"]
+
+    @staticmethod
+    def _state(url: str) -> tuple[bool | None, list[str], int]:
+        with psycopg.connect(url) as conn:
+            valid = conn.execute(
+                "SELECT i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid"
+                " WHERE c.relname = 'idx_t_c'"
+            ).fetchone()
+            labels = conn.execute(
+                "SELECT enumlabel FROM pg_enum WHERE enumtypid = 'mood'::regtype ORDER BY 1"
+            ).fetchall()
+            applied = conn.execute("SELECT count(*) FROM tb_confiture").fetchone()
+        assert applied is not None
+        return (valid[0] if valid else None), [label for (label,) in labels], applied[0]
+
+    @pytest.fixture(autouse=True)
+    def _isolated(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    def test_a_generated_concurrent_index_applies(
+        self, fresh_database: str, tmp_path: Path
+    ) -> None:
+        common = self._generated(tmp_path, fresh_database, self.OLD, self.NEW)
+        self._run("migrate", "up", *common)
+        assert self._state(fresh_database) == (True, ["a", "b"], 1)
+
+    def test_the_down_drops_the_index_concurrently_and_up_applies_again(
+        self, fresh_database: str, tmp_path: Path
+    ) -> None:
+        common = self._generated(tmp_path, fresh_database, self.OLD, self.NEW)
+        self._run("migrate", "up", *common)
+        self._run("migrate", "down", "-n", "1", *common)
+        assert self._state(fresh_database) == (None, ["a", "b"], 0)
+        self._run("migrate", "up", *common)
+        assert self._state(fresh_database) == (True, ["a", "b"], 1)
+
+    def test_a_label_used_by_a_default_in_the_same_file_applies(
+        self, fresh_database: str, tmp_path: Path
+    ) -> None:
+        """In one transaction PostgreSQL refuses the new label before commit (55P04)."""
+        old = "CREATE TYPE mood AS ENUM ('a');\nCREATE TABLE p (m mood DEFAULT 'a');\n"
+        new = "CREATE TYPE mood AS ENUM ('a', 'b');\nCREATE TABLE p (m mood DEFAULT 'b');\n"
+        common = self._generated(tmp_path, fresh_database, old, new)
+        self._run("migrate", "up", *common)
+        with psycopg.connect(fresh_database) as conn:
+            default = conn.execute(
+                "SELECT column_default FROM information_schema.columns"
+                " WHERE table_name = 'p' AND column_name = 'm'"
+            ).fetchone()
+        assert default == ("'b'::mood",)

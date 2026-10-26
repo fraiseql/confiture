@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.34.0
-**Last Updated**: October 9, 2026
+**Version**: 1.41.0
+**Last Updated**: October 25, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -99,7 +99,7 @@ pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
-pglast = ">=8.5"          # PostgreSQL's own C parser (libpg_query) — the one parser
+pglast = ">=8.7"          # PostgreSQL's own C parser (libpg_query) — the one parser
 
 [project.optional-dependencies]
 ast = []                  # empty alias: an older `fraiseql-confiture[ast]` still resolves
@@ -425,11 +425,16 @@ environment, `--scratch-url` on `drift` and `migrate diff`), `schema_sources.mat
 builds the tree into a throwaway database (`ExpectedSchemaDB`) and reads it back, and
 `MATERIALISED` compares PostgreSQL's reading with PostgreSQL's reading — every parity
 rule but `analysed_expressions` and `view_definitions`, so a CHECK, an index predicate
-and a view's query compare as stored. A payload carries `"fidelity"` only when it is
+and a view's query compare as stored. What the catalog reads by existence alone (a
+domain, a type, an aggregate, a policy, …) keeps the tree's statement on that side, so
+only its existence is compared and a migration still creates it; the side carries the
+read's notes (`DIFFER_402`, `DIFFER_403`) too. A payload carries `"fidelity"` only when it is
 `materialised`; `docs/reference/comparison-fidelity.md` says what each tier compares.
 Every other comparator is a rendering of the engine too: the body checks hand it sides
 whose statements carry one slot (`differ.slot_side`; `function_body_drift.changed_bodies`),
-the signature checks ask `function_signature_drift.unpaired_routines`, and the baseline
+the signature checks ask `function_signature_drift.unpaired_routines` (`--require-migration`'s
+over the routines of the two trees its DDL half compared, `GitSchemaBuilder.read_at_ref`,
+never a changed file on its own), and the baseline
 detector compares a database with each schema-history snapshot (model wire,
 `<version>_<name>.json`) through `database_side`. `tests/unit/test_bodies_render_the_engine.py`
 and `tests/unit/test_routines_are_paired_once.py` fail on a comparator of its own.
@@ -495,10 +500,11 @@ a fourth resolver.
 
 #### pglast: one major
 
-Confiture depends on **`pglast>=8.5`, uncapped**: one major, which `uv.lock` pins. 8.5 is
-the first pglast whose libpg_query serialises a trigger body as valid JSON (#272), with a
-cp314 wheel on every platform confiture ships, and 8 embeds PostgreSQL 18's grammar, so
-18's constraint attributes are readable.
+Confiture depends on **`pglast>=8.7`, uncapped**: one major, which `uv.lock` pins. 8.7 is
+the printer that spells the expressions the model's wire and the goldens hold, so every
+install writes the same bytes; 8.5 was the first pglast whose libpg_query serialises a
+trigger body as valid JSON (#272), and 8 embeds PostgreSQL 18's grammar, so 18's
+constraint attributes are readable.
 
 **Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18 inserted a
 member into `AlterTableType`, so pglast 8 renumbered everything after it: a literal
@@ -571,6 +577,7 @@ confiture/
 │   │   ├── error_json.py         # Structured error envelope + JSON-aware CLI error boundary (issue #145)
 │   │   ├── generate.py           # CLI commands for the `confiture generate` subcommand group
 │   │   ├── git_validation.py     # CLI helpers for git-aware schema validation
+│   │   ├── help_text.py          # A command's help as paragraphs Rich can re-wrap: a sentence's line brea…
 │   │   ├── helpers.py            # Shared helpers for Confiture CLI commands
 │   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
 │   │   ├── lint_formatter.py     # Output formatting for linting results
@@ -583,10 +590,11 @@ confiture/
 │   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI
 │   │   ├── seed.py               # CLI commands for seed data validation
 │   │   ├── seed_copy.py          # ``confiture seed convert``: the COPY-format tool
+│   │   ├── seed_drift.py         # ``confiture seed drift``: compare the seeded rows of a seed-built datab…
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
 │   │   ├── commands/             # CLI command modules for Confiture (37 modules)
-│   │   └── formatters/           # (8 modules)
+│   │   └── formatters/           # (9 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
 │   │   ├── _env_vars.py          # Shared ``${VAR}`` expansion for Confiture YAML configuration
@@ -641,6 +649,7 @@ confiture/
 │   │   ├── mcp_http.py           # HTTP transport adapter for MCPServer using FastAPI
 │   │   ├── mcp_server.py         # MCPServer: exposes Confiture operations and PostgreSQL functions as MCP…
 │   │   ├── migration_analyzer.py # Analyze migration SQL for non-transactional statements
+│   │   ├── migration_down.py     # Whether a Python migration's ``down()`` does anything, read from its so…
 │   │   ├── migration_generator.py # Migration file generator from schema diffs
 │   │   ├── migration_grant_extractor.py # Static extraction of ``CREATE TABLE`` and ``GRANT`` statements from a
 │   │   ├── migration_reads.py    # Which files a migration reads at run time, and which of them sit under…
@@ -698,10 +707,10 @@ confiture/
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (20 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (5 modules)
-│   │   ├── linting/              # Rule Library System (46 modules)
+│   │   ├── linting/              # Rule Library System (47 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
-│   │   ├── seed/                 # Seed data management and optimization (28 modules)
+│   │   ├── seed/                 # Seed data management and optimization (31 modules)
 │   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (17 modules)
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models
@@ -1487,8 +1496,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: October 9, 2026
-**Version**: 1.34.0
+**Last Updated**: October 25, 2026
+**Version**: 1.41.0
 
 ---
 

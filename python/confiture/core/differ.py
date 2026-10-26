@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any, Literal, NoReturn
 
-from confiture.core.ddl_objects import DDLObject, pair_definitions
+from confiture.core.ddl_objects import DDLObject, pair_definitions, shape
 from confiture.core.ddl_walk import (
     AS_WRITTEN,
     ConstantSpellings,
@@ -67,6 +67,7 @@ from confiture.core.schema_model import (
     EnumType,
     Index,
     ObjectRef,
+    OtherObject,
     Provenance,
     RelationKind,
     RelationName,
@@ -353,9 +354,10 @@ def _refuse(index: Index, reason: str) -> NoReturn:
         f"{comment_text(index.table.qualified)}: {reason}",
         error_code="DIFFER_406",
         resolution_hint=(
-            "Declare the relation in the desired schema, before the index — compose the "
-            "fragment into the environment's include_dirs, after the file that creates it — "
-            "or remove the index"
+            "Declare the relation in the desired schema, before the index — give the "
+            "fragment's include_dirs entry a higher `order` than the entry that creates the "
+            "relation (entries build by `order`, then by path; where an entry is listed "
+            "sequences nothing) — or remove the index"
         ),
     )
 
@@ -591,7 +593,7 @@ def _section(kind: str) -> str:
     return _SECTIONS.get(kind, "other_objects")
 
 
-def _held(model: SchemaModel) -> set[ObjectRef]:
+def held_by_definition(model: SchemaModel) -> set[ObjectRef]:
     """Every object *model* holds that is compared by definition, by its bucket."""
     return {*model.routines, *model.views, *model.triggers, *model.tviews, *model.other_objects}
 
@@ -625,10 +627,12 @@ def _redefined(
     the options it pins. A kind the model holds by existence alone is the same
     object whenever both sides hold it.
     """
+    section = _section(ref.kind)
+    if section == "other_objects":
+        return _other_redefined(old.other_objects.get(ref), new.other_objects.get(ref), policy)
     if not policy.rules:
         return before.definition != after.definition
     rules = policy.rules
-    section = _section(ref.kind)
     if section == "routines":
         old_routine, new_routine = _routine(old, ref, before), _routine(new, ref, after)
         if old_routine is None or new_routine is None:
@@ -643,34 +647,102 @@ def _redefined(
         return parity_view(old_view, rules) != parity_view(new_view, rules)
     if section == "tviews":
         return _tview_redefined(old.tviews[ref], new.tviews[ref], policy)
-    if section == "other_objects" and old.coverage.shared(new.coverage, section) == "definition":
-        return before.definition != after.definition
     return False
 
 
-def _matview_indexes(model: SchemaModel, ref: ObjectRef) -> tuple[Index, ...]:
-    """The indexes a materialized view is created with: none backs a constraint.
+def _other_redefined(
+    before: OtherObject | None, after: OtherObject | None, policy: ComparisonPolicy
+) -> bool:
+    """Whether an object no typed section holds is defined differently on the two sides.
 
-    A side may hold a matview's statement and no model entry for it (a slot side
-    compares one slot of a view alone), and then it carries none.
+    Only when both sides read what it is (``OtherObject.definition``): a database
+    reads a schema or an extension by existence alone, and a domain, a type, a policy
+    or a rule whole (#708). Under ``analysed_expressions`` the two are compared by
+    shape — an analysed expression is present or not, as a table's CHECK is — and
+    otherwise as written, which at the materialised tier is PostgreSQL's reading twice.
     """
-    found = getattr(model.views.get(ref), "indexes", ())
+    if before is None or after is None or before.definition is None or after.definition is None:
+        return False
+    if "analysed_expressions" in policy.rules:
+        return shape(before.definition) != shape(after.definition)
+    return before.definition != after.definition
+
+
+def _carried_indexes(model: SchemaModel, ref: ObjectRef) -> tuple[Index, ...]:
+    """The indexes a materialized view or a TVIEW is created with: none backs a constraint.
+
+    A side may hold the relation's statement and no model entry for it (a slot side
+    compares one slot of a view alone), or a TVIEW whose indexes were not read, and
+    then it carries none.
+    """
+    held = model.tviews.get(ref) if ref.kind == "tview" else model.views.get(ref)
+    found = getattr(held, "indexes", None) or ()
     return tuple(index for index in found if not index.backs_constraint)
 
 
 def _with_indexes(change: SchemaChange, old: SchemaModel, new: SchemaModel) -> SchemaChange:
-    """*change*, carrying the indexes of the materialized view it adds, drops or redefines."""
+    """*change*, carrying the indexes of the relation it creates or drops whole.
+
+    A materialized view added, dropped or redefined, and a TVIEW added or dropped.
+    A TVIEW redefined carries none: ``pg_tviews_create_or_replace()`` keeps a
+    user's indexes, so their differences are index changes of their own.
+    """
     if not isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
         return change
     ref = change.ref
-    if ref.kind != "matview":
+    if ref.kind not in ("matview", "tview"):
         return change
     if isinstance(change, ObjectAdded):
-        return replace(change, indexes=_matview_indexes(new, ref))
+        return replace(change, indexes=_carried_indexes(new, ref))
     if isinstance(change, ObjectDropped):
-        return replace(change, indexes=_matview_indexes(old, ref))
+        return replace(change, indexes=_carried_indexes(old, ref))
+    if ref.kind == "tview":
+        return change
     return replace(
-        change, old_indexes=_matview_indexes(old, ref), new_indexes=_matview_indexes(new, ref)
+        change, old_indexes=_carried_indexes(old, ref), new_indexes=_carried_indexes(new, ref)
+    )
+
+
+#: How two indexes are one index: what pg_tviews compares before it adopts a
+#: user's ``CREATE INDEX`` as its own.
+_INDEX_SHAPE = ("columns", "unique", "method", "nulls_not_distinct", "where", "key_options")
+
+
+def adopted_by_pg_tviews(
+    author: TView, catalog: TView, rules: frozenset[str]
+) -> tuple[tuple[Index, ...], tuple[Index, ...]]:
+    """The *author*'s indexes on a TVIEW that are its own, and those pg_tviews skipped.
+
+    pg_tviews reserves the names of the indexes it creates
+    (``tviews.registry.managed_indexes``, read into *catalog*'s
+    ``managed_indexes``). An index the author writes under one of those names and
+    that is that index, as *rules* compare it, is adopted by pg_tviews: it leaves
+    the comparison. One that is another index under that name was skipped — its
+    ``CREATE INDEX IF NOT EXISTS`` met a name already taken — and is returned
+    second. Every other index of the author's is returned first.
+    """
+    managed = {index.name: seen for index, seen in parity_indexes(catalog.managed_indexes, rules)}
+    kept: list[Index] = []
+    skipped: list[Index] = []
+    for index, seen in parity_indexes(author.indexes or (), rules):
+        own = managed.get(index.name)
+        if own is None:
+            kept.append(index)
+        elif _fields_differ(_INDEX_SHAPE)(seen, own):
+            skipped.append(index)
+    return tuple(kept), tuple(skipped)
+
+
+def _refuse_skipped(index: Index) -> NoReturn:
+    raise DifferError(
+        f"Index '{comment_text(index.name or '')}' on TVIEW {comment_text(index.table.qualified)} "
+        "has the name of an index pg_tviews created on it, and is another index: pg_tviews "
+        "skipped its CREATE INDEX, so the database does not hold it",
+        error_code="DIFFER_410",
+        resolution_hint=(
+            "Rename the index in the schema: pg_tviews reserves the names of its own indexes "
+            "on a TVIEW (tviews.registry.managed_indexes)"
+        ),
     )
 
 
@@ -680,8 +752,11 @@ def _tview_redefined(old: TView, new: TView, policy: ComparisonPolicy) -> bool:
     Against an author's side, an option that side does not pin is pg_tviews' to
     choose, whatever the database holds (``tview_defaults``), and one it pins is
     compared as pinned, ``function_reads`` by identity, since the registry spells
-    them its own way. With no author side, the rule's own reading decides.
+    them its own way. With no author side, the rule's own reading decides. Its
+    indexes are none of this: they are compared as a table's are.
     """
+    # A TVIEW's indexes are compared as a table's are, not as its definition.
+    old, new = replace(old, indexes=()), replace(new, indexes=())
     if policy.author is None:
         return parity_tview(old, policy.rules) != parity_tview(new, policy.rules)
     pins = old if policy.author == "old" else new
@@ -774,9 +849,10 @@ class SchemaDiffer:
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
         # Objects compared by definition: views, routines and the rest (#288).
         objects, unwritable = self._compare_objects(old, new, policy)
-        changes.extend(_with_indexes(change, old.model, new.model) for change in objects)
+        changes.extend(self._carrying(change, old.model, new.model, policy) for change in objects)
         whole = {c.ref for c in objects if c.ref.kind == "matview"}
         changes.extend(self._compare_matview_indexes(old.model, new.model, policy, whole))
+        changes.extend(self._compare_tview_indexes(old.model, new.model, policy))
         return SchemaDiff(
             changes=changes,
             warnings=[
@@ -903,7 +979,7 @@ class SchemaDiffer:
         """
         changes: list[SchemaChange] = []
         unwritable: list[BuildWarning] = []
-        old_held, new_held = _held(old.model), _held(new.model)
+        old_held, new_held = held_by_definition(old.model), held_by_definition(new.model)
         refs = old.objects.keys() | new.objects.keys() | old_held | new_held
         for ref in sorted(refs, key=_object_sort_key):
             if not old.model.coverage.shared(new.model.coverage, _section(ref.kind)):
@@ -1123,20 +1199,91 @@ class SchemaDiffer:
         indexes, which are created with it, so none of them is a change of its own.
         A side that did not read views says nothing about a matview's indexes.
         """
+        changes: list[SchemaChange] = []
+        for ref in sorted(old.views.keys() & new.views.keys() - whole, key=_object_sort_key):
+            changes.extend(self._matview_index_changes(old, new, ref, policy))
+        return changes
+
+    def _matview_index_changes(
+        self, old: SchemaModel, new: SchemaModel, ref: ObjectRef, policy: ComparisonPolicy
+    ) -> list[SchemaChange]:
+        """How the indexes of the materialized view *ref* differ: the one index comparison.
+
+        Only for a matview both sides hold, materialized on both, read by both: a
+        side that did not read views says nothing about a matview's indexes.
+        """
+        before, after = old.views.get(ref), new.views.get(ref)
+        if before is None or after is None or not (before.materialized and after.materialized):
+            return []
         if not old.coverage.shared(new.coverage, "views"):
             return []
+        relation = RelationName(before.schema, before.name)
+        return self._compare_indexes(
+            before.indexes, after.indexes, relation, policy, relation_kind="matview"
+        )
+
+    def _carrying(
+        self, change: SchemaChange, old: SchemaModel, new: SchemaModel, policy: ComparisonPolicy
+    ) -> SchemaChange:
+        """*change* with the indexes a matview it adds, drops or redefines carries.
+
+        A redefined matview also carries how its indexes differ, compared as a
+        paired matview's are: the recreate writes them whole, and a reader that
+        asks about the indexes (drift) reads the difference.
+        """
+        change = _with_indexes(change, old, new)
+        if not (isinstance(change, ObjectReplaced) and change.ref.kind == "matview"):
+            return change
+        found = self._matview_index_changes(old, new, change.ref, policy)
+        return replace(
+            change,
+            index_changes=tuple(c for c in found if isinstance(c, IndexAdded | IndexDropped)),
+        )
+
+    def _compare_tview_indexes(
+        self, old: SchemaModel, new: SchemaModel, policy: ComparisonPolicy
+    ) -> list[SchemaChange]:
+        """The indexes of each TVIEW both sides hold, compared as a table's are.
+
+        A TVIEW added or dropped carries its indexes on its own change; one
+        redefined keeps them (``pg_tviews_create_or_replace()``), so its index
+        differences are changes here. A side whose TVIEW indexes were not read
+        (``None``) says nothing about them. Against a database, an author's index
+        that is pg_tviews' own is its, and one pg_tviews skipped is refused
+        (:func:`adopted_by_pg_tviews`).
+
+        Raises:
+            DifferError: ``DIFFER_410``, naming an author's index pg_tviews skipped.
+        """
+        if not old.coverage.shared(new.coverage, "tviews"):
+            return []
         changes: list[SchemaChange] = []
-        for ref in sorted(old.views.keys() & new.views.keys(), key=_object_sort_key):
-            before, after = old.views[ref], new.views[ref]
-            if ref in whole or not (before.materialized and after.materialized):
+        for ref in sorted(old.tviews.keys() & new.tviews.keys(), key=_object_sort_key):
+            before, after = old.tviews[ref], new.tviews[ref]
+            if before.indexes is None or after.indexes is None:
                 continue
-            relation = RelationName(before.schema, before.name)
+            if policy.author == "old":
+                before = self._adopted(before, after, policy)
+            elif policy.author == "new":
+                after = self._adopted(after, before, policy)
             changes.extend(
                 self._compare_indexes(
-                    before.indexes, after.indexes, relation, policy, relation_kind="matview"
+                    before.indexes or (),
+                    after.indexes or (),
+                    RelationName(before.schema, before.name),
+                    policy,
+                    relation_kind="tview",
                 )
             )
         return changes
+
+    @staticmethod
+    def _adopted(author: TView, catalog: TView, policy: ComparisonPolicy) -> TView:
+        """*author*'s TVIEW without the indexes pg_tviews adopted; refused for one it skipped."""
+        kept, skipped = adopted_by_pg_tviews(author, catalog, policy.rules)
+        if skipped:
+            _refuse_skipped(skipped[0])
+        return replace(author, indexes=kept)
 
     @staticmethod
     def _constraints(table: Table, kind: str, policy: ComparisonPolicy) -> list[tuple[Any, Any]]:

@@ -136,6 +136,7 @@ class TestGrantAccompanimentChecker:
     def _make_checker(self):
         checker = GrantAccompanimentChecker()
         checker.git_repo = MagicMock()
+        checker.git_repo.get_repo_root.return_value = checker.repo_path
         return checker
 
     def test_no_grant_changes_is_valid(self):
@@ -272,6 +273,7 @@ class TestGrantAccompanimentChecker:
     def test_custom_grant_dir(self):
         checker = GrantAccompanimentChecker(grant_dir="db/grants")
         checker.git_repo = MagicMock()
+        checker.git_repo.get_repo_root.return_value = checker.repo_path
         checker.git_repo.get_staged_files.return_value = [
             Path("db/grants/reporter.sql"),
         ]
@@ -281,6 +283,7 @@ class TestGrantAccompanimentChecker:
     def test_custom_migrations_dir(self):
         checker = GrantAccompanimentChecker(migrations_dir="db/custom_migrations")
         checker.git_repo = MagicMock()
+        checker.git_repo.get_repo_root.return_value = checker.repo_path
         checker.git_repo.get_staged_files.return_value = [
             Path("db/7_grant/grant.sql"),
             Path("db/custom_migrations/001_foo.up.sql"),
@@ -309,6 +312,7 @@ class TestSemanticGrantMatching:
     ):
         checker = GrantAccompanimentChecker()
         git = MagicMock()
+        git.get_repo_root.return_value = checker.repo_path
         git.get_staged_files.return_value = list(staged_files)
         target = {p.as_posix(): c for p, c in target_contents.items()}
         base = {p.as_posix(): c for p, c in (base_contents or {}).items()}
@@ -560,6 +564,7 @@ class TestStagedPythonMigrationReadsRelativeToItself:
         )
         checker = GrantAccompanimentChecker(repo_path=project)
         git = MagicMock()
+        git.get_repo_root.return_value = checker.repo_path
         git.get_staged_files.return_value = [grant_file, migration]
         target = {
             grant_file.as_posix(): "GRANT SELECT ON s.t TO reporter;",
@@ -585,6 +590,7 @@ class TestGrantHeldInAConstantIsVerifiedSemantically:
     def _checker(self, target_contents):
         checker = GrantAccompanimentChecker()
         git = MagicMock()
+        git.get_repo_root.return_value = checker.repo_path
         git.get_staged_files.return_value = list(target_contents)
         target = {p.as_posix(): c for p, c in target_contents.items()}
         git.get_staged_file_content.side_effect = lambda p: target.get(p.as_posix())

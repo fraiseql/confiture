@@ -149,9 +149,7 @@ ListUnmigratedBodiesOpt = Annotated[
         "combined with any other check.",
     ),
 ]
-BaseRefOpt = Annotated[
-    str, typer.Option("--base-ref", help="Base git reference for comparison (default: origin/main)")
-]
+BaseRefOpt = Annotated[str, typer.Option("--base-ref", help="Base git reference for comparison")]
 SinceOpt = Annotated[
     str | None, typer.Option("--since", help="Shortcut for --base-ref (default: none)")
 ]
@@ -191,7 +189,9 @@ CheckLiveDriftOpt = Annotated[
         "extra_matview, missing_trigger / extra_trigger, missing_routine / "
         "extra_routine, missing_tview / extra_tview / tview_option_mismatch (pg_tviews), "
         "missing_object / extra_object (an extension, schema, domain, policy, … — "
-        "subject.kind says which). "
+        "subject.kind says which), object_definition_mismatch (a domain, type, policy "
+        "or rule defined otherwise), view_definition_mismatch (a view's or matview's "
+        "query, with a scratch server). "
         "Sequences are not compared; grants and ownership are "
         "separate checks (--check-acls, --check-ownership-coverage). "
         "Requires --config and a database connection.",
@@ -294,7 +294,9 @@ ScratchUrlOpt = Annotated[
         help="Writable PostgreSQL server on which to build the expected scratch database "
         "for --check-body-views / --check-body-replay (default: the live server from "
         "the config). Required when using --ssh, since the scratch DB cannot be built "
-        "on the remote read-only live server.",
+        "on the remote read-only live server. --check-live-drift builds the tree there "
+        "and compares at the materialised tier (default: the environment's scratch_url; "
+        "without one, it compares structurally).",
     ),
 ]
 CheckAclsOpt = Annotated[
@@ -302,9 +304,11 @@ CheckAclsOpt = Annotated[
     typer.Option(
         "--check-acls",
         "--check-acl-coverage",
-        help="Static: verify every `CREATE TABLE` in db/migrations/ has a matching "
-        "`GRANT` either in the same migration or in the configured global grant "
-        "sweep directory (defaults to db/7_grant). No-op when the config has no "
+        help="Static: verify every `CREATE TABLE` in a migration `migrate up` runs from "
+        "--migrations-dir has a matching `GRANT` either in the same migration or in the "
+        "grant sweep directory (`migration.grant_dir`, default db/7_grant, relative to "
+        "the directory you run in; a configured one that is missing is reported). "
+        "No-op when the config has no "
         "`acls:` block. No database connection required.  "
         "Use --check-acls; --check-acl-coverage is a deprecated alias.",
     ),
@@ -314,7 +318,7 @@ CheckOwnershipCoverageOpt = Annotated[
     typer.Option(
         "--check-ownership-coverage",
         help="Static: verify every `CREATE { TABLE | VIEW | MATERIALIZED VIEW | SEQUENCE }` "
-        "in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` "
+        "in a migration `migrate up` runs from --migrations-dir is paired with a matching `ALTER … OWNER TO <expected_owner>` "
         "in the same file (`own_001`).  Also flags bare `ALTER … OWNER TO` on objects "
         "the migration didn't create (`own_002` — three severity tiers: silent when "
         "guarded + companion `requires_superuser=True`, WARNING when only guarded, "
@@ -520,7 +524,7 @@ def migrate_validate(
       --check-signatures takes both a singular --schema and a plural --schemas:
         --schema FILE       Path to a *SQL file* to compare function signatures against.
                             If omitted, schema is auto-built from db/schema/ DDL files.
-        --schemas LIST      Comma-separated list of *database schema names* (default: public)
+        --schemas LIST      Comma-separated list of *database schema names*
                             to scan in the live DB for stale overloads.
         They're different things — file path vs. DB schema names — and both flags can
         appear in the same invocation.

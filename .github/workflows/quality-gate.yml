@@ -422,15 +422,19 @@ jobs:
       run: |
         uv run pytest \
           tests/integration/test_tview_live.py \
+          tests/integration/test_tview_indexes_live.py \
           tests/integration/test_tview_diff.py \
           tests/integration/test_diff_from_a_database.py \
           tests/integration/test_drift_agrees_with_diff.py \
           tests/integration/test_tview_migrate.py \
           tests/integration/test_tview_restore.py \
+          tests/integration/test_generated_examples_apply.py \
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
+          tests/unit/test_tview_indexes.py \
           tests/unit/test_drift_tviews.py \
           tests/unit/test_pg_tviews_contract.py \
+          tests/unit/test_pg_tviews_registry.py \
           -q -rs -p no:randomly
 
   wheel-python-314:
@@ -451,6 +455,11 @@ jobs:
 
     - name: Build the wheel
       run: maturin build --release --interpreter python3.14 --out dist
+
+    - name: Every dependency a fresh install picks has a wheel
+      # A warning, not a failure: upstream uploads an sdist before its wheels, and
+      # Publish runs the same check with --strict before anything is uploaded.
+      run: python scripts/check_dependency_wheels.py --warn
 
     - name: A fresh venv installs it, never the sdist
       # No cache: an earlier source build in uv's cache would hide a missing wheel.

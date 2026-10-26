@@ -638,7 +638,7 @@ class TestMigrateGenerateExternalGenerator:
         assert "Resolved command" in result.output or "Target file" in result.output
 
     def test_generator_exits_nonzero_surfaces_error(self, tmp_path):
-        """Non-zero generator exit → error message + exit 3 (execution error)."""
+        """Non-zero generator exit → error message + exit 1 (execution error, #727)."""
         script_path = _make_fake_generator(tmp_path, exit_code=2)
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
@@ -674,7 +674,7 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 3
+        assert result.exit_code == 1
 
     def test_generator_without_from_exits_5(self, tmp_path):
         """--generator without --from → clear error, exit 5 (CONFIG_001, a configuration error)."""

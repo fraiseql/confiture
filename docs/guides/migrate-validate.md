@@ -702,6 +702,9 @@ confiture migrate validate --check-body-views --show-diff \
 - Covers **regular and materialized** views; honours `--schemas`.
 - `--show-diff` adds `expected_def`, `live_def`, and `unified_diff` to each drifted
   view (text and JSON). Default output is hash-only.
+- With a scratch server, `--check-live-drift` and `confiture drift` report the same
+  difference as `view_definition_mismatch` (warning); its `expected` and `actual` are this
+  check's `source_hash` and `db_hash`, and this check's `--show-diff` prints the queries.
 - **Remote read-only live (`--ssh`)**: the scratch database is built on a
   *writable* server, which the read-only production replica is not. Pass
   `--scratch-url postgresql://localhost/postgres` (or a CI server) so the expected
@@ -789,7 +792,10 @@ A redefined **view** is not in that gap: `--require-migration` reports it, becau
 nothing else does.
 
 `--require-migration-bodies` closes the gap. It is **static and git-based (no
-DB)**: it diffs function bodies between `--base-ref` and HEAD and requires each
+DB)**: it compares the function bodies of the two builds `--require-migration`
+reads — the environment's selection at the fork point of `--base-ref` and at HEAD,
+each tree whole, so a function that moved between files is compared with itself
+and a file the build does not select is never read — and requires each
 changed body to be carried by a migration that re-defines the function (a
 `CREATE OR REPLACE`, in a `.sql` or `.py` migration). Comment/whitespace/case-only
 changes don't count; parameter-type changes are the existing signature check's

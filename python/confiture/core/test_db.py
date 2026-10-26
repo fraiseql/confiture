@@ -32,9 +32,9 @@ from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.restorer import DatabaseRestorer, RestoreOptions
 from confiture.core.seed.applier import apply_seed_files
 from confiture.core.temp_database import (
-    _maintenance_url,
     _replace_dbname,
     force_drop_database,
+    maintenance_url,
     terminate_backends,
 )
 from confiture.exceptions import ConfigurationError, SchemaError
@@ -375,7 +375,7 @@ class TestDbProvisioner:
 
     def __init__(self, server_url: str) -> None:
         self.server_url = server_url
-        self.maintenance_url = _maintenance_url(server_url)
+        self.maintenance_url = maintenance_url(server_url)
         parsed = urlparse(server_url)
         self._host = parsed.hostname or "/var/run/postgresql"
         self._port = parsed.port or 5432

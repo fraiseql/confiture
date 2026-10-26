@@ -490,13 +490,17 @@ What the rule deliberately does **not** report:
   search path and confiture cannot enumerate it. Without that rule, every
   `now()` and `count()` would be a finding.
 
-#### Three tiers answer a reference
+#### Four tiers answer a reference
+
+They run in the order of the table: (a) and (c) in one pass, then (b) for what
+they left, then (d) for what (b) left.
 
 | Tier | What answers | When |
 |------|--------------|------|
 | a | the build inventory | always |
-| b | a live database — `to_regclass` for relations, `pg_proc` for routines | when `--env`'s `database_url` accepts a connection, and only for names tier (a) could not answer |
-| c | `lint.ignore_objects` in the environment YAML | always |
+| c | `lint.ignore_objects` in the environment YAML | always, in the same pass as (a) |
+| b | a live database — `to_regclass` for relations, `pg_proc` for routines | when `--env`'s `database_url` accepts a connection, and only for names (a) and (c) left |
+| d | the build's own extensions, asked of a scratch database | when a name (b) left is in a schema where the build runs `CREATE EXTENSION`, and a scratch server is configured |
 
 Tier (b) is what makes the rule usable on a real project: an object created by
 a migration, or owned by an extension, is real and is absent from the DDL tree.
@@ -507,15 +511,20 @@ something is outstanding, so a clean tree connects to nothing.
 the JSON payload's `degraded` array:
 
 ```text
-build_003 ran without the live tier: no database answered, so an object created
-by a migration or owned by an extension is reported as missing: connection failed …
+build_003 ran on less than the whole schema: no database answered, so an object a
+migration created, or an extension outside the tree owns, is reported as missing:
+connection failed …
 ```
+
+When tier (d) then answers every name tier (b) left, that entry is dropped: the
+live database's silence cost nothing, and `--require-complete` does not fail on it.
 
 Read `n unresolved references` from a degraded run as an upper bound, not a
 count of bugs.
 
-Tier (c) is for a project with no reachable database. It is `fnmatch` over
-`schema.name`:
+Tier (c) is for objects created *outside* the tree, by a migration, the
+platform, or a sibling service, in a project with no reachable database. It
+is `fnmatch` over `schema.name`:
 
 ```yaml
 # db/environments/local.yaml
@@ -527,6 +536,97 @@ lint:
     - app
     - public
 ```
+
+#### An extension the build creates
+
+A `CREATE EXTENSION` in the tree creates routines no file spells out. A
+`SECURITY DEFINER` function pins its `search_path`, so it must call them
+qualified, and those are exactly the calls tier (a) cannot answer:
+
+```sql
+-- db/schema/001_extensions.sql
+CREATE EXTENSION IF NOT EXISTS ltree SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS unaccent SCHEMA public;
+
+-- db/schema/002_fn.sql
+CREATE FUNCTION app.label(p_name TEXT) RETURNS public.ltree
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+    RETURN public.text2ltree(public.unaccent('public.unaccent'::regdictionary, p_name));
+END;
+$$;
+```
+
+Which routines an extension creates is in its install script, on the server,
+so tier (d) asks PostgreSQL. It builds a throwaway database on the **scratch
+server**: `--server-url`, else the environment's `scratch_url`, and **never**
+the environment's `database_url`, because a lint does not create a database on
+the server it lints against unless told to. That database holds only the
+schemas the extensions are installed in (created by name, so a tree's
+`AUTHORIZATION <role>` is not replayed) and the tree's `CREATE EXTENSION`
+statements, each run on its own, in build order. It is asked the same question
+as tier (b), then dropped. A name it holds resolves. A name it lacks is a
+finding that says the scratch was asked:
+
+```text
+⚠️ build_003: Function 'app.label(text)' references routine 'public.text2ltre',
+   and no file in the build creates it (not provided by extension(s) ltree, unaccent in public)
+```
+
+Nothing is built unless such a name is outstanding. A clean tree, a tree with no
+`CREATE EXTENSION`, or a run whose live database already answered builds no
+scratch.
+
+**With no scratch server**, or when it cannot be built, a name in a schema an
+extension's **written** `SCHEMA` clause names is *unchecked*, not missing. The
+whole run reports one `degraded` entry, which names each extension and the
+line it is created on:
+
+```text
+build_003 ran on less than the whole schema: 2 references into public, where the
+build creates extensions ltree (db/schema/001_extensions.sql:1) and unaccent
+(db/schema/001_extensions.sql:2), were not checked: no scratch server is configured
+(--server-url, or scratch_url in the environment) to say what they provide
+```
+
+A written `SCHEMA` on any extension makes every reference into that schema
+unchecked, whichever extension might provide it: without a server, confiture cannot
+tell which one does.
+
+When the scratch could not create one extension (the server does not offer it,
+a `VERSION` it has not got, a schema the tree never creates), PostgreSQL's own
+error line is the reason. Only names in that extension's schema stay unchecked,
+and the other extensions are still asked. `--require-complete` treats every one
+of these entries as a run that did not finish (exit 2).
+
+**An extension with no `SCHEMA` clause** lands wherever the applying role's
+`search_path` puts it, so the tree does not say where it is. Without a scratch
+server, such an extension never turns a finding into "unchecked": confiture only
+loosens a verdict on what the tree writes. The finding stays, and says how to
+clear it:
+
+```text
+⚠️ build_003: Function 'app.fn_id()' references routine 'public.gen_random_uuid',
+   and no file in the build creates it; the build creates extension(s) pgcrypto
+   (db/schema/001_extensions.sql:1) with no SCHEMA clause: write the schema each is
+   installed in (SCHEMA …), or give a scratch server (--server-url, or scratch_url),
+   so confiture can tell whether one provides this
+```
+
+With a scratch server, every extension is asked, `SCHEMA` written or not.
+
+Two caveats:
+
+- Without a `SCHEMA` clause, an extension is routed to `public`, the default
+  schema, when tier (d) decides which names to ask about.
+- The scratch is asked about qualified names, and the build's own `SET
+  search_path` is not replayed. So an extension with no `SCHEMA` clause is read
+  where the scratch server's default `search_path` puts it, which is not
+  necessarily where the build put it.
+
+A parameterless `CREATE LANGUAGE plpgsql` counts too: PostgreSQL's grammar turns
+it into `CREATE EXTENSION plpgsql`, and runs it as one. Only `CREATE LANGUAGE …
+HANDLER …` defines a language by hand.
 
 #### Adopting it on a schema that already trips it
 
@@ -575,6 +675,17 @@ object is the one that counts — a later `OR REPLACE` does not make it exist
 sooner. An object no file creates is `build_003`'s, not this rule's. A statement
 naming what it creates itself (a table's foreign key to itself, a recursive
 `LANGUAGE sql` function) is not a finding: PostgreSQL accepts both.
+
+An extension the build creates counts as creating what it installs, at its
+`CREATE EXTENSION` statement (#747): a `LANGUAGE sql` body calling
+`public.text2ltree` in a file before `CREATE EXTENSION ltree SCHEMA public` is a
+finding, which names the extension. Only a server knows what an extension
+installs, so this needs a scratch server (`--server-url`, or `scratch_url` in
+the environment), the one `build_003`'s extension tier builds: a single scratch
+database is created for both rules and asked after each `CREATE EXTENSION`.
+Without one, a reference made before an extension whose written `SCHEMA` it
+could mean is not ordered, and one `degraded` entry for `build_004` says how
+many and which extension.
 
 It is an **error**, on by default, with no directive to silence it: every row
 of the table above was applied to an empty PostgreSQL in both orders
@@ -1232,14 +1343,15 @@ into a table it keeps in step with its base tables. From 0.1.0-beta.18 it indexe
 each `fk_*` column and sets fillfactor 85 itself; what it leaves to the author is
 said on the `CREATE` (`UNLOGGED`, `WITH (fillfactor = n)`, which pg_tviews
 0.1.0-beta.20 accepts), in a `pg_tviews_create_or_replace()` call's `options`, or
-*after* the conversion (`CREATE INDEX`, `ALTER TABLE tv_x SET LOGGED`). The rules read
-the tree, with no database; `tview_002` reads the `logged` the schema model pins, the
-one drift compares and a generated migration passes.
+*after* the conversion (`CREATE INDEX`, `ALTER TABLE tv_x SET UNLOGGED`). A TVIEW is
+LOGGED unless it says otherwise (pg_tviews' read contract 2). The rules read the tree,
+with no database; `tview_002` reads the `logged` the schema model pins, the one drift
+compares and a generated migration passes.
 
 | Rule | Says | Fix |
 |---|---|---|
 | `tview_001` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
-| `tview_002` | replicas are declared and the TVIEW is not pinned logged (UNLOGGED is pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED`, or `options => '{"logged": true}'` |
+| `tview_002` | replicas are declared and the TVIEW is pinned UNLOGGED (`CREATE UNLOGGED TABLE`, `SET UNLOGGED`, `"logged": false`): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED`, or drop the `UNLOGGED` pin |
 
 `tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
 removed when it is fixed. `tview_001` sees only the indexes the tree declares.
@@ -1277,7 +1389,7 @@ db/schema/20_views/v_product.sql:4  tview_003  tv_product reads current_setting(
   `"time_refresh": "external"` and a non-immutable function not declared in
   `"function_reads"` — under its `error` and `full_refresh` policies, so neither rule
   reports a TVIEW declaring `uncascaded_policy: warn`; pg_tviews 0.1.0-beta.26 is the
-  first release that refuses them, and confiture's minimum. A `CREATE TABLE … AS`
+  first release that refuses them (confiture's minimum is 0.1.0-beta.30). A `CREATE TABLE … AS`
   cannot pass options: write the TVIEW as a `pg_tviews_create_or_replace()` call, or
   waive the read. `tview_003` is on because pg_tviews does not refuse `current_setting`
   (a `pg_catalog` function), yet the stored row is wrong for every other reader.
@@ -1300,7 +1412,7 @@ A tree is a table whose ltree path pg_treekey maintains: the tree declares it wi
 (the path column is the fourth argument, `path` by default; named arguments are read
 too). pg_tviews follows a TVIEW's query through the plain views it reads to decide which
 rows a write refreshes, and how that chain walks the tree decides what it can follow.
-Measured on pg_tviews 0.1.0-beta.26 (PostgreSQL 18.6):
+Measured on pg_tviews 0.1.0-beta.26 and 0.1.0-beta.27 (PostgreSQL 18.6):
 
 | Spelling of "the ancestors of n" | What pg_tviews does | Rule |
 |---|---|---|

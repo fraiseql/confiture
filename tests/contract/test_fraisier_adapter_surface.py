@@ -259,7 +259,11 @@ def test_preflight_exposes_top_level_window_safe_verdict(tmp_path: Path) -> None
 
 
 def test_version_output_shape_matches_adapter_parser() -> None:
-    """`confiture --version` ends in the version token (adapter parse_version)."""
+    """`confiture --version` ends in the version token (adapter parse_version).
+
+    fraiseql v2 runs it too, to tell whether confiture is installed, and reads only
+    the exit status (``crates/fraiseql-cli/src/commands/migrate.rs:498``).
+    """
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0, result.output
     # The adapter (fraisier doctor) reads the first line only and takes its last
@@ -423,21 +427,40 @@ def test_adapter_full_flow_against_real_db(adapter_db, migrations_dir, tmp_path)
     assert _VERSIONS[1][0] in down_payload["rolled_back"]
 
 
+@pytest.mark.parametrize("verb", ["up", "down", "status"])
 def test_adapter_dsn_handoff_is_env_only_under_no_config(
-    adapter_db, migrations_dir, tmp_path
+    verb, adapter_db, migrations_dir, tmp_path
 ) -> None:
     """Under --no-config the env DSN is the sole source — proving the adapter handoff.
 
-    A successful `migrate up` driven purely by CONFITURE_DATABASE_URL (no --config,
-    no DSN in argv) is end-to-end proof that confiture honours the adapter's
-    secrets-via-env contract.
+    fraisier hands ``up`` its DSN this way; fraiseql v2 hands ``up``, ``down`` and
+    ``status`` theirs (``crates/fraiseql-cli/src/commands/migrate.rs:336``). Each verb,
+    driven purely by CONFITURE_DATABASE_URL (no --config, no DSN in argv), reads or
+    writes the ledger in that database: ``status`` reporting the applied versions is
+    the proof, since without a DSN it lists every migration as ``unknown``.
     """
+    versions = [v for v, _ in _VERSIONS]
     report = tmp_path / "r.json"
-    result = _adapter_invoke("up", dsn=adapter_db, report=report, migrations_dir=migrations_dir)
+    if verb != "up":
+        applied = _adapter_invoke(
+            "up", dsn=adapter_db, report=report, migrations_dir=migrations_dir
+        )
+        assert applied.exit_code == 0, applied.output
+        report.unlink()
+    extra = ("--steps", "1") if verb == "down" else ()
+    result = _adapter_invoke(
+        verb, *extra, dsn=adapter_db, report=report, migrations_dir=migrations_dir
+    )
     assert result.exit_code == 0, result.output
     payload = _read_report(result, report)
-    assert payload["success"] is True
-    assert [m["version"] for m in payload["applied"]] == [v for v, _ in _VERSIONS]
+    if verb == "up":
+        assert payload["success"] is True
+        assert [m["version"] for m in payload["applied"]] == versions
+    elif verb == "down":
+        assert payload["success"] is True
+        assert [m["version"] for m in payload["rolled_back"]] == versions[-1:]
+    else:
+        assert payload["applied"] == versions
 
 
 def test_adapter_up_that_halts_is_a_failure_that_says_why(adapter_db, tmp_path) -> None:
@@ -481,3 +504,51 @@ def test_adapter_up_that_halts_is_a_failure_that_says_why(adapter_db, tmp_path) 
     assert f"{halted}_needs_superuser" in message
     assert f"confiture migrate apply-as <role> {halted}" in message
     assert "1 migration left pending" in message
+
+
+#: Codes that mean ``migrate down`` cannot be trusted to undo the migration they name
+#: (#754). Pinned as a literal: a code leaving this set makes ``reversible`` say true
+#: where a deploy tool would have taken the full-database template.
+EXPECTED_IRREVERSIBLE_CODES = frozenset(
+    {
+        "PFLIGHT_MISSING_DOWN",
+        "PFLIGHT_DOWN_EMPTY",
+        "PFLIGHT_DOWN_UNVERIFIED",
+        "PFLIGHT_IRREVERSIBLE",
+        "PFLIGHT_DESTRUCTIVE_GATED",
+        "PFLIGHT_NON_TRANSACTIONAL",
+        "PFLIGHT_UNPARSEABLE",
+    }
+)
+
+
+def test_the_codes_that_deny_reversible_are_a_stability_commitment() -> None:
+    from confiture.core.preflight import IRREVERSIBLE_CODES
+
+    assert IRREVERSIBLE_CODES == EXPECTED_IRREVERSIBLE_CODES
+
+
+def test_preflight_exposes_top_level_reversible_verdict(tmp_path: Path) -> None:
+    """`reversible`: can `migrate down` undo every checked migration (#754)?"""
+    undoable = _preflight_payload(
+        tmp_path / "undoable", "ALTER TABLE t ADD COLUMN c int;", "ALTER TABLE t DROP COLUMN c;"
+    )
+    assert undoable["reversible"] is True
+
+    no_down = _preflight_payload(tmp_path / "no_down", "ALTER TABLE t ADD COLUMN c int;", None)
+    assert no_down["reversible"] is False
+
+    marked = _preflight_payload(
+        tmp_path / "marked",
+        "-- confiture:irreversible overwrites t.v\nUPDATE t SET v = 0;",
+        "SELECT 1;",
+    )
+    assert marked["reversible"] is False
+    assert marked["window_safe"] is True  # the two verdicts answer different questions
+
+    # Not gated, not marked, has a down — and still loses the column's data: its tier says so.
+    dropped = _preflight_payload(
+        tmp_path / "dropped", "ALTER TABLE t DROP COLUMN c;", "ALTER TABLE t ADD COLUMN c int;"
+    )
+    assert [c["tier"] for c in dropped["change_set"]["changes"]] == ["irreversible"]
+    assert dropped["reversible"] is False

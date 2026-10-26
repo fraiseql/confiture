@@ -7,7 +7,7 @@ and other best practices.
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
@@ -68,7 +68,61 @@ _SOFT_DELETE_RULES = {
 _LIVE_TIER_TIMEOUT_S = 3
 
 
-def _first_line(exc: Exception) -> str:
+def _ask_scratch(
+    server: str,
+    extensions: Sequence[Any],
+    schemas: Any,
+    search_path: Sequence[str],
+    candidates: list[tuple[str | None, Any]],
+) -> Any:
+    """``build_003``'s scratch tier, looked up when it runs so a test may stand in for it.
+
+    *schemas* is called only here: the schemas are read once a scratch is asked.
+    """
+    # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+    from confiture.core.linting import unresolved
+
+    return unresolved.scratch_names(
+        server,
+        extensions,
+        schemas(),
+        candidates,
+        search_path,
+        connect_timeout=_LIVE_TIER_TIMEOUT_S,
+    )
+
+
+class _OneScratch:
+    """One scratch database per lint run, asked by ``build_003`` and ``build_004`` together.
+
+    The first question asks about every name either rule may put (*names*) as
+    well as its own, so the second is answered by the same build, and so is its
+    failure.
+    """
+
+    def __init__(self, ask_once: Callable[[list[Any]], Any], names: list[Any]) -> None:
+        self._ask_once = ask_once
+        self._names = names
+        self._answer: Any = None
+        self._error: Exception | None = None
+
+    def __call__(self, candidates: list[Any]) -> Any:
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import ScratchUnavailable
+
+        if self._answer is None and self._error is None:
+            keys = {(ref.kind, ref.qualified) for _file, ref in self._names}
+            extra = [pair for pair in candidates if (pair[1].kind, pair[1].qualified) not in keys]
+            try:
+                self._answer = self._ask_once([*self._names, *extra])
+            except ScratchUnavailable as exc:
+                self._error = exc
+        if self._error is not None:
+            raise self._error
+        return self._answer
+
+
+def first_line(exc: Exception) -> str:
     """A driver's error, trimmed to the sentence a summary line can carry."""
     return str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
 
@@ -373,6 +427,7 @@ class SchemaLinter:
         env: str = "local",
         project_dir: Path | None = None,
         config: LintConfig | None = None,
+        migrations_dir: Path = Path("db/migrations"),
     ):
         """Initialize linter.
 
@@ -380,10 +435,14 @@ class SchemaLinter:
             env: Environment name (local, test, production)
             project_dir: Project root directory
             config: Linting configuration (optional)
+            migrations_dir: The migrations ``acl_001`` reads, relative to
+                ``project_dir`` unless absolute — what ``--migrations-dir`` names
+                for every migration-tree rule.
         """
         self.env = env
         self.project_dir = project_dir or Path()
         self.config = config or LintConfig()
+        self.migrations_dir = self.project_dir / migrations_dir
 
         # Load environment configuration
         self.environment = Environment.load(env, project_dir=project_dir)
@@ -535,27 +594,47 @@ class SchemaLinter:
         ran |= {rule.family for rule in LINT_RULES if rule.code in self.config.check_tree_walks}
         self._report_blinded_rules(report, ran, rejected)
 
-        # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
-        # the environment YAML.  An ``acls:`` block alone does not fire it:
-        # a project may set ``acls:`` only for ``confiture drift --check-acls``,
-        # and explicit opt-in keeps the two surfaces independently controllable.
-        if (
+        self._lint_acl_coverage(report)
+        return report
+
+    def _lint_acl_coverage(self, report: LintReport) -> None:
+        """ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in the environment YAML.
+
+        An ``acls:`` block alone does not fire it: a project may set ``acls:`` only for
+        ``confiture drift --check-acls``, and explicit opt-in keeps the two surfaces
+        independently controllable.
+        """
+        if not (
             self.config.check_acl_coverage
             and self.environment.acls_lint_enabled
             and self.environment.acls
         ):
-            migrations_dir = self.project_dir / "db" / "migrations"
-            if migrations_dir.exists():
-                grant_dir_str = self.environment.migration.grant_dir
-                grant_dir = (self.project_dir / grant_dir_str).resolve()
-                for violation in self.lint_migrations(
-                    migrations_dir=migrations_dir,
-                    expectations=self.environment.acls,
-                    grant_dir=grant_dir if grant_dir.exists() else None,
-                ).errors:
-                    report.add_violation(violation)
-
-        return report
+            return
+        migrations_dir = self.migrations_dir
+        if not migrations_dir.is_dir():
+            report.degraded.append(
+                RuleStatus(
+                    code="acl_001",
+                    state="degraded",
+                    reason=(
+                        f"the migrations directory {migrations_dir} does not exist, so no "
+                        "migration's grants were read (--migrations-dir names another)"
+                    ),
+                )
+            )
+            return
+        migration = self.environment.migration
+        grant_dir: Path | None = self.project_dir / migration.grant_dir
+        if "grant_dir" not in migration.model_fields_set and not grant_dir.is_dir():
+            grant_dir = None  # no sweep at the default path: the project has none
+        acl = self.lint_migrations(
+            migrations_dir=migrations_dir,
+            expectations=self.environment.acls,
+            grant_dir=grant_dir,
+        )
+        for violation in acl.errors:
+            report.add_violation(violation)
+        report.degraded.extend(acl.degraded)
 
     def _parsed_files(self) -> tuple[list[ParsedFile], list[Rejected]]:
         """Each schema file parsed once, and the files PostgreSQL's parser rejected.
@@ -891,18 +970,68 @@ class SchemaLinter:
         from confiture.core.linting.unresolved import forward_references
 
         scans = [(parsed.label, read_references(parsed)) for parsed in self._files]
+        extensions, ask = self._extension_scratch(scans)
         if self.config.check_forward_references:
-            for violation in forward_references(
+            forward = forward_references(
                 scans,
                 self._file_objects or self._inventory.objects,
                 search_path=self.environment.lint.search_path,
                 two_pass=self.environment.build.two_pass,
-            ):
+                extensions=extensions,
+                ask=ask,
+            )
+            for violation in forward.findings:
                 report.add_violation(violation)
+            if forward.reason is not None:
+                report.degraded.append(
+                    RuleStatus(code="build_004", state="degraded", reason=forward.reason)
+                )
         if self.config.check_references:
-            self._check_unresolved(scans, report)
+            self._check_unresolved(scans, report, extensions, ask)
 
-    def _check_unresolved(self, scans: list[tuple[str | None, Any]], report: LintReport) -> None:
+    def _extension_scratch(self, scans: list[tuple[str | None, Any]]) -> tuple[list[Any], Any]:
+        """The extensions the build creates, and the one scratch tier both rules ask about them.
+
+        With a scratch server (``--server-url``, else the environment's
+        ``scratch_url``, never its ``database_url``: a lint does not create a
+        database on the server it lints against unless told to), one scratch
+        database holding only the build's schemas and extensions is built the
+        first time either rule asks, and asked about every name either may put.
+        """
+        # Reason: import cycle (extensions reads ddl_objects, which imports LintViolation through duplicates)
+        from confiture.core.linting.extensions import built_extensions, extension_schemas
+
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import split_by_extension
+
+        uncreated = self._inventory.uncreated
+        extensions = built_extensions(self._files, uncreated)
+        server = self.config.server_url or self.environment.scratch_url
+        if server is None or not extensions:
+            return extensions, None
+        search_path = self.environment.lint.search_path
+        everything = [
+            (label, reference)
+            for label, scan in scans
+            for reference in [*scan.references, *scan.clauses]
+        ]
+        names, _elsewhere = split_by_extension(everything, extensions, search_path)
+        once = partial(
+            _ask_scratch,
+            server,
+            extensions,
+            partial(extension_schemas, extensions, self._files, uncreated),
+            search_path,
+        )
+        return extensions, _OneScratch(once, names)
+
+    def _check_unresolved(
+        self,
+        scans: list[tuple[str | None, Any]],
+        report: LintReport,
+        extensions: list[Any],
+        ask: Any,
+    ) -> None:
         """``build_003``: a body names an object no file in the build creates (#246)."""
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting.unresolved import reference_findings, unresolved_references
@@ -915,10 +1044,49 @@ class SchemaLinter:
             ignore=self.environment.lint.ignore_objects,
             search_path=self.environment.lint.search_path,
         )
+        live_at = len(report.degraded)
         if candidates:
             candidates = self._after_live_tier(candidates, report)
-        for violation in reference_findings(candidates):
+        tier = None
+        if candidates:
+            tier = self._after_extension_tier(candidates, report, extensions, ask)
+            candidates = tier.missing
+            # The live tier's silence cost nothing when the scratch answered every name it left.
+            if len(report.degraded) > live_at and not candidates and tier.reason is None:
+                del report.degraded[live_at]
+        for violation in reference_findings(
+            candidates,
+            unwritten=tier.unwritten if tier else (),
+            asked=tier.asked if tier else (),
+            search_path=self.environment.lint.search_path,
+            answered=bool(tier and tier.answered),
+        ):
             report.add_violation(violation)
+
+    def _after_extension_tier(
+        self,
+        candidates: list[tuple[str | None, Any]],
+        report: LintReport,
+        extensions: list[Any],
+        ask: Any,
+    ) -> Any:
+        """*candidates* minus what an extension the build creates provides, or may.
+
+        *ask* is the scratch tier :meth:`_extension_scratch` built, or ``None``
+        with no scratch server. With none, or when it cannot be built, a
+        reference into a schema an extension's written ``SCHEMA`` names is
+        *unchecked*, not missing, and one ``degraded`` entry says so.
+        """
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting import unresolved
+
+        search_path = self.environment.lint.search_path
+        tier = unresolved.extension_tier(candidates, extensions, search_path, ask)
+        if tier.reason is not None:
+            report.degraded.append(
+                RuleStatus(code=unresolved.RULE_ID, state="degraded", reason=tier.reason)
+            )
+        return tier
 
     @staticmethod
     def _report_unread_bodies(scans: list[tuple[str | None, Any]], report: LintReport) -> None:
@@ -987,7 +1155,7 @@ class SchemaLinter:
                 search_path=self.environment.lint.search_path,
             )
         except (psycopg.Error, OSError, ConfiturError) as exc:
-            self._skip_body_rules(report, bodies.BUILD_FAILED + _first_line(exc))
+            self._skip_body_rules(report, bodies.BUILD_FAILED + first_line(exc))
             return
         wanted = set(self._selected_body_rules())
         where = bodies.locations(self._files)
@@ -1051,8 +1219,9 @@ class SchemaLinter:
                     code=RULE_ID,
                     state="degraded",
                     reason=(
-                        "no database answered, so an object created by a migration or owned "
-                        f"by an extension is reported as missing: {_first_line(exc)}"
+                        "no database answered, so an object a migration created, or an "
+                        "extension outside the tree owns, is reported as missing: "
+                        f"{first_line(exc)}"
                     ),
                 )
             )
@@ -1363,15 +1532,16 @@ class SchemaLinter:
             report.add_violation(violation)
         return report
 
+    @staticmethod
     def lint_migrations(
-        self,
         migrations_dir: Path,
         expectations: list[Any],
         grant_dir: Path | None = None,
     ) -> LintReport:
         """Lint a migrations directory for ACL coverage (ACL001).
 
-        No-op when ``expectations`` is empty — projects without an
+        Reads no environment: ``migrate validate --check-acls`` hands it the
+        expectations of the config it was given (#715). No-op when ``expectations`` is empty — projects without an
         ``acls:`` block see zero violations regardless of what their
         migrations contain.
 
@@ -1380,7 +1550,9 @@ class SchemaLinter:
             expectations: Parsed ``acls:`` block (list of
                 :class:`~confiture.config.environment.AclExpectation`).
             grant_dir: Optional global grant sweep directory (typically
-                ``db/7_grant``).
+                ``db/7_grant``). One that does not exist is reported as
+                ``acl_001`` degraded: a table granted only there would be
+                reported as missing its grant.
 
         Returns:
             :class:`LintReport` with any ACL001 violations.
@@ -1389,6 +1561,18 @@ class SchemaLinter:
         from confiture.core.linting.libraries.acl import Acl001GrantCoverage
 
         report = LintReport()
+        if grant_dir is not None and not grant_dir.is_dir():
+            report.degraded.append(
+                RuleStatus(
+                    code="acl_001",
+                    state="degraded",
+                    reason=(
+                        f"the grant sweep directory {grant_dir} does not exist, so a table "
+                        "granted only there is reported as missing its grant"
+                    ),
+                )
+            )
+            grant_dir = None
         for violation in Acl001GrantCoverage(expectations=expectations, grant_dir=grant_dir).check(
             migrations_dir
         ):

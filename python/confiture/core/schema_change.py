@@ -255,8 +255,8 @@ class _OnTable(_Change):
 
     ``table`` is the relation, schema and name apart; :attr:`ref` is the key the
     model holds it under, since a column, an index and a constraint are keyed by
-    nothing of their own. An index may be on a materialized view instead, which
-    its change says (``relation_kind``).
+    nothing of their own. An index may be on a materialized view or a TVIEW
+    instead, which its change says (``relation_kind``).
     """
 
     __slots__ = ()
@@ -520,7 +520,7 @@ def _index_detail(index: Index) -> dict[str, Any]:
 
 
 class _OnIndexed(_OnTable):
-    """A change to one index, on a table or a materialized view.
+    """A change to one index, on a table, a materialized view or a pg_tviews TVIEW.
 
     ``relation_kind`` says which the relation is, so :attr:`ref` is the key the
     model holds it under. An index on a relation neither tree declares (#679)
@@ -534,7 +534,7 @@ class _OnIndexed(_OnTable):
 
     @property
     def ref(self) -> ObjectRef:
-        """The key of the table or materialized view the index is on."""
+        """The key of the table, materialized view or TVIEW the index is on."""
         return self.table.ref(self.relation_kind)
 
     def _wire_fields(self) -> dict[str, Any]:
@@ -549,7 +549,7 @@ class IndexAdded(_OnIndexed):
     """An index only the new side holds on a relation both hold, or on one neither declares.
 
     ``relation_kind`` is ``"matview"`` for an index on a materialized view both
-    sides hold. ``table_declared`` is false for an index on a table neither tree
+    sides hold, ``"tview"`` for one on a TVIEW both hold. ``table_declared`` is false for an index on a table neither tree
     declares (#679): someone else's table, which the migration assumes exists.
     """
 
@@ -567,7 +567,7 @@ class IndexDropped(_OnIndexed):
     """An index only the old side holds on a relation both hold, or on one neither declares.
 
     ``relation_kind`` is ``"matview"`` for an index on a materialized view both
-    sides hold. ``table_declared`` is false for an index on a table neither tree
+    sides hold, ``"tview"`` for one on a TVIEW both hold. ``table_declared`` is false for an index on a table neither tree
     declares (#679): someone else's table, which the migration assumes exists.
     """
 
@@ -859,8 +859,8 @@ class _ObjectChange(_Change):
 class ObjectAdded(_ObjectChange):
     """An object only the new tree defines.
 
-    ``indexes`` are the ones a materialized view is created with, as a table's
-    travel on ``TableAdded``; ``()`` for every other kind.
+    ``indexes`` are the ones a materialized view or a TVIEW is created with, as a
+    table's travel on ``TableAdded``; ``()`` for every other kind.
     """
 
     VERB: ClassVar[str] = "ADD"
@@ -881,8 +881,8 @@ class ObjectAdded(_ObjectChange):
 class ObjectDropped(_ObjectChange):
     """An object only the old tree defines.
 
-    ``indexes`` are the ones a materialized view held, which its down creates
-    again with it; ``()`` for every other kind.
+    ``indexes`` are the ones a materialized view or a TVIEW held, which its down
+    creates again with it; ``()`` for every other kind.
     """
 
     VERB: ClassVar[str] = "DROP"
@@ -908,6 +908,14 @@ class ObjectReplaced(_ObjectChange):
     object's shape moved. A materialized view is dropped and created again, so
     it carries its indexes: ``new_indexes`` are created after it, and its down
     creates the old one with ``old_indexes``; both ``()`` for every other kind.
+
+    ``index_changes`` is how the recreated matview's indexes differ from the
+    dropped one's, by the one index comparison under the comparison's policy:
+    what a reader that asks about the indexes rather than the recreate reads
+    (drift, #701). They are not changes of the diff: the recreate writes
+    ``new_indexes`` whole, so no SQL, order, tier or wire field reads them. A
+    TVIEW's index changes will be top-level changes instead, because a TVIEW
+    replaced in place keeps its user indexes.
     """
 
     VERB: ClassVar[str] = "REPLACE"
@@ -917,6 +925,7 @@ class ObjectReplaced(_ObjectChange):
     new: DDLObject
     old_indexes: tuple[Index, ...] = ()
     new_indexes: tuple[Index, ...] = ()
+    index_changes: tuple[IndexAdded | IndexDropped, ...] = ()
 
     def _wire_fields(self) -> dict[str, Any]:
         return {

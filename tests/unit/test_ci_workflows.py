@@ -120,7 +120,7 @@ class TestPythonMatrix:
 
 class TestQualityGate:
     def test_one_pglast_major_needs_no_matrix(self) -> None:
-        """``pglast>=8.5`` is one major; the lock pins it and the suite runs it."""
+        """``pglast>=8.7`` is one major; the lock pins it and the suite runs it."""
         data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
         assert "pglast-matrix" not in data["jobs"]
 
@@ -410,14 +410,78 @@ class TestReleaseWheels:
         )
         assert setup["with"]["python-version"].split() == SUPPORTED
 
-    def test_the_publish_check_loops_over_the_supported_tags(self) -> None:
-        script = _run_scripts(_steps("publish.yml", "validate"))
-        tags = " ".join(f"cp3{v.split('.')[1]}" for v in SUPPORTED)
-        assert f"for py in {tags}; do" in script
+    def test_macos_and_windows_build_for_the_set_up_interpreter_only(self) -> None:
+        """``--find-interpreter`` also found the runner's own 3.15 and shipped cp315."""
+        steps = _steps("publish.yml", "build-wheels")
+        setup = next(s for s in steps if s.get("uses", "").startswith("actions/setup-python"))
+        maturin = next(s for s in steps if s.get("uses", "").startswith("PyO3/maturin-action"))
+        assert "--find-interpreter" not in maturin["with"]["args"]
+        path = f"${{{{ steps.{setup['id']}.outputs.python-path }}}}"
+        assert f"--interpreter {path}" in maturin["with"]["args"]
+
+    @staticmethod
+    def _check_tags(tmp_path: Path, wheels: list[str]) -> subprocess.CompletedProcess:
+        step = next(s for s in _steps("publish.yml", "validate") if "DECLARED" in s.get("env", {}))
+        (tmp_path / "dist").mkdir()
+        for wheel in wheels:
+            (tmp_path / "dist" / wheel).touch()
+        return subprocess.run(
+            ["bash", "-c", step["run"]],
+            cwd=tmp_path,
+            env={**os.environ, **step["env"]},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_the_publish_check_declares_the_supported_tags(self) -> None:
+        step = next(s for s in _steps("publish.yml", "validate") if "DECLARED" in s.get("env", {}))
+        assert step["env"]["DECLARED"].split() == [f"cp3{v.split('.')[1]}" for v in SUPPORTED]
+
+    def _one_per_platform(self, tag: str) -> list[str]:
+        return [
+            f"fraiseql_confiture-1.0.0-{tag}-{tag}-{platform}.whl"
+            for platform in (
+                "manylinux_2_28_x86_64",
+                "macosx_11_0_arm64",
+                "win_amd64",
+            )
+        ]
+
+    def test_the_publish_check_passes_the_declared_wheels(self, tmp_path: Path) -> None:
+        assert self._check_tags(tmp_path, self._one_per_platform("cp314")).returncode == 0
+
+    def test_the_publish_check_refuses_an_undeclared_tag(self, tmp_path: Path) -> None:
+        wheels = [
+            *self._one_per_platform("cp314"),
+            "fraiseql_confiture-1.0.0-cp315-cp315-win_amd64.whl",
+        ]
+        result = self._check_tags(tmp_path, wheels)
+        assert result.returncode == 1
+        assert "cp315" in result.stdout
+
+    def test_the_publish_check_refuses_a_missing_platform(self, tmp_path: Path) -> None:
+        result = self._check_tags(tmp_path, self._one_per_platform("cp314")[:2])
+        assert result.returncode == 1
+        assert "win" in result.stdout
 
     def test_no_build_leans_on_forward_compatibility(self) -> None:
         """The wheels are version-specific; the flag only hid a missing one."""
         assert "PYO3_USE_ABI3_FORWARD_COMPATIBILITY" not in (WORKFLOWS / "publish.yml").read_text()
+
+    def test_a_dependency_without_a_wheel_is_named_before_each_fresh_install(self) -> None:
+        """A pull request warns (upstream uploads its sdist first); Publish refuses."""
+        for workflow, job, mode in (
+            ("quality-gate.yml", "wheel-python-314", "--warn"),
+            ("publish.yml", "validate", "--strict"),
+        ):
+            runs = [step.get("run", "") for step in _steps(workflow, job)]
+            check = next(
+                i for i, run in enumerate(runs) if "scripts/check_dependency_wheels.py" in run
+            )
+            install = next(i for i, run in enumerate(runs) if "uv venv --python 3.14" in run)
+            assert mode in runs[check], workflow
+            assert check < install, workflow
 
     def test_the_newest_is_installed_from_its_wheel_on_every_pull_request(self) -> None:
         script = _run_scripts(_steps("quality-gate.yml", "wheel-python-314"))

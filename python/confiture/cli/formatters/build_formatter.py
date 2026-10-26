@@ -5,8 +5,8 @@ Handles text, JSON, and CSV formatting for build results.
 
 from pathlib import Path
 
-from confiture.cli.formatters.common import handle_output
-from confiture.cli.markup import Printer, markup
+from confiture.cli.formatters.common import handle_output, print_warnings
+from confiture.cli.markup import Printer
 from confiture.core.builder import SelectionReport
 from confiture.core.linting.inventory import label_for
 from confiture.models.results import BuildResult
@@ -68,35 +68,14 @@ def format_text(result: BuildResult, console: Printer) -> None:
             console.print(t"📦 Artifact: {result.artifact_path}")
         if result.execution_time_ms > 0:
             console.print(t"⏱️ Time: {result.execution_time_ms}ms")
-        format_warnings(result, console)
+        print_warnings(result.warnings, console)
         if result.duplicates:
             console.print(
                 t"\n[yellow]Duplicate definitions: {len(result.duplicates)} (see above)[/yellow]"
             )
     else:
         console.print(t"[red]❌ Build failed: {result.error}[/red]")
-        format_warnings(result, console)
-
-
-def format_warnings(result: BuildResult, console: Printer) -> None:
-    """Print the build's own diagnostics — the only place a `BuildWarning` is rendered.
-
-    A build that stopped is exactly when its warnings are worth reading, so a
-    failed result prints them too.
-
-    Args:
-        result: The build result whose ``warnings`` to print.
-        console: Rich console for output.
-    """
-    if not result.warnings:
-        return
-    console.print("\n[yellow]Warnings:[/yellow]")
-    for warning in result.warnings:
-        style = "yellow" if warning.severity == "warning" else "dim"
-        console.print(
-            t"  [{markup(style)}]{warning.code} {warning.message}[/{markup(style)}]",
-            soft_wrap=True,
-        )
+        print_warnings(result.warnings, console)
 
 
 def selection_payload(report: SelectionReport, project_dir: Path | None) -> dict:

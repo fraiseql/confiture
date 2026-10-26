@@ -19,6 +19,7 @@ from confiture.core._migrator.rollback_planner import (
     REASON_TARGET_NEWER,
     plan_down_to,
 )
+from confiture.core.migration_down import has_usable_down
 from confiture.exceptions import RollbackError
 from confiture.models.results import DownToResult, MigrateDownResult, MigrationApplied
 
@@ -77,22 +78,33 @@ def _reversible_versions(session: SessionHost) -> set[str]:
     """Set of discoverable versions that have a usable rollback.
 
     A ``.up.sql`` migration is reversible iff its sibling ``.down.sql``
-    exists on disk; Python migrations are treated as reversible (they define
-    ``down()``). This feeds the planner's ``down_available`` so an
-    irreversible target is refused *before* any execution.
+    exists on disk; a Python migration unless its ``down()`` is statically empty
+    (:func:`~confiture.core.migration_down.has_usable_down`). This feeds the
+    planner's ``down_available`` and ``down()``'s own check, so an irreversible
+    rollback is refused *before* any execution.
     """
     assert session._migrator is not None
 
-    reversible: set[str] = set()
-    for f in session._migrator.find_migration_files(migrations_dir=session._migrations_dir):
-        version = session._migrator._version_from_filename(f.name)
-        if f.name.endswith(".up.sql"):
-            down_file = f.parent / f.name.replace(".up.sql", ".down.sql")
-            if down_file.exists():
-                reversible.add(version)
-        else:
-            reversible.add(version)
-    return reversible
+    return {
+        session._migrator._version_from_filename(f.name)
+        for f in session._migrator.find_migration_files(migrations_dir=session._migrations_dir)
+        if has_usable_down(f)
+    }
+
+
+def _irreversible(missing: list[str], *, target: str | None = None) -> RollbackError:
+    """``ROLLBACK_600`` for a rollback that reaches a migration with no usable down."""
+    names = ", ".join(missing)
+    what = "Cannot roll back" if target is None else f"Cannot roll back to {target}"
+    return RollbackError(
+        f"{what}: no usable down for {names} (a missing .down.sql, or a down() that "
+        f"does nothing). Aborting without applying anything.",
+        error_code="ROLLBACK_600",
+        resolution_hint=(
+            f"Add the missing .down.sql file(s) or write the down() for {names}, or "
+            f"choose a rollback that does not reach them."
+        ),
+    )
 
 
 def down(
@@ -120,6 +132,13 @@ def down(
         if not applied_versions:
             return [], 0
         versions_to_rollback = list(reversed(applied_versions[-steps:]))  # newest → oldest
+        files = {
+            session._migrator._version_from_filename(f.name): f
+            for f in session._migrator.find_migration_files(migrations_dir=session._migrations_dir)
+        }
+        missing = [v for v in versions_to_rollback if v in files and not has_usable_down(files[v])]
+        if missing:
+            raise _irreversible(missing)
         return _rollback_sequence(session, versions_to_rollback, dry_run=dry)
 
     if dry_run:
@@ -174,16 +193,7 @@ def _down_to_under_lock(session: SessionHost, target: str, *, dry_run: bool) -> 
 
     if not plan.valid:
         if plan.reason == REASON_IRREVERSIBLE:
-            missing = ", ".join(plan.missing_down)
-            raise RollbackError(
-                f"Cannot roll back to {target}: missing .down.sql for {missing}. "
-                f"Aborting without applying anything.",
-                error_code="ROLLBACK_600",
-                resolution_hint=(
-                    f"Add the missing .down.sql file(s) for {missing}, or choose a "
-                    f"target that does not require rolling back past them."
-                ),
-            )
+            raise _irreversible(plan.missing_down, target=target)
         if plan.reason == REASON_TARGET_NEWER:
             raise MigrationError(
                 f"Revision {target} is newer than the current revision — "

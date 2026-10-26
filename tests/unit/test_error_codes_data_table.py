@@ -70,3 +70,13 @@ def test_error_codes_module_has_no_hand_written_catalog_function() -> None:
         and node.end_lineno - node.lineno + 1 > MAX_FUNCTION_LINES
     ]
     assert long_functions == [], f"catalog still hand-written in a function: {long_functions}"
+
+
+def test_a_retired_code_is_never_registered_again() -> None:
+    """A code removed under the stability contract keeps its number out of use for good."""
+    from confiture import error_codes
+
+    retired = getattr(error_codes, "RETIRED_CODES", frozenset())
+    assert "DIFFER_407" in retired
+    assert retired.isdisjoint(c.code for c in ERROR_CODE_REGISTRY.all_codes())
+    assert retired.isdisjoint(error_codes.CANONICAL_EXIT_CODES)

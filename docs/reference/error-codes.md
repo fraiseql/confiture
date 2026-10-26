@@ -52,10 +52,10 @@ resolution hint surfaced in the envelope.
 | `CONFIG_008` | 5 | error | Invalid migration.tracking_table: {value} | Use letters, digits and underscores only, optionally schema-qualified (e.g. public.tb_confiture) |
 | `CONFIG_009` | 5 | error | Anonymization secret not set ({env_var}) | Export ANONYMIZATION_SECRET to a long random string kept out of version control before running an anonymizing sync or a keyed hash strategy |
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
-| `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=8.5) |
+| `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=8.7) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
 | `CONFIG_013` | 5 | error | {call} needs a connection {mode}: {reason} | Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open |
-| `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run pg_tviews 0.1.0-beta.26 or later, whose `tviews.contract_version()` is the contract confiture reads and whose registry holds every column it reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |
+| `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run pg_tviews 0.1.0-beta.30 or later, whose `tviews.contract_version()` is the contract confiture reads (2) and whose registry holds every column it reads: from an earlier beta, ALTER EXTENSION pg_tviews UPDATE, then SELECT * FROM tviews.pg_tviews_reregister_all(); an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |
 | `CONFIG_015` | 5 | error | The ledger {table!r} does not resolve for this session, but a relation of that name exists in {elsewhere} | Point at the existing ledger — set migration.tracking_table to it, or put its schema on the connection's search_path |
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
@@ -65,23 +65,24 @@ resolution hint surfaced in the envelope.
 | `DIFFER_403` | 5 | error | A schema being compared names an object that needs quotes | Rename it so it needs no quotes; `confiture lint` lists every such name (naming_003, naming_004) |
 | `DIFFER_404` | 0 | warning | {kind} '{identity}' is only in the {side} schema, a database that says it exists and not how it is made: the diff carries no statement for it | Write the statement by hand, or declare the object in the tree so the two sides agree |
 | `DIFFER_405` | 0 | warning | Index '{index}' is on {table}, which neither schema declares: the migration {action} it CONCURRENTLY and assumes the table exists | Make sure the table exists before the migration runs, or declare it in the schema |
-| `DIFFER_406` | 5 | error | Index '{index}' is on {table}: {reason} | Declare the relation in the desired schema, before the index — compose the fragment into the environment's include_dirs, after the file that creates it — or remove the index |
-| `DIFFER_407` | 0 | warning | Index '{index}' is on TVIEW {tview}: migrate diff does not carry it and drift does not check it yet | Keep it in the schema (the build creates it, and pg_tviews keeps it across a rebuild); write any change to it in a migration by hand |
+| `DIFFER_406` | 5 | error | Index '{index}' is on {table}: {reason} | Declare the relation in the desired schema, before the index — give the fragment's include_dirs entry a higher `order` than the entry that creates the relation (entries build by `order`, then by path; where an entry is listed sequences nothing) — or remove the index |
 | `DIFFER_408` | 0 | warning | Index '{index}' is written before {table}, the relation it is on: the current schema's build fails at it, so it is not compared | Move the index after the statement that creates its relation; confiture lint reports it as build_004 |
-| `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
+| `DIFFER_409` | 5 | error | {change} '{identity}' carries no statement: the side it came from is compared, never generated from | Generate from a side read from a tree (Side.of) or a database (database_side); a stated or slot side is compared, never generated from |
+| `DIFFER_410` | 5 | error | Index '{index}' on TVIEW {tview} has the name of an index pg_tviews created on it, and is another index: pg_tviews skipped its CREATE INDEX, so the database does not hold it | Rename the index in the schema: pg_tviews reserves the names of its own indexes on a TVIEW (tviews.registry.managed_indexes) |
+| `GEN_001` | 1 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |
 | `GIT_003` | 7 | error | Base ref unreachable in this checkout | In CI, set fetch-depth: 0 (actions/checkout) or run 'git fetch --unshallow origin <branch>' |
 | `GRANT_001` | 7 | error | Grant accompaniment error | Stage a migration file alongside grant changes |
 | `LOCK_1300` | 6 | error | Cannot acquire database lock | Wait for other operations to complete |
-| `MIGR_001` | 3 | error | Migration error | Check migration files and database state |
-| `MIGR_004` | 3 | error | Migration file already exists | Use --force flag to overwrite existing file |
-| `MIGR_100` | 3 | error | Migration {version} not found | Check the migration version and ensure the file exists |
+| `MIGR_001` | 1 | error | Migration error | Check migration files and database state |
+| `MIGR_004` | 1 | error | Migration file already exists | Use --force flag to overwrite existing file |
+| `MIGR_100` | 1 | error | Migration {version} not found | Check the migration version and ensure the file exists |
 | `MIGR_101` | 0 | warning | Migration {version} already applied | This migration has already been applied to the database |
-| `MIGR_102` | 3 | error | Migration file corrupted: {file} | Regenerate or restore the migration file |
-| `MIGR_106` | 3 | error | Duplicate migration version: {version} | Multiple migration files share the same version number. Rename files to use unique version prefixes. Run 'confiture migrate validate' to see all duplicates. |
-| `MIGR_107` | 3 | error | Migration {version} ({name}) issued an explicit COMMIT or ROLLBACK in its body, breaking confiture's transaction envelope | Remove any explicit COMMIT or ROLLBACK from the migration body. Confiture manages the outer transaction; embedded transaction control leaves the database in an unrecoverable state if a subsequent statement fails. If you need autocommit semantics, set transactional = False on the migration. |
-| `MIGR_108` | 3 | error | Migration {version} is non-transactional and cannot run with commit=False (inside a SAVEPOINT) | A non-transactional migration commits the current transaction and runs in autocommit, so it cannot be tested inside a SAVEPOINT. `session.up(dry_run_execute=True)` skips such migrations; apply them for real with `migrate up`. |
+| `MIGR_102` | 1 | error | Migration file corrupted: {file} | Regenerate or restore the migration file |
+| `MIGR_106` | 1 | error | Duplicate migration version: {version} | Multiple migration files share the same version number. Rename files to use unique version prefixes. Run 'confiture migrate validate' to see all duplicates. |
+| `MIGR_107` | 1 | error | Migration {version} ({name}) issued an explicit COMMIT or ROLLBACK in its body, breaking confiture's transaction envelope | Remove any explicit COMMIT or ROLLBACK from the migration body. Confiture manages the outer transaction; embedded transaction control leaves the database in an unrecoverable state if a subsequent statement fails. If you need autocommit semantics, set transactional = False on the migration. |
+| `MIGR_108` | 1 | error | Migration {version} is non-transactional and cannot run with commit=False (inside a SAVEPOINT) | A non-transactional migration commits the current transaction and runs in autocommit, so it cannot be tested inside a SAVEPOINT. `session.up(dry_run_execute=True)` skips such migrations; apply them for real with `migrate up`. |
 | `PGGIT_900` | 7 | error | pgGit command failed | Check pgGit is installed and configured |
 | `PRECON_1000` | 5 | error | Precondition not met: {condition} | Ensure the precondition is satisfied before retrying |
 | `PRECON_1001` | 2 | error | Database not initialized | Run 'confiture init' to initialize the database |
@@ -165,11 +166,17 @@ warnings → 0 unless `--strict`.
 
 | Code | Default severity | Meaning |
 |------|------------------|---------|
+| `PFLIGHT_UNPARSEABLE` | error | PostgreSQL's parser rejects the migration, so nothing about it can be certified (forces `window_safe: false`) |
 | `PFLIGHT_MISSING_DOWN` | error | Migration has no matching `.down.sql` (not reversible) |
+| `PFLIGHT_DOWN_EMPTY` | warning | A `.py` migration's `down()` does nothing (absent, or only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError`), read from its source and never imported |
+| `PFLIGHT_DOWN_UNVERIFIED` | info | A `.py` migration's `down()` is not read: whether `migrate down` undoes it is not checked (`details.down`: `present` — it has statements; `unknown` — another base class may supply it) |
+| `PFLIGHT_DESTRUCTIVE_GATED` | warning | Migration carries `-- confiture:destructive`: `migrate up` refuses it without `--allow-destructive` |
+| `PFLIGHT_IRREVERSIBLE` | info | Migration declares `-- confiture:irreversible <reason>`: `migrate down` runs but does not restore what the reasons name (`details.irreversible`) |
 | `PFLIGHT_NON_TRANSACTIONAL` | warning | Migration contains a statement that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) |
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
+| `PFLIGHT_TVIEW_BASE_COLUMN` | error | `--against`: the migration drops a table or changes a column a registered pg_tviews TVIEW reads, which PostgreSQL refuses while the TVIEW exists |
 | `PFLIGHT_INVALID_INDEX` | warning | `--against`: a `CREATE INDEX … IF NOT EXISTS` names an index the database holds INVALID (a failed concurrent build), which the statement skips (#689) |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
 
@@ -225,6 +232,10 @@ Symbolic error codes are **public API**:
 - The one exception was 0.51.0, which removed 36 codes that had been registered
   but were never emitted by any command (the list is in the CHANGELOG). Every
   code in the table above is one the package can produce; a test keeps it so.
+- A retired code's number is never given to another meaning
+  (`confiture.error_codes.RETIRED_CODES`, held by a test). Retired:
+  `DIFFER_407`, "an index on a TVIEW is not compared", once a TVIEW's indexes
+  were compared, carried and drift-checked.
 
 Some codes (`PGGIT_*`, `GIT_*`) are internal and unlikely to surface in the
 `--format json` output of the migrate family — depend on the codes the migrate

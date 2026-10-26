@@ -13,7 +13,7 @@ from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed.applier import apply_seed_files
-from confiture.core.temp_database import TempDatabase, _maintenance_url
+from confiture.core.temp_database import TempDatabase, maintenance_url
 from confiture.exceptions import SchemaError
 
 pytestmark = pytest.mark.integration
@@ -30,7 +30,7 @@ def temp_url():
     if shutil.which("psql") is None:
         pytest.skip("psql not on PATH")
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True):
+        with psycopg.connect(maintenance_url(url), autocommit=True):
             pass
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")

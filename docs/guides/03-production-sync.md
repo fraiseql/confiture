@@ -140,12 +140,24 @@ database:
   password: ${PROD_DB_PASSWORD}
 ```
 
-```bash
-# Use an SSH tunnel for production access, then point --from at the
-# forwarded local port via a DSN (--from / --to accept an env name or a DSN):
-ssh -L 5433:prod-db.internal:5432 bastion.example.com
-confiture sync --from "postgresql://user:pass@localhost:5433/proddb" --to local
+`--from` and `--to` each take an environment name, a `.yaml` config file or a PostgreSQL URL.
+An environment that reaches its database through a bastion declares an `ssh_tunnel`, and
+`sync --from production` opens it:
+
+```yaml
+# db/environments/production.yaml
+database_url: postgresql://app:${PROD_DB_PASSWORD}@localhost:${TUNNEL_LOCAL_PORT}/proddb
+ssh_tunnel:
+  host: bastion.example.com
+  user: deploy
+  remote_host: prod-db.internal
 ```
+
+```bash
+confiture sync --from production --to local
+```
+
+Before 1.41.0 `sync` ignored `ssh_tunnel` and connected straight to `database_url`.
 
 ---
 

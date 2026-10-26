@@ -12,7 +12,7 @@ from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.config.environment import SeedProfile
 from confiture.core.seed.applier import SeedApplier
-from confiture.core.temp_database import TempDatabase, _maintenance_url
+from confiture.core.temp_database import TempDatabase, maintenance_url
 
 pytestmark = pytest.mark.integration
 
@@ -26,7 +26,7 @@ def _server_url() -> str:
 def temp_db_url() -> Iterator[str]:
     url = _server_url()
     try:
-        with psycopg.connect(_maintenance_url(url), autocommit=True):
+        with psycopg.connect(maintenance_url(url), autocommit=True):
             pass
     except psycopg.OperationalError as e:
         pytest.skip(f"PostgreSQL not available: {e}")

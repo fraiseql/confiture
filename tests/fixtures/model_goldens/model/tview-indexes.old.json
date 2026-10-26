@@ -1,0 +1,335 @@
+{
+  "coverage": {
+    "enum_types": "definition",
+    "other_objects": "definition",
+    "routines": "definition",
+    "sequences": "definition",
+    "tables": "definition",
+    "triggers": "definition",
+    "tviews": "definition",
+    "views": "definition"
+  },
+  "enum_types": [],
+  "other_objects": [],
+  "routines": [],
+  "sequences": [],
+  "source": "author",
+  "tables": [
+    {
+      "columns": [
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "pk_author",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 5,
+          "name": "pk_author",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 6,
+          "name": "id",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 7,
+          "name": "name",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "pk_author"
+          ],
+          "deferrable": null,
+          "enforced": true,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "nulls_not_distinct": false,
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "temporal": false,
+          "where": null
+        },
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "enforced": true,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "nulls_not_distinct": false,
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "temporal": false,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_author",
+      "schema": null
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "pk_post",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 11,
+          "name": "pk_post",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 12,
+          "name": "id",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "fk_author",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 13,
+          "name": "fk_author",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "title",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 14,
+          "name": "title",
+          "not_null": true,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "default_kind": null,
+          "file": "tests/fixtures/tview_indexes/old.sql",
+          "folded": "body",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 15,
+          "name": "body",
+          "not_null": false,
+          "not_null_validated": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "pk_post"
+          ],
+          "deferrable": null,
+          "enforced": true,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "nulls_not_distinct": false,
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "temporal": false,
+          "where": null
+        },
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "enforced": true,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "nulls_not_distinct": false,
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "temporal": false,
+          "where": null
+        },
+        {
+          "columns": [
+            "fk_author"
+          ],
+          "deferrable": null,
+          "enforced": true,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "nulls_not_distinct": false,
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": {
+            "name": "tb_author",
+            "schema": null
+          },
+          "temporal": false,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_post",
+      "schema": null
+    }
+  ],
+  "triggers": [],
+  "tviews": [
+    {
+      "definition": "SELECT p.pk_post, p.id, p.title, jsonb_build_object('id', p.id, 'title', p.title) AS data FROM tb_post AS p",
+      "fillfactor": null,
+      "function_reads": null,
+      "indexes": [
+        {
+          "backs_constraint": false,
+          "columns": [
+            "title"
+          ],
+          "expressions": [
+            false
+          ],
+          "key_options": [],
+          "method": "btree",
+          "name": "ix_tv_post_title",
+          "nulls_not_distinct": false,
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
+          "unique": false,
+          "valid": true,
+          "where": null
+        },
+        {
+          "backs_constraint": false,
+          "columns": [
+            "title"
+          ],
+          "expressions": [
+            false
+          ],
+          "key_options": [],
+          "method": "btree",
+          "name": "ix_tv_post_lookup",
+          "nulls_not_distinct": false,
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
+          "unique": false,
+          "valid": true,
+          "where": null
+        }
+      ],
+      "logged": null,
+      "managed_indexes": [],
+      "name": "tv_post",
+      "other_options": {},
+      "schema": null,
+      "time_refresh": null,
+      "uncascaded_policy": null,
+      "uncascaded_tables": null
+    }
+  ],
+  "views": []
+}

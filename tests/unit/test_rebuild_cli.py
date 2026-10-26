@@ -1,11 +1,14 @@
 """Tests for the CLI command (confiture migrate rebuild)."""
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psycopg
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.exceptions import ConfigurationError
 from confiture.models.results import MigrateRebuildResult, MigrationApplied
 from tests._helpers import strip_ansi as _strip_ansi
 
@@ -205,21 +208,37 @@ class TestRebuildExitCodes:
         )
         assert result.exit_code == 0
 
-    @patch("confiture.core.migrator.Migrator.from_config")
-    def test_fatal_error_exit_3(self, mock_from_config, tmp_path: Path):
+    @staticmethod
+    def _rebuild_failing_with(error: Exception, tmp_path: Path) -> tuple[int, dict]:
         config, migrations = _make_env(tmp_path)
-        mock_from_config.side_effect = Exception("connection refused")
+        with patch("confiture.core.migrator.Migrator.from_config", side_effect=error):
+            result = runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "rebuild",
+                    "--config",
+                    str(config),
+                    "--migrations-dir",
+                    str(migrations),
+                    "--yes",
+                    "--format",
+                    "json",
+                ],
+            )
+        return result.exit_code, json.loads(result.stdout)["error"]
 
-        result = runner.invoke(
-            app,
-            [
-                "migrate",
-                "rebuild",
-                "--config",
-                str(config),
-                "--migrations-dir",
-                str(migrations),
-                "--yes",
-            ],
+    def test_an_unforeseen_failure_is_migr_001_exit_1(self, tmp_path: Path):
+        code, error = self._rebuild_failing_with(Exception("boom"), tmp_path)
+        assert (code, error["code"]) == (1, "MIGR_001")
+
+    def test_a_confiture_error_keeps_its_code(self, tmp_path: Path):
+        refused = ConfigurationError("Database connection failed", error_code="CONFIG_006")
+        code, error = self._rebuild_failing_with(refused, tmp_path)
+        assert (code, error["code"]) == (3, "CONFIG_006")
+
+    def test_a_refused_connection_is_config_006_exit_3(self, tmp_path: Path):
+        code, error = self._rebuild_failing_with(
+            psycopg.OperationalError("connection refused"), tmp_path
         )
-        assert result.exit_code == 3
+        assert (code, error["code"]) == (3, "CONFIG_006")

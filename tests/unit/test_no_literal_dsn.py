@@ -36,6 +36,12 @@ SENTINEL_DSNS: frozenset[str] = frozenset(
         # environment file interpolates, so the file validates through the model.
         # Never dialled: the test connects only to fresh_database_factory URLs.
         "postgresql://user:secret@db.example.internal:5432/app",
+        # tests/integration/test_lint_extension_tier.py: the database_url nothing listens
+        # on, dialled to prove the live tier cannot answer in the scratch's place.
+        "postgresql://127.0.0.1:1/confiture_no_such_server",
+        # tests/integration/test_seed_drift.py: the same dead port with a password, dialled
+        # to prove the password is masked in what an unreachable --against prints.
+        "postgresql://u:hunter2@127.0.0.1:1/confiture_no_such_server",
     }
 )
 

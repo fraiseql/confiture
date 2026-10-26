@@ -96,3 +96,11 @@ def test_builtin_tools_have_valid_json_schema():
         assert "description" in tool
         assert "inputSchema" in tool
         assert tool["inputSchema"]["type"] == "object"
+
+
+def test_load_migration_class_is_the_loader_itself():
+    """``confiture.load_migration_class`` is the migrator's loader, not a wrapper (#737)."""
+    from confiture.core._migrator import loader
+
+    assert "load_migration_class" in confiture.__all__
+    assert confiture.load_migration_class is loader.load_migration_class

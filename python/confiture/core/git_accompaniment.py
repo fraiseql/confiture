@@ -4,13 +4,19 @@ Validates that DDL schema changes are accompanied by migration files.
 Useful for pre-commit hooks and CI/CD pipelines.
 """
 
-import re
+from functools import cached_property
 from pathlib import Path
-from typing import assert_never
+from typing import TYPE_CHECKING, assert_never
 
+from confiture.core._migrator.discovery import changed_migrations
 from confiture.core.ddl_objects import BODY_KINDS
-from confiture.core.function_signature_checker import FunctionSignatureChecker
-from confiture.core.git import GitRepository
+from confiture.core.function_body_checker import FunctionBodyChecker, FunctionBodyViolation
+from confiture.core.function_signature_checker import (
+    FunctionSignatureChecker,
+    FunctionSignatureViolation,
+)
+from confiture.core.function_signature_drift import routines_of
+from confiture.core.git import GitRepository, root_relative
 from confiture.core.git_schema import GitSchemaDiffer
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -46,13 +52,11 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.exceptions import DifferError, GitError, SchemaError
+from confiture.exceptions import DifferError, SchemaError
 from confiture.models.git import MigrationAccompanimentReport
 
-_FUNC_CONTENT_RE = re.compile(
-    r"\bCREATE\b.*?\bFUNCTION\b|\bCREATE\b.*?\bPROCEDURE\b",
-    re.IGNORECASE | re.DOTALL,
-)
+if TYPE_CHECKING:
+    from confiture.core.schema_model import Routine
 
 
 def is_body_change(change: SchemaChange) -> bool:
@@ -109,6 +113,20 @@ def is_body_change(change: SchemaChange) -> bool:
             assert_never(change)
 
 
+def _touches_routines(changes: list[SchemaChange]) -> bool:
+    """Whether the engine found a routine added, dropped or redefined.
+
+    Every violation the signature and body checks report is one of these: a
+    retype is a drop and an add in two signature buckets, a body edit a
+    redefinition. Without one there is nothing for either check to read.
+    """
+    return any(
+        isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced)
+        and change.ref.kind in BODY_KINDS
+        for change in changes
+    )
+
+
 def _without_body_changes(changes: list[SchemaChange]) -> list[SchemaChange]:
     """The changes the gate acts on when ``--require-migration-bodies`` is off."""
     return [change for change in changes if not is_body_change(change)]
@@ -134,18 +152,26 @@ class MigrationAccompanimentChecker:
     """
 
     def __init__(
-        self, env: str, repo_path: Path | None = None, *, differ: GitSchemaDiffer | None = None
+        self,
+        env: str,
+        repo_path: Path | None = None,
+        *,
+        differ: GitSchemaDiffer | None = None,
+        migrations_dir: Path = Path("db/migrations"),
     ):
         """Initialize accompaniment checker.
 
         Args:
             env: Environment name (e.g., "local", "production")
-            repo_path: Repository root directory (default: current directory)
+            repo_path: The project's directory, in its repository (default: current directory)
             differ: The differ to compare refs with — one shared with another
                 check reads each tree once; a new one by default.
+            migrations_dir: Where ``migrate up`` reads the migrations, relative to
+                *repo_path* — the same ``--migrations-dir``.
         """
         self.env = env
         self.repo_path = repo_path or Path.cwd()
+        self.migrations_dir = self.repo_path / migrations_dir
         self.git_repo = GitRepository(self.repo_path)
         self.differ = differ or GitSchemaDiffer(env, self.repo_path)
 
@@ -160,12 +186,16 @@ class MigrationAccompanimentChecker:
         """Check if DDL changes are accompanied by migrations.
 
         Validates:
-        1. Detects DDL changes between refs
+        1. Detects DDL changes between refs: the build at the point
+           *target_ref* forked from *base_ref*, against the build at *target_ref*
         2. Finds new migration files between refs
-        3. Reports whether changes are properly accompanied
+        3. Reports whether changes are properly accompanied, a changed routine
+           compared across the two trees whole, whichever file holds it
 
         Args:
-            base_ref: Base git reference (e.g., "origin/main")
+            base_ref: Base git reference (e.g., "origin/main"). What the branch
+                changed is read from its merge base with *target_ref*, so a
+                change made on the base after the fork is not the branch's.
             target_ref: Target git reference (default "HEAD")
             check_bodies: Also flag function *body* changes not carried by a
                 migration (#178). Off by default — opt-in via
@@ -193,9 +223,11 @@ class MigrationAccompanimentChecker:
         """
         # Get new migration files regardless of whether schema parsing succeeds
         new_migrations = self._get_new_migrations(base_ref, target_ref, two_dot=two_dot)
+        # A two-dot caller has resolved the merge base already (see two_dot).
+        anchor = base_ref if two_dot else self._fork_point(base_ref, target_ref)
 
         try:
-            diff = self.differ.compare_refs(base_ref, target_ref)
+            diff = self.differ.compare_refs(anchor, target_ref)
         except (SchemaError, DifferError) as exc:
             # A schema PostgreSQL rejects (DIFFER_400), or one the differ cannot
             # compare (a quoted name, an index read before its table): the check
@@ -210,17 +242,16 @@ class MigrationAccompanimentChecker:
                 target_ref=target_ref,
             )
 
-        # Check function signature violations (param type changes need DROP FUNCTION)
-        signature_violations = self._check_signature_violations(
-            new_migrations, base_ref, target_ref, two_dot=two_dot
-        )
-
-        # Check function body violations (body edits need a re-defining migration)
-        body_violations = (
-            self._check_body_violations(new_migrations, base_ref, target_ref, two_dot=two_dot)
-            if check_bodies
-            else []
-        )
+        signature_violations: list[FunctionSignatureViolation] = []
+        body_violations: list[FunctionBodyViolation] = []
+        if _touches_routines(diff.changes):
+            old, new = self._routines_at(anchor), self._routines_at(target_ref)
+            migrations = [self._repo_root / path for path in new_migrations]
+            # A parameter type change needs a DROP FUNCTION of the old signature.
+            signature_violations = FunctionSignatureChecker().check(old, new, migrations)
+            if check_bodies:
+                # A body edit needs a migration that re-defines the routine.
+                body_violations = FunctionBodyChecker().check(old, new, migrations)
 
         ddl_changes = diff.changes if check_bodies else _without_body_changes(diff.changes)
 
@@ -236,96 +267,38 @@ class MigrationAccompanimentChecker:
             warnings=diff.warnings,
         )
 
-    def _check_signature_violations(
-        self,
-        new_migrations: list[Path],
-        base_ref: str,
-        target_ref: str,
-        *,
-        two_dot: bool = False,
-    ) -> list:
-        """Return function signature violations for changed function files."""
-        try:
-            function_files = self._get_changed_function_files(base_ref, target_ref, two_dot=two_dot)
-            if not function_files:
-                return []
+    def _fork_point(self, base_ref: str, target_ref: str) -> str:
+        """Where *target_ref* left *base_ref*: what the branch changed is read from there.
 
-            checker = FunctionSignatureChecker(self.git_repo)
-            return checker.check(
-                changed_sql_files=function_files,
-                migration_file_paths=new_migrations,
-                base_ref=base_ref,
-                target_ref=target_ref,
-            )
-        except (
-            Exception
-        ):  # Reason: documented policy: the signature check is best-effort and never blocks CI
-            # Signature check is best-effort — never block CI on unexpected errors
-            return []
+        The tip of *base_ref* would charge the branch with every change made on
+        the base since it forked. The migrations are listed three-dot, from the
+        same point. With no common ancestor, the tip.
+        """
+        return self.git_repo.get_merge_base(base_ref, target_ref) or base_ref
 
-    def _check_body_violations(
-        self,
-        new_migrations: list[Path],
-        base_ref: str,
-        target_ref: str,
-        *,
-        two_dot: bool = False,
-    ) -> list:
-        """Return function body violations for changed function files (#178)."""
-        try:
-            function_files = self._get_changed_function_files(base_ref, target_ref, two_dot=two_dot)
-            if not function_files:
-                return []
+    def _routines_at(self, ref: str) -> list[Routine]:
+        """The routines *ref*'s build declares: the tree ``compare_refs`` has just read."""
+        return routines_of(self.differ.builder.read_at_ref(ref))
 
-            # Reason: import cycle (the module is partially initialised when this import runs at module level)
-            from confiture.core.function_body_checker import (
-                FunctionBodyChecker,
-            )
-
-            checker = FunctionBodyChecker(self.git_repo)
-            return checker.check(
-                changed_sql_files=function_files,
-                migration_file_paths=new_migrations,
-                base_ref=base_ref,
-                target_ref=target_ref,
-            )
-        except (
-            Exception
-        ):  # Reason: documented policy: the body check is best-effort and never blocks CI
-            # Body check is best-effort — never block CI on unexpected errors.
-            return []
-
-    def _get_changed_function_files(
-        self, base_ref: str, target_ref: str, *, two_dot: bool = False
-    ) -> list[Path]:
-        """Return SQL files that changed between refs and contain function definitions."""
-        changed_files = self._changed_files(base_ref, target_ref, two_dot=two_dot)
-        result = []
-        for f in changed_files:
-            if not f.name.endswith(".sql"):
-                continue
-            try:
-                content = self.git_repo.show_file_at_ref(f, target_ref)
-            except GitError:
-                continue
-            if content and _FUNC_CONTENT_RE.search(content):
-                result.append(f)
-        return result
+    @cached_property
+    def _repo_root(self) -> Path:
+        """Where the paths git lists are relative to."""
+        return self.git_repo.get_repo_root()
 
     def _changed_files(self, base_ref: str, target_ref: str, *, two_dot: bool) -> list[Path]:
-        """Files changed between the refs, two-dot when the target is a tree."""
+        """Files changed between the refs and present at the target, two-dot for a tree."""
         if two_dot:
-            return self.git_repo.get_changed_files_two_dot(base_ref, target_ref)
-        return self.git_repo.get_changed_files(base_ref, target_ref)
+            return self.git_repo.get_changed_files_two_dot(base_ref, target_ref, diff_filter="d")
+        return self.git_repo.get_changed_files(base_ref, target_ref, diff_filter="d")
 
     def _get_new_migrations(
         self, base_ref: str, target_ref: str = "HEAD", *, two_dot: bool = False
     ) -> list[Path]:
         """Get list of new migration files between refs.
 
-        Searches for migration files (*.up.sql) that are new or modified
-        between the base and target refs. Only matches files in db/migrations/
-        directory to avoid false positives.
+        A changed file is one when ``migrate up`` would run it from the
+        migrations directory: directly in it, named as a migration, and present
+        at the target (a deleted migration carries nothing).
 
         Args:
             base_ref: Base git reference
@@ -338,23 +311,6 @@ class MigrationAccompanimentChecker:
             NotAGitRepositoryError: If not in a git repository
             GitError: If git operations fail
         """
-        # Get all changed files between refs
-        changed_files = self._changed_files(base_ref, target_ref, two_dot=two_dot)
-
-        # Filter to migration files in db/migrations/ directory.
-        # Accepts both .up.sql files and .py migration files (generated by
-        # `confiture migrate generate`), excluding __init__.py and private modules.
-        migration_files: list[Path] = []
-        migration_files.extend(
-            file_path
-            for file_path in changed_files
-            if len(file_path.parts) >= 2
-            and file_path.parts[0] == "db"
-            and file_path.parts[1] == "migrations"
-            and (
-                file_path.name.endswith(".up.sql")
-                or (file_path.name.endswith(".py") and not file_path.name.startswith("_"))
-            )
-        )
-
-        return migration_files
+        changed = self._changed_files(base_ref, target_ref, two_dot=two_dot)
+        directory = root_relative(self.migrations_dir, self._repo_root.resolve())
+        return changed_migrations(changed, directory)

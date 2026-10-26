@@ -87,6 +87,12 @@ PINNED: dict[str, dict[str, int]] = {
     "matview-indexes.old.down.sql": {"DROP_TABLE": 1},
     "matview-indexes.old.up.sql": {},
     "matview-indexes.up.sql": {},
+    "tview-indexes.down.sql": {},
+    "tview-indexes.new.down.sql": {"DROP_TABLE": 2},
+    "tview-indexes.new.up.sql": {},
+    "tview-indexes.old.down.sql": {"DROP_TABLE": 2},
+    "tview-indexes.old.up.sql": {},
+    "tview-indexes.up.sql": {},
 }
 
 SQL_GOLDENS = sorted(GOLDENS.glob("*.sql"))

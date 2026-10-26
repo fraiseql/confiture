@@ -116,7 +116,7 @@ def test_drift_and_accompaniment_share_one_differ(
         return {"passed": True, "changes": []}
 
     def accompaniment(**kwargs: Any) -> dict[str, Any]:
-        seen.append(kwargs["differ"])
+        seen.append(kwargs["checker"].differ)
         return {"is_valid": True}
 
     monkeypatch.setattr("confiture.cli.git_validation.validate_git_drift", drift)

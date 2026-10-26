@@ -31,3 +31,12 @@ def rendered(query: Any, context: AdaptContext | None = None) -> str:
         with suppress(psycopg.Error, TypeError):
             return sql.as_string(query, context)
     return sql.as_string(query)
+
+
+def relation(schema: str, name: str) -> Template:
+    """``schema.name`` as an executed statement names a relation: two quoted identifiers.
+
+    Always qualified: an unqualified name resolves through the session's
+    ``search_path``, and two servers may resolve it to two relations.
+    """
+    return t"{schema:i}.{name:i}"

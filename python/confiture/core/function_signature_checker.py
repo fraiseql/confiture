@@ -3,8 +3,8 @@
 When a function's parameter types change, PostgreSQL's CREATE OR REPLACE silently
 creates a second overload rather than replacing the old one.  This module detects
 that case by comparing old vs new routines — the schema model's, read from the
-file at each ref by the lint inventory — and verifying that a migration file
-drops the old signature.
+tree the build reads at each ref — and verifying that a migration file drops the
+old signature.
 """
 
 import dataclasses
@@ -17,7 +17,6 @@ from confiture.core.ddl_walk import object_edits, object_kinds
 from confiture.core.function_body_checker import migration_sql
 from confiture.core.function_signature_drift import (
     by_name,
-    declared_routines,
     function_key,
     printed_arguments,
     printed_signature,
@@ -26,10 +25,10 @@ from confiture.core.function_signature_drift import (
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import parse_file
 from confiture.core.type_lattice import signature_from_type_names, signatures_match
-from confiture.exceptions import GitError
 
 if TYPE_CHECKING:
-    from confiture.core.git import GitRepository
+    from collections.abc import Sequence
+
     from confiture.core.schema_model import Routine
 
 
@@ -64,107 +63,94 @@ class FunctionSignatureViolation:
 class FunctionSignatureChecker:
     """Check that parameter type changes include DROP FUNCTION for old signature.
 
-    Args:
-        git_repo: GitRepository instance for reading file content at refs
+    It compares the routines two trees declare — each ref's build, read whole — so
+    a routine that moved between files is compared with itself.
     """
-
-    def __init__(self, git_repo: GitRepository) -> None:
-        self._git = git_repo
 
     def check(
         self,
-        changed_sql_files: list[Path],
+        old_routines: Sequence[Routine],
+        new_routines: Sequence[Routine],
         migration_file_paths: list[Path],
-        base_ref: str,
-        target_ref: str,
     ) -> list[FunctionSignatureViolation]:
-        """Check changed SQL files for signature type changes without DROP.
+        """Each routine whose argument types changed with no migration dropping the old one.
+
+        A routine *old_routines* holds that *new_routines* lacks is retyped when
+        *new_routines* gained a routine of the same ``schema.name``; the i-th of a
+        name's lost routines is reported against the i-th it gained, or the last. A
+        name that only lost an overload, or lost every routine, was dropped: the
+        accompaniment check reports that as a schema change.
 
         Args:
-            changed_sql_files: SQL files that changed between refs (relative to repo root)
-            migration_file_paths: New migration files in the changeset
-            base_ref: Old git reference
-            target_ref: New git reference
+            old_routines: The routines the base tree declares.
+            new_routines: The routines the target tree declares.
+            migration_file_paths: New migration files in the changeset.
 
         Returns:
             List of violations (empty if all type changes have accompanying DROPs)
         """
+        dropped, added = unpaired_routines(old_routines, new_routines)
+        overloads = by_name(old_routines)
         violations: list[FunctionSignatureViolation] = []
-        for sql_file in changed_sql_files:
-            old = self._routines_at_ref(sql_file, base_ref)
-            new = self._routines_at_ref(sql_file, target_ref)
-            violations.extend(self._check_file(old, new, migration_file_paths))
-        return violations
-
-    def _routines_at_ref(self, path: Path, ref: str) -> list[Routine]:
-        """The routines *path* declares at *ref*; none when it did not exist there."""
-        try:
-            content = self._git.show_file_at_ref(path, ref)
-        except GitError:
-            return []
-        if content is None:
-            return []
-        return declared_routines(content)
-
-    def _check_file(
-        self,
-        old_routines: list[Routine],
-        new_routines: list[Routine],
-        migration_files: list[Path],
-    ) -> list[FunctionSignatureViolation]:
-        """Compare old vs new routines; for each type change, check migrations.
-
-        A file is read one function at a time: the last overload each declares
-        of a ``schema.name``, as a file that redefines a function in place does.
-        """
-        violations: list[FunctionSignatureViolation] = []
-        old_last = {fn_key: found[-1] for fn_key, found in by_name(old_routines).items()}
-        new_last = {fn_key: found[-1] for fn_key, found in by_name(new_routines).items()}
-        # A function only the old ref declares was deleted: the accompaniment check's.
-        kept = [fn_key for fn_key in old_last if fn_key in new_last]
-        retyped, _added = unpaired_routines(
-            (old_last[fn_key] for fn_key in kept), (new_last[fn_key] for fn_key in kept)
-        )
-
-        for fn_key in (function_key(routine) for routine in retyped):
-            old, new = old_last[fn_key], new_last[fn_key]
-
-            # Parameter types changed: need DROP FUNCTION(old_types) in a migration
-            if not self._migration_has_drop(old, migration_files):
-                violations.append(
-                    FunctionSignatureViolation(
-                        function_key=fn_key,
-                        old_signature=printed_signature(old),
-                        new_signature=printed_signature(new),
-                        migration_file=None,
-                        message=(
-                            f"Parameter type change for {fn_key} detected "
-                            f"({printed_arguments(old)} -> {printed_arguments(new)}) "
-                            f"but no DROP FUNCTION {printed_signature(old)} found in migrations."
-                        ),
-                    )
-                )
-
-        return violations
-
-    def _migration_has_drop(self, old: Routine, migration_files: list[Path]) -> bool:
-        """Whether any migration drops *old* — its name and its argument types."""
-        for mig_path in migration_files:
-            try:
-                content = mig_path.read_text()
-            except OSError:
+        for old, new in _retypes(dropped, added):
+            fn_key = function_key(old)
+            if _migration_drops(old, migration_file_paths, sole=len(overloads[fn_key]) == 1):
                 continue
-            for sql in migration_sql(mig_path, content):
-                if _drops(sql, old):
-                    return True
-        return False
+            violations.append(
+                FunctionSignatureViolation(
+                    function_key=fn_key,
+                    old_signature=printed_signature(old),
+                    new_signature=printed_signature(new),
+                    migration_file=None,
+                    message=(
+                        f"Parameter type change for {fn_key} detected "
+                        f"({printed_arguments(old)} -> {printed_arguments(new)}) "
+                        f"but no DROP FUNCTION {printed_signature(old)} found in migrations."
+                    ),
+                )
+            )
+        return violations
 
 
-def _drops(sql: str, routine: Routine) -> bool:
+def _retypes(dropped: list[Routine], added: list[Routine]) -> list[tuple[Routine, Routine]]:
+    """Each lost routine with the routine of its name that took its place.
+
+    The i-th routine a name lost goes with the i-th it gained, or with the last it
+    gained when it gained fewer; a name that gained none was dropped, not retyped.
+    """
+    gained = by_name(added)
+    lost = by_name(dropped)
+    return [
+        (old, gained[fn_key][min(i, len(gained[fn_key]) - 1)])
+        for fn_key, olds in lost.items()
+        if fn_key in gained
+        for i, old in enumerate(olds)
+    ]
+
+
+def _migration_drops(old: Routine, migration_files: list[Path], *, sole: bool) -> bool:
+    """Whether any migration drops *old* — its name and its argument types.
+
+    *sole*: *old* is the one routine of its name the base tree declares, so a
+    ``DROP FUNCTION`` naming no argument list drops it.
+    """
+    for mig_path in migration_files:
+        try:
+            content = mig_path.read_text()
+        except OSError, UnicodeDecodeError:
+            continue
+        for sql in migration_sql(mig_path, content):
+            if _drops(sql, old, sole=sole):
+                return True
+    return False
+
+
+def _drops(sql: str, routine: Routine, *, sole: bool) -> bool:
     """Whether *sql* holds a ``DROP FUNCTION`` / ``PROCEDURE`` / ``ROUTINE`` of *routine*.
 
     A drop that names no argument list drops the one routine of that name, so it
-    counts; a schema the drop leaves off matches any, as PostgreSQL resolves it
+    counts when *routine* is the *sole* one; with two, PostgreSQL refuses it (the
+    name is not unique). A schema the drop leaves off matches any, as PostgreSQL resolves it
     through ``search_path``. A migration pglast rejects drops nothing here; the
     migration's own checks report it.
     """
@@ -179,8 +165,9 @@ def _drops(sql: str, routine: Routine) -> bool:
         and edit.name == routine.name
         and edit.schema in (None, schema)
         and (
-            edit.arg_types is None
-            or signatures_match(signature_from_type_names(edit.arg_types), routine.signature_key)
+            sole
+            if edit.arg_types is None
+            else signatures_match(signature_from_type_names(edit.arg_types), routine.signature_key)
         )
         for raw in statements
         for edit in object_edits(raw.stmt)

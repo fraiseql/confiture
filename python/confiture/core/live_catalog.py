@@ -42,8 +42,9 @@ holds, an introspector what the *database* holds.
 """
 
 import functools
+import re
 from collections import defaultdict
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Concatenate
@@ -66,6 +67,8 @@ from confiture.core.ddl_walk import (
 from confiture.core.ddl_walk import type_name as ddl_type_name
 from confiture.core.schema_identity import DEFAULT_SCHEMA, quote_identifier
 from confiture.core.schema_model import (
+    DEFINED_OTHER_KINDS,
+    TVIEW_OPTIONS,
     TVIEWS_SCHEMA,
     Column,
     Constraint,
@@ -109,6 +112,16 @@ _EXTENSION_OWNED = """
 
 #: Not an object an extension created.
 _NOT_EXTENSION_OWNED = "NOT " + _EXTENSION_OWNED
+
+#: Not a routine PostgreSQL created with another object: a range type's
+#: constructors and its multirange's are recorded as the type's implicit
+#: dependents, made and dropped with it, and no tree declares them.
+_NOT_IMPLICIT_ROUTINE = """
+    NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'i'
+    )
+"""
 
 #: The first object id ``initdb`` does not hand out (PostgreSQL's
 #: ``FirstNormalObjectId``): an object below it — ``plpgsql``, ``pg_catalog``'s
@@ -169,8 +182,8 @@ def _created(catalog: str, oid: str) -> str:
 
 #: Every object of the kinds no typed section holds, by the identity ``ddl_objects``
 #: gives it: ``(kind, schema, name)`` — ``schema`` ``NULL`` for a kind that lives in
-#: no schema, a policy or rule named ``table.name``. Existence only: the definition
-#: each would need is a deparse per kind.
+#: no schema, a policy or rule named ``table.name``. The kinds read whole are read
+#: by :func:`_defined_others`; the rest by existence only.
 _OTHER_OBJECTS = f"""
 SELECT 'schema', NULL, n.nspname FROM pg_namespace n
 WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_namespace", "n.oid")}
@@ -234,12 +247,209 @@ WHERE {_created("pg_am", "a.oid")}
 def _other_objects(
     conn: psycopg.Connection, schemas: Sequence[str]
 ) -> dict[ObjectRef, OtherObject]:
-    """Every object of the kinds no typed section holds, by identity (existence depth)."""
+    """Every object of the kinds no typed section holds: by identity, and whole where it can.
+
+    A domain, a composite or range type, a policy and a rule carry their definition
+    (:data:`DEFINED_OTHER_KINDS`): the statement PostgreSQL's catalog says creates
+    each, read through ``ddl_objects.object_of`` as a tree's statement is. Every
+    other kind is held by existence alone.
+    """
     found = (
         OtherObject(kind, (schema or DEFAULT_SCHEMA).lower(), name.lower())
         for kind, schema, name in conn.execute(_OTHER_OBJECTS, {"schemas": list(schemas)})
     )
-    return {other_ref(obj): obj for obj in found}
+    defined = _defined_others(conn, schemas)
+    return {(ref := other_ref(obj)): replace(obj, definition=defined.get(ref)) for obj in found}
+
+
+def _qualified(schema: str, name: str) -> str:
+    return f"{quote_identifier(schema)}.{quote_identifier(name)}"
+
+
+def _collate(schema: str | None, name: str | None) -> str:
+    """A ``COLLATE`` clause, or nothing when the collation is the type's own."""
+    return "" if name is None else f" COLLATE {_qualified(schema or DEFAULT_SCHEMA, name)}"
+
+
+#: A domain: its base type, a collation other than the base type's, its default,
+#: NOT NULL, and each CHECK by name. PostgreSQL 18 also writes NOT NULL as a
+#: constraint (``contype 'n'``): ``typnotnull`` says it once.
+_DOMAINS = f"""
+SELECT n.nspname, t.typname, format_type(t.typbasetype, t.typtypmod),
+       CASE WHEN t.typcollation NOT IN (0, b.typcollation) THEN cn.nspname END,
+       CASE WHEN t.typcollation NOT IN (0, b.typcollation) THEN co.collname END,
+       pg_get_expr(t.typdefaultbin, 0), t.typnotnull,
+       ARRAY(SELECT k.conname FROM pg_constraint k
+             WHERE k.contypid = t.oid AND k.contype = 'c' ORDER BY k.conname),
+       ARRAY(SELECT pg_get_constraintdef(k.oid) FROM pg_constraint k
+             WHERE k.contypid = t.oid AND k.contype = 'c' ORDER BY k.conname)
+FROM pg_type t
+JOIN pg_namespace n ON n.oid = t.typnamespace
+JOIN pg_type b ON b.oid = t.typbasetype
+LEFT JOIN pg_collation co ON co.oid = t.typcollation
+LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
+WHERE t.typtype = 'd' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+"""
+
+#: A composite type's attributes, in order, each with a collation other than its type's.
+_COMPOSITES = f"""
+SELECT n.nspname, t.typname,
+       ARRAY(SELECT a.attname FROM pg_attribute a
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum),
+       ARRAY(SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum),
+       ARRAY(SELECT cn.nspname FROM pg_attribute a
+             JOIN pg_type at ON at.oid = a.atttypid
+             LEFT JOIN pg_collation co
+               ON co.oid = a.attcollation AND a.attcollation NOT IN (0, at.typcollation)
+             LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum),
+       ARRAY(SELECT co.collname FROM pg_attribute a
+             JOIN pg_type at ON at.oid = a.atttypid
+             LEFT JOIN pg_collation co
+               ON co.oid = a.attcollation AND a.attcollation NOT IN (0, at.typcollation)
+             WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped
+             ORDER BY a.attnum)
+FROM pg_type t
+JOIN pg_namespace n ON n.oid = t.typnamespace
+JOIN pg_class c ON c.oid = t.typrelid AND c.relkind = 'c'
+WHERE t.typtype = 'c' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+"""
+
+#: A range type: each option only where it is not what PostgreSQL would choose —
+#: the subtype's default operator class, its own collation, no functions.
+_RANGES = f"""
+SELECT n.nspname, t.typname, format_type(r.rngsubtype, NULL),
+       CASE WHEN NOT oc.opcdefault THEN ocn.nspname END,
+       CASE WHEN NOT oc.opcdefault THEN oc.opcname END,
+       CASE WHEN r.rngcollation NOT IN (0, st.typcollation) THEN cn.nspname END,
+       CASE WHEN r.rngcollation NOT IN (0, st.typcollation) THEN co.collname END,
+       canon_n.nspname, canon.proname, diff_n.nspname, diff.proname,
+       mn.nspname, m.typname
+FROM pg_range r
+JOIN pg_type t ON t.oid = r.rngtypid
+JOIN pg_namespace n ON n.oid = t.typnamespace
+JOIN pg_type st ON st.oid = r.rngsubtype
+JOIN pg_opclass oc ON oc.oid = r.rngsubopc
+JOIN pg_namespace ocn ON ocn.oid = oc.opcnamespace
+LEFT JOIN pg_collation co ON co.oid = r.rngcollation
+LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace
+LEFT JOIN pg_proc canon ON canon.oid = r.rngcanonical
+LEFT JOIN pg_namespace canon_n ON canon_n.oid = canon.pronamespace
+LEFT JOIN pg_proc diff ON diff.oid = r.rngsubdiff
+LEFT JOIN pg_namespace diff_n ON diff_n.oid = diff.pronamespace
+JOIN pg_type m ON m.oid = r.rngmultitypid
+JOIN pg_namespace mn ON mn.oid = m.typnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+"""
+
+#: A policy: permissive or not, its command, its roles (``0`` is PUBLIC), its two
+#: expressions as the catalog deparses them against its table.
+_POLICIES = f"""
+SELECT n.nspname, c.relname, p.polname, p.polpermissive, p.polcmd,
+       0 = ANY(p.polroles),
+       ARRAY(SELECT r.rolname FROM pg_roles r WHERE r.oid = ANY(p.polroles) ORDER BY r.rolname),
+       pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)
+FROM pg_policy p
+JOIN pg_class c ON c.oid = p.polrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_policy", "p.oid")}
+"""
+
+_RULES = f"""
+SELECT pg_get_ruledef(r.oid)
+FROM pg_rewrite r
+JOIN pg_class c ON c.oid = r.ev_class
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE r.rulename <> '_RETURN' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_rewrite", "r.oid")}
+"""
+
+#: ``polcmd``'s letters, as ``CREATE POLICY … FOR`` spells them.
+_POLICY_COMMANDS = {"*": "ALL", "r": "SELECT", "a": "INSERT", "w": "UPDATE", "d": "DELETE"}
+
+
+def _domain_statement(row: tuple[Any, ...]) -> str:
+    schema, name, base, coll_schema, collation, default, not_null, names, checks = row
+    clauses = [f"CREATE DOMAIN {_qualified(schema, name)} AS {base}"]
+    clauses.append(_collate(coll_schema, collation).strip())
+    if default is not None:
+        clauses.append(f"DEFAULT {default}")
+    if not_null:
+        clauses.append("NOT NULL")
+    for check_name, check in zip(names, checks, strict=True):
+        # A name PostgreSQL made up for an unnamed CHECK is no name, as a table's is.
+        generated = re.fullmatch(rf"{re.escape(name)}_check\d*", check_name)
+        named = "" if generated else f"CONSTRAINT {quote_identifier(check_name)} "
+        clauses.append(named + check.removesuffix(" NOT VALID"))
+    return " ".join(clause for clause in clauses if clause)
+
+
+def _composite_statement(row: tuple[Any, ...]) -> str:
+    schema, name, attributes, types, coll_schemas, collations = row
+    columns = ", ".join(
+        f"{quote_identifier(attribute)} {type_}{_collate(coll_schema, collation)}"
+        for attribute, type_, coll_schema, collation in zip(
+            attributes, types, coll_schemas, collations, strict=True
+        )
+    )
+    return f"CREATE TYPE {_qualified(schema, name)} AS ({columns})"
+
+
+def _default_multirange(name: str) -> str:
+    """The name PostgreSQL gives a range type's multirange when none is written."""
+    at = name.find("range")
+    return f"{name[:at]}multirange{name[at + 5 :]}" if at >= 0 else f"{name}_multirange"
+
+
+def _range_statement(row: tuple[Any, ...]) -> str:
+    (schema, name, subtype, opc_schema, opclass, coll_schema, collation, canon_schema,
+     canonical, diff_schema, diff, multi_schema, multirange) = row  # fmt: skip
+    options = [f"SUBTYPE = {subtype}"]
+    if opclass is not None:
+        options.append(f"SUBTYPE_OPCLASS = {_qualified(opc_schema, opclass)}")
+    if collation is not None:
+        options.append(f"COLLATION = {_qualified(coll_schema, collation)}")
+    if canonical is not None:
+        options.append(f"CANONICAL = {_qualified(canon_schema, canonical)}")
+    if diff is not None:
+        options.append(f"SUBTYPE_DIFF = {_qualified(diff_schema, diff)}")
+    if (multi_schema, multirange) != (schema, _default_multirange(name)):
+        options.append(f"MULTIRANGE_TYPE_NAME = {_qualified(multi_schema, multirange)}")
+    return f"CREATE TYPE {_qualified(schema, name)} AS RANGE ({', '.join(options)})"
+
+
+def _policy_statement(row: tuple[Any, ...]) -> str:
+    schema, table, name, permissive, command, public, roles, using, check = row
+    grantees = (["PUBLIC"] if public else []) + [quote_identifier(role) for role in roles]
+    text = (
+        f"CREATE POLICY {quote_identifier(name)} ON {_qualified(schema, table)}"
+        f" AS {'PERMISSIVE' if permissive else 'RESTRICTIVE'}"
+        f" FOR {_POLICY_COMMANDS[command]} TO {', '.join(grantees)}"
+    )
+    if using is not None:
+        text += f" USING ({using})"
+    if check is not None:
+        text += f" WITH CHECK ({check})"
+    return text
+
+
+def _defined_others(conn: psycopg.Connection, schemas: Sequence[str]) -> dict[ObjectRef, str]:
+    """Each object of :data:`DEFINED_OTHER_KINDS` in *schemas*, as ``object_of`` defines it."""
+    wanted = {"schemas": list(schemas)}
+    texts = [_domain_statement(row) for row in conn.execute(_DOMAINS, wanted)]
+    texts += [_composite_statement(row) for row in conn.execute(_COMPOSITES, wanted)]
+    texts += [_range_statement(row) for row in conn.execute(_RANGES, wanted)]
+    texts += [_policy_statement(row) for row in conn.execute(_POLICIES, wanted)]
+    texts += [row[0] for row in conn.execute(_RULES, wanted)]
+    defined: dict[ObjectRef, str] = {}
+    for text in texts:
+        obj = object_of(text, pglast.parse_sql(text)[0])
+        if obj is not None:
+            defined[obj.ref] = obj.definition
+    return defined
 
 
 #: The ``relkind`` letters of a table, partitioned or not.
@@ -308,6 +518,8 @@ _VALID = "(i.indisvalid AND i.indisready) OR ic.relkind = 'I'"
 
 #: An index attached to a partitioned table's index (``pg_inherits``) is that
 #: index's, as a cloned constraint is: the tree declares it once, on the parent.
+#: The last column is pg_tviews' test of a TVIEW's user index: no constraint at all
+#: uses the index — a foreign key elsewhere that references it included.
 _INDEXES = f"""
 SELECT
     i.indrelid,
@@ -317,7 +529,8 @@ SELECT
         WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid
           AND k.contype IN ('p', 'u', 'x')
     ),
-    {_VALID}
+    {_VALID},
+    EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid)
 FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 WHERE i.indrelid = ANY(%s)
@@ -417,7 +630,8 @@ def _with_primary_keys(columns: list[Column], constraints: list[Constraint]) -> 
 
 def _tables(
     conn: psycopg.Connection, schemas: list[str], kinds: Sequence[str]
-) -> dict[ObjectRef, Table]:
+) -> tuple[dict[ObjectRef, Table], dict[ObjectRef, frozenset[str]]]:
+    """The tables of *kinds* in *schemas*, and the names of each one's indexes a constraint uses."""
     relations = conn.execute(_RELATIONS, (list(kinds), schemas)).fetchall()
     oids = [oid for oid, _schema, _name in relations]
     rows: dict[int, list[tuple[Any, ...]]] = defaultdict(list)
@@ -431,8 +645,12 @@ def _tables(
         if read is not None:
             constraints[relid].append(read)
     indexes: dict[int, list[tuple[Any, bool, bool]]] = defaultdict(list)
-    for relid, definition, backs, valid in conn.execute(_INDEXES, (oids,)).fetchall():
-        indexes[relid].append((pglast.parse_sql(definition)[0].stmt, bool(backs), bool(valid)))
+    used: dict[int, set[str]] = defaultdict(set)
+    for relid, definition, backs, valid, constrained in conn.execute(_INDEXES, (oids,)).fetchall():
+        stmt: Any = pglast.parse_sql(definition)[0].stmt
+        indexes[relid].append((stmt, bool(backs), bool(valid)))
+        if constrained:
+            used[relid].add(stmt.idxname)
 
     tables: dict[ObjectRef, Table] = {}
     for oid, schema, name in relations:
@@ -455,7 +673,32 @@ def _tables(
             constraints=tuple(constraints[oid]),
             indexes=tuple(index_models),
         )
-    return tables
+    constrained = {
+        ref_for("table", schema, name): frozenset(used[oid]) for oid, schema, name in relations
+    }
+    return tables, constrained
+
+
+def _with_indexes(
+    tview: TView,
+    managed: frozenset[str],
+    table: Table | None,
+    constrained: frozenset[str],
+) -> TView:
+    """*tview* holding the indexes on its table, as pg_tviews tells them apart.
+
+    pg_tviews' own are those ``tviews.registry.managed_indexes`` names; the user's
+    are every other one no constraint uses. Its table not read, they are not read.
+    """
+    if table is None:
+        return replace(tview, indexes=None)
+    return replace(
+        tview,
+        indexes=tuple(
+            i for i in table.indexes if i.name not in managed and i.name not in constrained
+        ),
+        managed_indexes=tuple(i for i in table.indexes if i.name in managed),
+    )
 
 
 @reads_under_one_path
@@ -477,8 +720,9 @@ def read(
     ``introspect`` reads ``('r',)``, the plugin's snapshot :data:`TABLE_LIKE`.
 
     *other_objects* reads every object of the kinds no typed section holds — a
-    schema, an extension, a domain, a policy, … — that they exist, not what they
-    are (``Coverage`` says ``existence``).
+    schema, an extension, a domain, a policy, … — that they exist (``Coverage``
+    says ``existence``), and, for a domain, a composite or range type, a policy
+    and a rule, what they are (``OtherObject.definition``, #708).
 
     *routines*, *views* and *triggers* read those too — each a query, and a
     view's a deparse per view — for the callers that compare them. An
@@ -518,7 +762,7 @@ def read(
                 routine = routine_of(row)
                 routine_models[routine_ref(routine)].append(routine)
     registered = _tviews(conn, wanted)
-    parts = {oid for _tview, oid in registered}
+    parts = {oid for _tview, oid, _managed in registered}
     view_models = (
         {
             view_ref(view): view
@@ -527,10 +771,19 @@ def read(
         if views
         else {}
     )
-    tview_models = {tview_ref(tview): tview for tview, _oid in registered}
+    read_tables, constrained = _tables(conn, wanted, kinds)
+    tview_models = {
+        tview_ref(tview): _with_indexes(
+            tview,
+            managed,
+            read_tables.get(ref := ref_for("table", tview.schema, tview.name)),
+            constrained.get(ref, frozenset()),
+        )
+        for tview, _oid, managed in registered
+    }
     tables = {
         ref: table
-        for ref, table in _tables(conn, wanted, kinds).items()
+        for ref, table in read_tables.items()
         if ref_for("tview", ref.schema, ref.name) not in tview_models
     }
     return SchemaModel(
@@ -574,6 +827,7 @@ SELECT EXISTS (
 """
 
 _SCHEMA_EXISTS = "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = %s)"
+
 
 _COLUMNS_OF = f"""
 SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
@@ -889,28 +1143,23 @@ _PG_TVIEWS = "SELECT extversion FROM pg_extension WHERE extname = 'pg_tviews'"
 
 #: The read contract confiture reads: ``tviews.registry``, its ``options`` keys, and
 #: what ``pg_tviews_create_or_replace()`` takes and returns. pg_tviews bumps
-#: ``tviews.contract_version()`` on any change a reader could misread.
-CONTRACT_VERSION = 1
+#: ``tviews.contract_version()`` on any change a reader could misread; contract 2
+#: (pg_tviews ADR 0211) moved every policy column into ``options`` and made the
+#: options a call passes the whole declaration.
+CONTRACT_VERSION = 2
 
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-#: The first pg_tviews whose registry holds every column confiture reads.
-MINIMUM_PG_TVIEWS = "0.1.0-beta.26"
+#: The first pg_tviews release that offers :data:`CONTRACT_VERSION`.
+MINIMUM_PG_TVIEWS = "0.1.0-beta.30"
 
-#: The registry columns pg_tviews appended under contract 1 that confiture reads:
-#: ``view``, the backing view in pg_tviews' own schema, and ``uncascaded_policy``,
-#: stored beside ``options`` (0.1.0-beta.25, fraiseql/pg_tviews#181);
-#: ``function_reads`` and ``time_refresh`` (0.1.0-beta.26, fraiseql/pg_tviews#193), and
-#: ``uncascaded_table_policies``, the ``uncascaded_tables`` option (0.1.0-beta.26,
-#: fraiseql/pg_tviews#195). A build without one is refused, not read as a TVIEW that
-#: declares nothing.
-REGISTRY_COLUMNS = (
-    "view",
-    "uncascaded_policy",
-    "function_reads",
-    "time_refresh",
-    "uncascaded_table_policies",
-)
+#: The registry columns confiture reads: ``options`` holds every option, defaults
+#: filled; ``view`` is the backing view in pg_tviews' own schema; ``managed_indexes``
+#: the indexes pg_tviews created on the TVIEW's table, which tells them from the
+#: user's. A contract grows by appended columns, so a build without one is refused,
+#: not read as a TVIEW that declares nothing — whatever version it reports: the
+#: column is the gate.
+REGISTRY_COLUMNS = ("schema", "name", "query", "options", "view", "managed_indexes")
 
 _REGISTRY_COLUMNS_HELD = """
 SELECT attname::text FROM pg_attribute
@@ -958,6 +1207,7 @@ JOIN pg_language l ON l.oid = p.prolang
 LEFT JOIN pg_description d ON d.objoid = p.oid AND d.classoid = 'pg_proc'::regclass
 WHERE n.nspname = ANY(%s)
   AND p.prokind = ANY(%s)
+  AND {_NOT_IMPLICIT_ROUTINE}
   {{filters}}
 ORDER BY n.nspname, p.proname, p.oid
 """
@@ -1043,7 +1293,7 @@ def _views(
     on: dict[int, list[Index]] = defaultdict(list)
     matviews = {oid: RelationName(schema, name) for oid, schema, name, mat, *_ in rows if mat}
     if indexes and matviews:
-        for relid, definition, _backs, valid in conn.execute(
+        for relid, definition, _backs, valid, _constrained in conn.execute(
             _INDEXES, (list(matviews),)
         ).fetchall():
             stmt = pglast.parse_sql(definition)[0].stmt
@@ -1062,8 +1312,12 @@ def _views(
 
 @reads_under_one_path
 def tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TView]:
-    """Every pg_tviews TVIEW in *schemas*; none where the extension is not installed."""
-    return [tview for tview, _view_oid in _tviews(conn, schemas)]
+    """Every pg_tviews TVIEW in *schemas*; none where the extension is not installed.
+
+    The registry alone is read: a TVIEW's indexes are not (``indexes`` is ``None``),
+    since they are on its table, which :func:`read` reads.
+    """
+    return [replace(tview, indexes=None) for tview, _view_oid, _managed in _tviews(conn, schemas)]
 
 
 def require_supported_pg_tviews(
@@ -1074,8 +1328,8 @@ def require_supported_pg_tviews(
     *contract* is what ``tviews.contract_version()`` answers, ``None`` where the
     function does not exist: pg_tviews 0.1.0-beta.19 and earlier, which kept
     their objects wherever ``search_path`` put them. *missing* are the
-    :data:`REGISTRY_COLUMNS` its registry lacks: contract 1 grows by appended
-    columns, so a release before :data:`MINIMUM_PG_TVIEWS` offers it without them.
+    :data:`REGISTRY_COLUMNS` its registry lacks: a contract grows by appended
+    columns, so a build of it may lack one.
 
     Raises:
         ConfigurationError: ``CONFIG_014``, naming the installed release and what it lacks.
@@ -1096,8 +1350,8 @@ def require_supported_pg_tviews(
     if contract is None:
         raise ConfigurationError(
             f"pg_tviews {release} has no read contract (tviews.contract_version()); "
-            f"confiture reads contract {CONTRACT_VERSION}, which pg_tviews 0.1.0-beta.20 "
-            "and later offer.",
+            f"confiture reads contract {CONTRACT_VERSION}, which pg_tviews "
+            f"{MINIMUM_PG_TVIEWS} and later offer.",
             error_code="CONFIG_014",
             resolution_hint=(
                 "Upgrade the server's pg_tviews. An extension created by 0.1.0-beta.19 or "
@@ -1105,14 +1359,22 @@ def require_supported_pg_tviews(
                 "not ALTER EXTENSION UPDATE"
             ),
         )
+    if contract < CONTRACT_VERSION:
+        hint = (
+            f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later: "
+            "ALTER EXTENSION pg_tviews UPDATE, then "
+            "SELECT * FROM tviews.pg_tviews_reregister_all()"
+        )
+    else:
+        hint = (
+            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
+            f"contract {CONTRACT_VERSION}"
+        )
     raise ConfigurationError(
         f"pg_tviews {release} offers read contract {contract}; "
         f"confiture reads contract {CONTRACT_VERSION}.",
         error_code="CONFIG_014",
-        resolution_hint=(
-            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
-            f"contract {CONTRACT_VERSION}"
-        ),
+        resolution_hint=hint,
     )
 
 
@@ -1145,51 +1407,55 @@ def _require_readable(conn: psycopg.Connection, installed: str | None) -> None:
     require_supported_pg_tviews(installed, contract, missing)
 
 
-def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int | None]]:
+def _tviews(
+    conn: psycopg.Connection, schemas: Sequence[str]
+) -> list[tuple[TView, int | None, frozenset[str]]]:
     installed = conn.execute(_PG_TVIEWS).fetchone()
     if installed is None:
         return []
     _require_readable(conn, installed[0])
-    # Each registered TVIEW: its relation, the query pg_tviews holds, the storage
-    # options it reads from the catalog, what it declares of its reads, and its
-    # backing view's oid — in pg_tviews' own schema, so a ``v_<entity>`` view
-    # beside the table is the tree's — ``NULL`` once that view is gone.
+    # Each registered TVIEW as the registry writes it, read by name; its backing
+    # view's oid — in pg_tviews' own schema, so a ``v_<entity>`` view beside the
+    # table is the tree's — ``NULL`` once that view is gone, and the names of the
+    # indexes pg_tviews created on its table (``NULL`` once it is gone).
     query = t"""
-        SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
-               r.uncascaded_policy, r.time_refresh, r.function_reads,
-               r.uncascaded_table_policies, r.view::oid::bigint
+        SELECT to_jsonb(r), r.view::oid::bigint,
+               COALESCE(ARRAY(
+                   SELECT c.relname::text FROM unnest(r.managed_indexes) m
+                   JOIN pg_class c ON c.oid = m
+               ), '{{}}')
         FROM {TVIEWS_SCHEMA:i}.registry r
         WHERE r.schema = ANY({list(schemas)})
         ORDER BY r.schema, r.name
         """
     return [
-        (
-            TView(
-                name=name,
-                schema=schema,
-                definition=rendered_query(definition),
-                logged=logged,
-                fillfactor=fillfactor,
-                uncascaded_policy=policy,
-                time_refresh=time_refresh,
-                function_reads=function_reads(reads),
-                uncascaded_tables=uncascaded_tables(table_policies or {}),
-            ),
-            view_oid,
-        )
-        for (
-            schema,
-            name,
-            definition,
-            logged,
-            fillfactor,
-            policy,
-            time_refresh,
-            reads,
-            table_policies,
-            view_oid,
-        ) in conn.execute(query).fetchall()
+        (registry_tview(row), view_oid, frozenset(managed))
+        for row, view_oid, managed in conn.execute(query).fetchall()
     ]
+
+
+def registry_tview(row: Mapping[str, Any]) -> TView:
+    """A ``tviews.registry`` row, as ``to_jsonb`` writes it, as the model's :class:`TView`.
+
+    Contract 2 holds every option in ``options``, each key set, its default
+    filled. A column this reader does not know is ignored: pg_tviews adds them
+    without bumping the contract. Every option the model does not compare is
+    carried in ``other_options``, so the call written from this side passes back
+    what the database holds: the contract's round trip.
+    """
+    options = row["options"]
+    return TView(
+        name=row["name"],
+        schema=row["schema"],
+        definition=rendered_query(row["query"]),
+        logged=options["logged"],
+        fillfactor=options["fillfactor"],
+        uncascaded_policy=options["uncascaded_policy"],
+        time_refresh=options["time_refresh"],
+        function_reads=function_reads(options["function_reads"]),
+        uncascaded_tables=uncascaded_tables(options["uncascaded_tables"]),
+        other_options={k: v for k, v in options.items() if k not in TVIEW_OPTIONS},
+    )
 
 
 @reads_under_one_path
@@ -1334,6 +1600,7 @@ JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = ANY(%s)
   AND p.prokind IN ('f', 'p', 'w')
   AND {_NOT_EXTENSION_OWNED.format(catalog="pg_proc", oid="p.oid")}
+  AND {_NOT_IMPLICIT_ROUTINE}
 ORDER BY n.nspname, p.proname, p.oid
 """
 
@@ -1345,6 +1612,8 @@ def _view_statement(view: View) -> str:
 
 
 def _other_statement(obj: OtherObject) -> str | None:
+    if obj.kind in DEFINED_OTHER_KINDS:
+        return obj.definition
     if obj.kind == "schema":
         return f"CREATE SCHEMA {quote_identifier(obj.name)}"
     if obj.kind == "extension":
@@ -1361,7 +1630,8 @@ def catalogued_objects(
     *model* is :func:`read`'s, of *schemas*. A routine is ``pg_get_functiondef``'s,
     a trigger ``pg_get_triggerdef``'s, a view its ``pg_get_viewdef`` behind the
     ``CREATE`` that names it, a TVIEW the call pg_tviews creates one with, a
-    schema or an extension its name — read through ``ddl_objects.object_of``, as a
+    schema or an extension its name, a domain, a type, a policy or a rule the
+    definition :func:`read` gave it — read through ``ddl_objects.object_of``, as a
     tree's statements are, so a change can carry the statement that undoes it.
     Every other object kind the model holds by existence alone, and has no entry.
     """

@@ -1,0 +1,40 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tb_author",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tb_post",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TVIEW",
+        "details": "ADD TABLE tv_post",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 3,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": [],
+    "ok": true,
+    "command": "migrate diff",
+    "parser": {
+      "pglast": "8.7",
+      "pg_major": 18
+    }
+  }
+}

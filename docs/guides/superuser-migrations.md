@@ -109,7 +109,7 @@ confiture migrate apply-as postgres 20260528160002 \
 - Loads exactly the named version from `--migrations-dir`.
 - Refuses if the version doesn't exist or is already applied (exit `2`).
 - Runs `apply()` with `applied_by=<role>` so the `tb_confiture` row records who applied it.
-- Returns exit `0` on success, `3` on SQL failure, `2` on configuration error.
+- Returns exit `0` on success, `1` on SQL failure, `2` on configuration error.
 
 ### Config block
 

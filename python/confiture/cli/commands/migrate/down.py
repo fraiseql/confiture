@@ -55,7 +55,7 @@ def migrate_down(
         1,
         "--steps",
         "-n",
-        help="Number of migrations to rollback (default: 1)",
+        help="Number of migrations to rollback",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -79,8 +79,10 @@ def migrate_down(
     """Rollback previously applied migrations.
 
     PROCESS:
-      Rolls back the last N applied migrations (default: 1), reverting schema
-      changes. Use --dry-run to analyze without executing.
+      Rolls back the last N applied migrations, reverting schema
+      changes. Use --dry-run to analyze without executing. If any of them has
+      no usable down (no .down.sql, or a Python down() that does nothing), it
+      refuses before rolling anything back: exit 8 (ROLLBACK_600).
 
     EXAMPLES:
       confiture migrate down
@@ -102,7 +104,7 @@ def migrate_down(
 
     OPTIONS:
       CORE: --steps
-        How many migrations to rollback (default: 1)
+        How many migrations to rollback
 
       DRY-RUN: --dry-run, --verbose, --format, --output
         Analyze rollback without executing, with detailed reports
@@ -199,16 +201,16 @@ def migrate_down_to(
 
     The absolute counterpart to ``migrate down --steps N``: instead of a
     relative count, name the revision to return to. Confiture computes the
-    rollback set, validates that every required ``.down.sql`` exists *before*
+    rollback set, validates that every migration in it has a usable down (a
+    ``.down.sql``, or a Python ``down()`` that does something) *before*
     touching the database, and rolls back newest→oldest under the migration
-    lock. If any required ``.down.sql`` is missing, it refuses atomically —
-    nothing is rolled back.
+    lock. If any has none, it refuses atomically — nothing is rolled back.
 
     EDGE CASES:
       <revision> == current      → no-op, exit 0 ("already at <revision>")
-      <revision> newer than current → exit 3 ("use 'migrate up --target'")
-      <revision> unknown         → exit 3 ("unknown revision")
-      any required .down.sql missing → exit 8, nothing applied (ROLLBACK_600)
+      <revision> newer than current → exit 1 ("use 'migrate up --target'")
+      <revision> unknown         → exit 1 ("unknown revision")
+      a required down missing or empty → exit 8, nothing applied (ROLLBACK_600)
 
     OUTPUT (--format json): {from, to, rolled_back, skipped, errors}
 

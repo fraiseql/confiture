@@ -33,6 +33,7 @@ import pglast.parser
 
 from confiture.config.environment import OwnershipExpectation
 from confiture.core import sql_lexer
+from confiture.core._migrator.discovery import discover_migration_files
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
@@ -58,6 +59,15 @@ _RELKIND_TO_CREATE_LABEL: dict[str, str] = {
     "m": "materialized view",
     "S": "sequence",
 }
+
+
+def sql_migrations(migrations_dir: Path) -> list[Path]:
+    """The ``.up.sql`` migrations ``migrate up`` runs from *migrations_dir* (#715).
+
+    Listed as the runner lists them: a file nested below the directory is never
+    applied, so it is neither linted nor fixed.
+    """
+    return [f for f in discover_migration_files(migrations_dir) if f.name.endswith(".up.sql")]
 
 
 @dataclass(frozen=True)
@@ -124,7 +134,7 @@ class Own001OwnershipCoverage:
         if not migrations_dir.exists():
             return []
         violations: list[LintViolation] = []
-        for migration in sorted(migrations_dir.rglob("*.up.sql")):
+        for migration in sql_migrations(migrations_dir):
             try:
                 violations.extend(self._check_file(migration))
             except pglast.parser.ParseError as exc:
@@ -374,7 +384,7 @@ class Own002BareAlterOwner:
         if not migrations_dir.exists():
             return []
         violations: list[LintViolation] = []
-        for migration in sorted(migrations_dir.rglob("*.up.sql")):
+        for migration in sql_migrations(migrations_dir):
             try:
                 violations.extend(self._check_file(migration))
             except pglast.parser.ParseError as exc:

@@ -30,12 +30,16 @@ or pass `--scratch-url` to `confiture drift` or `confiture migrate diff --from d
 wins over the key). `migrate validate --check-live-drift` reads the key as well. The scratch
 server is never the environment's own `database_url`, and it does not have to be the server
 the database runs on: a read-only production replica is compared at the materialised tier
-from a CI or local server. The scratch database is dropped when the comparison ends, whatever
+from a CI or local server. The scratch database is a copy of `template0`, so nothing the server
+keeps in `template1` answers for the tree, and it is dropped when the comparison ends, whatever
 happens.
 
 The scratch server must be able to build the tree: the extensions it creates must be
 installed there, and a tree with pg_tviews TVIEWs needs a pg_tviews confiture reads
-(`CONFIG_014` otherwise). A tree the scratch server cannot build is an error, never a quiet
+(`CONFIG_014` otherwise). A tree that declares TVIEWs without running `CREATE EXTENSION
+pg_tviews` itself gets the extension created in the scratch database first, since a
+`CREATE TABLE tv_x AS` built without it is a plain table; a scratch server that does not
+offer pg_tviews refuses such a tree with `CONFIG_014`. A tree the scratch server cannot build is an error, never a quiet
 fall back to the structural tier.
 
 Use a scratch server of the database's PostgreSQL major version. Both sides are compared as
@@ -63,13 +67,41 @@ missing, extra, changed or INVALID is an index change on the matview, never a re
 of it. A matview that is created, dropped or redefined carries its indexes: `migrate diff`
 writes them right after the `CREATE MATERIALIZED VIEW`, plain and `IF NOT EXISTS`.
 
+A pg_tviews TVIEW's indexes are compared as a table's are, at every tier, and never as a
+redefinition of the TVIEW. Read from a database, they are the user's: every index on the
+TVIEW's table but pg_tviews' own (`tviews.registry.managed_indexes`) and those a
+constraint uses. Between a tree and a database (the structural and materialised tiers),
+a tree index under the name of one of pg_tviews' own is that index when it is the same
+index, as the tier compares it — pg_tviews adopted the tree's statement — and leaves the
+comparison; when it is another index, pg_tviews skipped it, and the comparison refuses
+with `DIFFER_410`. Between two trees or two databases there is no such step: each side
+is compared as it stands.
+
 No tier compares a generated column's expression: no change says how one changed.
+
+A domain, a composite or range type, a policy and a rule are read from a database **whole**:
+the catalog's statement for each, read as a tree's is (#708). At the structural tier such an
+object is compared by what it is — a domain's base type, collation, NOT NULL and set of CHECKs,
+a composite type's attributes, a range's subtype and options, a policy's command, roles and
+mode, a rule's event — and an expression in it (a CHECK, a DEFAULT, a policy's USING or WITH
+CHECK, a rule's condition and action) only for presence, as a table's CHECK is. At the
+materialised tier everything PostgreSQL stores is compared. `migrate diff --generate` writes no
+SQL for a redefinition of one: a domain's constraints are altered one at a time, and the
+migration says so for you to write.
+
+An aggregate and every other kind no typed section holds are read from a database **by
+existence alone**: the catalog says one exists, not how it is made. At every tier such an
+object is compared by existence, and one the tree adds is created, in a migration
+`migrate diff --generate` writes, with the tree's own statement. One the database holds and
+the tree does not declare is a `DIFFER_404` warning: the diff has no statement to drop it with.
 
 ## What drift reports at each tier
 
 The drift kinds and severities are the same at every tier; the materialised tier reports
 more of them.
 
+- A redefined domain, composite or range type, policy or rule is `object_definition_mismatch`
+  (warning). At the structural tier, the text of an expression in it is not compared.
 - A changed CHECK is `constraint_mismatch` (critical) when PostgreSQL gave it one name on
   both sides, as it does for an unnamed CHECK built from one statement, and
   `missing_constraint` plus `extra_constraint` otherwise. At the structural tier, the
@@ -78,14 +110,18 @@ more of them.
   `extra_index`.
 - An index on a materialized view is reported as an index on a table is: `missing_index`
   (critical when it is unique: a matview holds no constraints, so that index is its only
-  uniqueness guarantee) or `extra_index`. One limit: at the materialised tier, a matview
-  whose query also changed is one redefinition, which drift does not report, so its index
-  differences go unreported with it. `migrate diff` still writes the recreate with every
-  index.
-- A view whose query changed is not a drift item at any tier: drift reports that a view
-  exists (`missing_view`, `extra_view`). Compare view bodies with `migrate validate
-  --check-body-views`, or ask `migrate diff --from db` with a scratch server, which writes
-  the `CREATE OR REPLACE VIEW`.
+  uniqueness guarantee) or `extra_index`. At the materialised tier, a matview whose query
+  also changed is one redefinition, which `migrate diff` writes as a recreate with every
+  index; drift still reports its index differences, as for any matview.
+- An index on a TVIEW is reported as an index on a table is (`missing_index`, critical
+  when it is unique; `extra_index`); pg_tviews' own indexes never are.
+- A view's or a materialized view's query that changed is `view_definition_mismatch`
+  (warning) at the materialised tier, where both queries are PostgreSQL's deparse.
+  `expected` and `actual` are the two queries' hashes, the `source_hash` and `db_hash`
+  `migrate validate --check-body-views` reports; its `--show-diff` prints both queries.
+  A matview whose query changed is reported with its index differences beside it. At the
+  structural tier a view's query is not compared, so drift reports only that a view
+  exists (`missing_view`, `extra_view`, `missing_matview`, `extra_matview`).
 - A finding names an object the way the tree side spells it. At the materialised tier that
   side is PostgreSQL's reading of the tree, so every name is schema-qualified
   (`public.tv_post`).

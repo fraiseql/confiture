@@ -97,3 +97,25 @@ def test_a_matview_index_change_writes_its_relation_kind() -> None:
     change_schema = Draft202012Validator(schema["properties"]["changes"]["items"])
     for change in DiffResult.from_schema_diff(diff).to_dict()["changes"]:
         change_schema.validate(change)
+
+
+def test_a_tview_index_change_writes_its_relation_kind() -> None:
+    """``details.relation_kind`` names a TVIEW, and the published schema accepts it."""
+    import json
+
+    from jsonschema import Draft202012Validator
+
+    from confiture.models.results import DiffResult
+
+    tree = "CREATE TABLE t (id INT);\nCREATE TABLE tv_t AS SELECT id FROM t;\n"
+    diff = SchemaDiffer().compare(tree, tree + "CREATE INDEX ix_tv_t ON tv_t (id);\n")
+    (change,) = diff.changes
+    assert change.to_wire().details["relation_kind"] == "tview"
+    schema_file = Path(confiture.__file__).parent / "schemas" / "diff.schema.json"
+    schema = json.loads(schema_file.read_text())
+    assert (
+        "tview" in schema["properties"]["changes"]["items"]["properties"]["details"]["description"]
+    )
+    change_schema = Draft202012Validator(schema["properties"]["changes"]["items"])
+    for wired in DiffResult.from_schema_diff(diff).to_dict()["changes"]:
+        change_schema.validate(wired)

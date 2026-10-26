@@ -530,9 +530,10 @@ class TestPlainCreates:
         assert "CREATE TABLE IF NOT EXISTS gone" in down
         assert "confiture:creates" not in down
 
-    def test_no_directive_when_the_renderer_writes_a_warning(self, tmp_path):
+    def test_a_replace_with_no_statement_is_refused_before_any_file(self, tmp_path):
         from confiture.core.ddl_objects import DDLObject
         from confiture.core.schema_change import ObjectReplaced
+        from confiture.exceptions import DifferError
         from tests.unit._schema_changes import ref
 
         old = DDLObject(
@@ -542,14 +543,12 @@ class TestPlainCreates:
         )
         empty = DDLObject(ref=ref("matview", "mv"), definition="", create_sql="")
         diff = SchemaDiff(changes=[ObjectReplaced(old.ref, old, empty)])
-        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
-            diff, name="m", version="20260101000000"
-        )
-        text = up.read_text()
-        assert "-- WARNING: no definition captured" in text
-        assert "confiture:creates" not in text
-        down = up.with_name(up.name.replace(".up.sql", ".down.sql")).read_text()
-        assert _creates_arguments(down) == ["mv"]
+        with pytest.raises(DifferError) as refused:
+            MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+                diff, name="m", version="20260101000000"
+            )
+        assert refused.value.error_code == "DIFFER_409"
+        assert list(tmp_path.iterdir()) == []
 
     def test_a_generated_pair_and_py_have_no_create_table_violation(self, tmp_path):
         from confiture.core.idempotency.validator import IdempotencyValidator
@@ -567,3 +566,32 @@ class TestPlainCreates:
         fixer = IdempotencyFixer(fix_patterns=[IdempotencyPattern.CREATE_TABLE])
         assert fixer.fix(up) == up
         assert fixer.fix(down) == down
+
+
+def test_a_file_with_a_tview_replace_and_its_index_pair_runs_in_autocommit(tmp_path):
+    """The index pair straddles ``pg_tviews_create_or_replace()``: the drop before, the add
+    after, ``CONCURRENTLY``; the down drops the new one, replaces back, re-creates the old."""
+    import pglast
+
+    from confiture.core.differ import SchemaDiffer
+    from confiture.models.sql_file_migration import _detect_transactional
+
+    base = "CREATE TABLE t (id int, n int);\n"
+    old = base + "CREATE TABLE tv_a AS SELECT id FROM t;\nCREATE INDEX ix_tv_a ON tv_a (id);\n"
+    new = base + "CREATE TABLE tv_a AS SELECT id, n FROM t;\nCREATE INDEX ix_tv_a ON tv_a (n);\n"
+    up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+        SchemaDiffer().compare(old, new), name="tviews", version="20260101000000"
+    )
+    down = up.with_name(up.name.replace(".up.sql", ".down.sql"))
+
+    def shapes(path):
+        return [
+            (type(s).__name__, getattr(s, "concurrent", None))
+            for s in (raw.stmt for raw in pglast.parse_sql(path.read_text()))
+        ]
+
+    assert shapes(up) == [("DropStmt", True), ("SelectStmt", None), ("IndexStmt", True)]
+    assert shapes(down) == [("DropStmt", True), ("SelectStmt", None), ("IndexStmt", True)]
+    assert "(n)" in up.read_text().split("pg_tviews_create_or_replace")[1]
+    assert "(id)" in down.read_text().split("pg_tviews_create_or_replace")[1]
+    assert _detect_transactional(up) is False

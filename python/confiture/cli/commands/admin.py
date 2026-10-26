@@ -556,7 +556,7 @@ def validate_config(
     migrations_path: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-path",
-        help="Migrations directory to validate (default: db/migrations)",
+        help="Migrations directory to validate",
     ),
     output_format: str = format_option("text", "json"),
     strict: bool = typer.Option(
