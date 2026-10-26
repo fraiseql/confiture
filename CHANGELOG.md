@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`diff.exclude` / `--exclude` leave the relations another tool owns out of every comparison**
+  (#767). A runtime that creates its own bookkeeping tables at boot (FraiseQL's `_fraiseql_*`) had
+  each one reported by `migrate diff --from db` as a table to drop, and by `confiture drift` as an
+  extra table. `diff.exclude` in the environment config lists relation patterns — `name` matches
+  the relation in any schema, `schema.name` in that schema only, each part a case-sensitive glob —
+  and a repeatable `--exclude PATTERN` on `migrate diff`, `confiture drift` and
+  `migrate validate --check-live-drift` adds to it. The exclusion is applied once, to both sides
+  `SchemaDiffer.compare_sides` is handed (its new `exclude` keyword): a table, view, materialized
+  view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers,
+  policies and rules. A foreign key that references an excluded relation, or a trigger, policy,
+  rule or index the tree writes on one, is a new `DIFFER_411` warning (exit 0) in `migrate diff`'s
+  `warnings[]` rather than skipped in silence. `confiture seed drift` skips a seeded table the
+  environment's `diff.exclude` names, with the pattern as the reason. No drift kind or severity
+  moved.
+
 ## [1.41.0] - 2026-10-25
 
 ### Added

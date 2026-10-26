@@ -52,6 +52,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "ddl_walk.py": (CRATE, TRANSFORM),
     "destructive.py": (CRATE, TRANSFORM),
     "differ.py": (CRATE, TRANSFORM),
+    "relation_exclusion.py": (CRATE, TRANSFORM),
     "differ_sql.py": (CRATE, TRANSFORM),
     "expand_contract.py": (CRATE, TRANSFORM),
     "fk_extractor.py": (CRATE, TRANSFORM),
