@@ -429,6 +429,7 @@ jobs:
           tests/integration/test_tview_migrate.py \
           tests/integration/test_tview_restore.py \
           tests/integration/test_generated_examples_apply.py \
+          tests/integration/test_generated_migration_meets_views.py \
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
           tests/unit/test_tview_indexes.py \
