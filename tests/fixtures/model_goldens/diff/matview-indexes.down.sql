@@ -1,7 +1,7 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:tier destructive
+-- confiture:tier lock_risky
 DROP MATERIALIZED VIEW IF EXISTS mv_order_total;
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_total AS SELECT customer, sum(total) AS total FROM tb_order GROUP BY customer;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_order_total_customer ON mv_order_total (customer);

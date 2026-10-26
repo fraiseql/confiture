@@ -45,6 +45,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **`migrate diff --generate` passes a column change under the views that read it** (#765).
+  `ALTER COLUMN … TYPE` and `DROP COLUMN` on a column a view reads were written as they are, and
+  PostgreSQL refused them (`cannot alter type of a column used by a view or rule`): in a layout
+  where every table is read through views, nearly every column change. The diff now carries two
+  new changes around such a change: `DependentsDropped` (wire `DROP_DEPENDENTS`) drops every view,
+  materialized view and pg_tviews TVIEW that reads the column, and every view reading one of them,
+  readers first, before any table is edited; `DependentsRecreated` (wire `CREATE_DEPENDENTS`)
+  creates them again from the new tree, each after the ones it reads, with a materialized view's or
+  a TVIEW's indexes and the `GRANT`s, `COMMENT`s and `OWNER TO` the tree writes on them. The down
+  mirrors it with the old tree's definitions. A view holds a column it names, bare or after a range,
+  or every column (`*`, the whole row, `USING`, `NATURAL`); which views read which is the one TVIEW
+  read graph's answer, over each side's own statements. The tier is the replacement the rebuild is:
+  `reversible` for plain views, `lock_risky` when a materialized view or a TVIEW is rebuilt. Drift
+  is unchanged: the diff keeps each rebuilt view's redefinition and index changes, and the generated
+  migration writes the recreate in their place. A column change no view reads generates exactly what
+  it did. A database side carries no grants or comments, so a migration diffed from a live database
+  does not write them again. The `every-change` diff goldens moved (one view added to the fixture).
+- ⚠️ **A view, materialized view or TVIEW dropped and created again in one file is tiered as the
+  replacement it is** (#765). The change-set classifier pairs a `DROP VIEW`, `DROP MATERIALIZED
+  VIEW` or `pg_tviews_drop()` with a later creation of the same kind, by the name as written: the
+  drop takes `replace_view`'s tier (`reversible`) or `replace_materialized_view`'s (`lock_risky`),
+  where it was `destructive`. A `CASCADE` drop is never paired. So a materialized view's redefinition
+  — `DROP` then `CREATE`, which a generated migration has always written — is now `lock_risky`, not
+  `destructive`: a generated migration that redefines one is no longer marked
+  `-- confiture:destructive` under the `gated` policy (the `matview-indexes` goldens' tier lines
+  moved). The same holds for a view whose columns change, which is dropped and created.
 - ⚠️ **`migrate diff --generate` never writes a change the existing rows refuse** (#766). A
   `NOT NULL` column with no default was written as one `ADD COLUMN … NOT NULL`, which fails on any
   table with rows; so did `SET NOT NULL`, an added UNIQUE, primary key or CHECK, and a narrowing

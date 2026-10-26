@@ -75,4 +75,7 @@ CREATE TABLE IF NOT EXISTS ren.tb_orders_history (
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;
 
 -- confiture:tier reversible
+CREATE OR REPLACE VIEW v_sizes AS SELECT id, size FROM things;
+
+-- confiture:tier reversible
 CREATE OR REPLACE VIEW v_things AS SELECT id, code FROM things;

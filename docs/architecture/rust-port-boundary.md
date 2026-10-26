@@ -124,6 +124,7 @@ module moves, not when one grows.
 | `tree_prefix.py` | DDL transform |
 | `tview_preflight.py` | DDL transform |
 | `type_lattice.py` | DDL transform |
+| `view_dependents.py` | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 

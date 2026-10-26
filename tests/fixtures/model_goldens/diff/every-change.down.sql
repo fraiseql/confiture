@@ -1,13 +1,17 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:tier destructive
+-- confiture:tier reversible
 -- review: v_things's columns change (id, code → id), which CREATE OR REPLACE VIEW refuses; it is dropped and created, so its grants and comment go, and a dependent view fails the DROP
 DROP VIEW IF EXISTS v_things;
 CREATE OR REPLACE VIEW v_things AS SELECT id FROM things;
 
 -- confiture:tier destructive
 DROP VIEW IF EXISTS v_added;
+
+-- confiture:tier reversible
+-- Read by a column change PostgreSQL refuses under them: v_sizes
+DROP VIEW IF EXISTS v_sizes;
 
 -- confiture:tier destructive
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_new_ex;
@@ -92,6 +96,9 @@ CREATE TABLE IF NOT EXISTS legacy (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)
 );
+
+-- confiture:tier reversible
+CREATE OR REPLACE VIEW v_sizes AS SELECT id, size FROM things;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one;

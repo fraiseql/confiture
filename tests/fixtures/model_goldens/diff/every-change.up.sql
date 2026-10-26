@@ -5,6 +5,10 @@
 -- confiture:tier destructive
 DROP VIEW IF EXISTS v_retired;
 
+-- confiture:tier reversible
+-- Read by a column change PostgreSQL refuses under them: v_sizes
+DROP VIEW IF EXISTS v_sizes;
+
 -- confiture:irreversible data
 -- confiture:tier irreversible
 DROP TABLE legacy;
@@ -106,6 +110,9 @@ ALTER TABLE things ADD CONSTRAINT things_new_uq UNIQUE (code, qty);
 
 -- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_new_ex EXCLUDE USING gist (span WITH &&) WHERE (qty > 0);
+
+-- confiture:tier reversible
+CREATE OR REPLACE VIEW v_sizes AS SELECT id, size FROM things;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;

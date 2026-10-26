@@ -48,6 +48,9 @@ from confiture.core.schema_change import (
     ColumnRenamed,
     ColumnTypeChanged,
     DefinitionChange,
+    Dependent,
+    DependentsDropped,
+    DependentsRecreated,
     EnumOrSequenceChange,
     EnumTypeAdded,
     EnumTypeDropped,
@@ -63,6 +66,7 @@ from confiture.core.schema_change import (
     ObjectReplaced,
     PrimaryKeyAdded,
     PrimaryKeyDropped,
+    RebuildChange,
     SchemaChange,
     SequenceAdded,
     SequenceDropped,
@@ -804,6 +808,8 @@ class DifferSQLGenerator:
                 return _enum_or_sequence_up(change)
             case ObjectAdded() | ObjectDropped() | ObjectReplaced():
                 return _definition_up(change)
+            case DependentsDropped() | DependentsRecreated():
+                return _rebuild_up(change)
             case _:
                 assert_never(change)
 
@@ -848,8 +854,48 @@ class DifferSQLGenerator:
                 return _enum_or_sequence_down(change)
             case ObjectAdded() | ObjectDropped() | ObjectReplaced():
                 return _definition_down(change)
+            case DependentsDropped() | DependentsRecreated():
+                return _rebuild_down(change)
             case _:
                 assert_never(change)
+
+
+def _dropping_dependents(dependents: tuple[Dependent, ...], change: RebuildChange) -> str:
+    """Each dependent dropped, the ones reading the others first."""
+    names = ", ".join(d.ref.qualified for d in dependents)
+    return _comment(f"Read by a column change PostgreSQL refuses under them: {names}") + "".join(
+        _dropping(d.obj, change) for d in reversed(dependents)
+    )
+
+
+def _creating_dependents(dependents: tuple[Dependent, ...], change: RebuildChange) -> str:
+    """Each dependent created, after the ones it reads, with its indexes and what it carried."""
+    return "".join(
+        _creating(d.obj, change) + _carried_indexes(d.indexes) + "".join(d.attached)
+        for d in dependents
+    )
+
+
+def _rebuild_up(change: RebuildChange) -> str:
+    """Dropped from the old tree before the tables are edited; created from the new one after."""
+    match change:
+        case DependentsDropped(dependents):
+            return _dropping_dependents(dependents, change)
+        case DependentsRecreated(dependents):
+            return _creating_dependents(dependents, change)
+        case _:
+            assert_never(change)
+
+
+def _rebuild_down(change: RebuildChange) -> str:
+    """The up in reverse: the new tree's dropped, the old tree's created again."""
+    match change:
+        case DependentsDropped(dependents):
+            return _creating_dependents(dependents, change)
+        case DependentsRecreated(dependents):
+            return _dropping_dependents(dependents, change)
+        case _:
+            assert_never(change)
 
 
 def _enum_or_sequence_up(change: EnumOrSequenceChange) -> str:

@@ -99,6 +99,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "RiskTier",
             *(variant.__name__ for variant in typing.get_args(platform.SchemaChange)),
             "DDLObject",
+            "Dependent",
         ],
     ),
     (
