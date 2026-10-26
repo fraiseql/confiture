@@ -81,6 +81,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/error-reference.md`): `migrate status`, then `migrate baseline` for a database built
   from DDL; `IF NOT EXISTS` only for a hand-written migration that must re-run.
 
+### Internal
+
+- The desired-state round trip proves an index on a table the migration creates with
+  `IF NOT EXISTS` new under `migrate preflight --against` a copy of the target (#692): statically
+  flagged, `--against` replica-safe and `additive`, applied, no drift. The FraiseQL fixture stays
+  without `ix_tb_post_title`: FraiseQL writes it into `90_indexes.sql`, which sorts before
+  `post.sql`, and a desired state that indexes a table before declaring it is refused
+  (`DIFFER_406`) — the contract migration is unchanged.
+
 ## [1.41.0] - 2026-10-25
 
 ### Added

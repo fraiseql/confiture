@@ -99,3 +99,59 @@ def test_round_trip_leaves_nothing_to_migrate(
     drift = _invoke("drift", "--schema", str(composed), "--config", str(config), "--format", "json")
     report = json.loads(drift.stdout)
     assert report["has_drift"] is False, report["drift_items"]
+
+
+#: ``ix_tb_post_title``, which FraiseQL writes into ``90_indexes.sql``: there it sorts before
+#: ``post.sql`` and the desired state is refused (``DIFFER_406``, the build fails at the index),
+#: so the checked-in artifact leaves it out. Written after its table, it is the case below.
+POST_TITLE = 'CREATE INDEX IF NOT EXISTS "ix_tb_post_title" ON "tb_post" ((lower(title)));\n'
+
+
+def test_an_index_on_the_new_table_is_proven_new_against_the_target(
+    clean_test_db: psycopg.Connection, test_db_url: str, tmp_path: Path, fresh_database: str
+) -> None:
+    """The file carries a concurrent index, so it keeps ``CREATE TABLE IF NOT EXISTS tb_post``.
+
+    Statically that proves nothing, and the plain index on ``tb_post`` is flagged.
+    ``--against`` a copy of the target, which does not hold ``tb_post``, proves the
+    table new: the index on it is replica-safe and ``additive``.
+    """
+    config = _database(clean_test_db, test_db_url, tmp_path)
+    with psycopg.connect(fresh_database, autocommit=True) as copy:
+        copy.execute((ARTIFACT / "user.sql").read_text())
+        copy.execute(TV_PRODUCT)
+    composed = tmp_path / "schema"
+    shutil.copytree(ARTIFACT, composed)
+    (composed / "10_tv_product.sql").write_text(TV_PRODUCT)
+    with (composed / "post.sql").open("a") as post:
+        post.write(POST_TITLE)
+    migrations = tmp_path / "migrations"
+
+    _invoke(
+        "migrate", "diff", "--from", "db", "--to", str(composed), "--config", str(config),
+        "--generate", "--name", "adopt_post", "--migrations-dir", str(migrations),
+    )  # fmt: skip
+    [up] = migrations.glob("*.up.sql")
+    assert "CREATE TABLE IF NOT EXISTS tb_post" in up.read_text()
+
+    static = runner.invoke(
+        app,
+        ["migrate", "preflight", "--migrations-dir", str(migrations), "--config", str(config),
+         "--format", "json"],
+    )  # fmt: skip
+    assert json.loads(static.stdout)["window_safe"] is False
+
+    preflight = _invoke(
+        "migrate", "preflight", "--migrations-dir", str(migrations), "--config", str(config),
+        "--against", fresh_database, "--format", "json",
+    )  # fmt: skip
+    payload = json.loads(preflight.stdout)
+    assert payload["ok"] and payload["window_safe"], payload["issues"]
+    assert {change["tier"] for change in payload["change_set"]["changes"]} == {"additive"}, payload[
+        "change_set"
+    ]
+
+    _invoke("migrate", "up", "--migrations-dir", str(migrations), "--config", str(config))
+
+    drift = _invoke("drift", "--schema", str(composed), "--config", str(config), "--format", "json")
+    assert json.loads(drift.stdout)["has_drift"] is False
