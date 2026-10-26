@@ -217,7 +217,7 @@ def test_the_issues_migration_applies_once_its_backfill_is_written(
 _TVIEW_OLD = _KEPT + (
     "CREATE VIEW v_user AS SELECT pk_user, jsonb_build_object('name', name, 'age', age) AS data "
     "FROM tb_user;\n"
-    "SELECT pg_tviews_create_or_replace('tv_user', $$SELECT pk_user, data FROM v_user$$);\n"
+    "CREATE TABLE tv_user AS SELECT pk_user, data FROM v_user;\n"
 )
 _TVIEW_NEW = _TVIEW_OLD.replace("age integer", "age bigint")
 
