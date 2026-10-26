@@ -139,16 +139,16 @@ PostgreSQL refuses `ALTER COLUMN … TYPE` and `DROP COLUMN` on a column a view 
 column change has such views, the migration drops them before any table is edited — readers
 first: a view on the view, a materialized view or a TVIEW (`pg_tviews_drop()`) before the view it
 reads — and creates them again from the new tree once every table is edited, each after the views
-it reads, with a materialized view's or a TVIEW's indexes, and the `GRANT`, `COMMENT ON` and
-`OWNER TO` statements the tree writes on them. The down file does the same with the old tree's
-definitions.
+it reads, with a materialized view's or a TVIEW's indexes. A view the migration adds that a
+recreated one reads is created first, in the same order. Grants, comments and owners are not
+compared, so a recreated view keeps the ones it had, then takes the `GRANT`, `COMMENT ON` and
+`OWNER TO` statements the new tree writes on it; a database side reads the ones it had from the
+catalog. The down file does the same with the old tree's definitions.
 
 A view is rebuilt when it names the column — bare or after a range — or reads every column (`*`,
 the whole row, `USING`, a `NATURAL` join), and so is every view that reads a rebuilt one. A view
 that reads only other columns of the table is left alone. The rebuild is tiered as a replacement:
 `reversible` for plain views, `lock_risky` when a materialized view or a TVIEW recomputes its rows.
-A diff from a live database carries no grants or comments, so the migration does not write them
-again; diff from the tree when they matter.
 
 ## Changes the rows can refuse: the backfill placeholder
 
@@ -162,10 +162,11 @@ column. A constant default is a catalog write on PostgreSQL 11+. A volatile one
 Everything else is written around a placeholder:
 
 ```sql
-ALTER TABLE tb_user ADD COLUMN email TEXT;
+ALTER TABLE tb_user ADD COLUMN IF NOT EXISTS email TEXT;
 -- confiture:backfill tb_user.email
 -- Replace this block with the statements that fix the rows of tb_user where email is NULL,
 -- or with `-- confiture:backfill none` when no row needs it: migrate up refuses this file until then.
+ALTER TABLE tb_user DROP CONSTRAINT IF EXISTS tb_user_email_not_null_check;
 ALTER TABLE tb_user ADD CONSTRAINT tb_user_email_not_null_check CHECK (email IS NOT NULL) NOT VALID;
 ALTER TABLE tb_user VALIDATE CONSTRAINT tb_user_email_not_null_check;
 ALTER TABLE tb_user ALTER COLUMN email SET NOT NULL;
@@ -186,6 +187,12 @@ file (`VALID_010`, exit 5), and `migrate preflight` reports it as `PFLIGHT_BACKF
 error). No flag overrides this: the file is unfinished. A Python migration carries the same
 placeholders in `backfill_pending` on its class, and you remove that line once `up()` does the
 backfill.
+
+The column is added `IF NOT EXISTS`, and each constraint added `NOT VALID` is preceded by a
+`DROP CONSTRAINT IF EXISTS` of its name. A file that holds a `CONCURRENTLY` index runs outside a
+transaction and commits each statement, so when `VALIDATE` fails on a row you missed, the column
+and the constraint stay; once the row is fixed, the same file runs again from the top. The change
+set reads that drop as part of the `ADD` after it, so it does not make the file destructive.
 
 The down file is not changed: it reverses the change as before.
 
