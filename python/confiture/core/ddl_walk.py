@@ -1249,6 +1249,16 @@ def column_is_not_null(coldef: object) -> bool:
     return False
 
 
+def column_default(coldef: object) -> Any:
+    """A column definition's ``DEFAULT`` expression node, or ``None``."""
+    if (raw := getattr(coldef, "raw_default", None)) is not None:
+        return raw
+    for c in getattr(coldef, "constraints", None) or ():
+        if enum_int(getattr(c, "contype", None)) == _CONSTR_DEFAULT:
+            return getattr(c, "raw_expr", None)
+    return None
+
+
 def column_has_default(coldef: object) -> bool:
     if getattr(coldef, "raw_default", None) is not None:
         return True
@@ -1389,6 +1399,40 @@ def default_kind(raw_expr: Any) -> DefaultKind | None:
         if name in VALUE_GENERATORS and schema in _GENERATOR_SCHEMAS and not node.args:
             return "generator"
     return None if node is None else "expression"
+
+
+#: Functions PostgreSQL marks stable or immutable that a default commonly calls: an
+#: ``ADD COLUMN`` default calling one is evaluated once and stored in the catalog.
+_ONCE_EVALUATED = frozenset({"now", "transaction_timestamp", "statement_timestamp"})
+
+
+def default_rewrites(raw_expr: Any) -> bool:
+    """Whether ``ADD COLUMN … DEFAULT <raw_expr>`` rewrites a table that has rows.
+
+    PostgreSQL 11+ stores a non-volatile default in the catalog and rewrites
+    nothing; a volatile one (``gen_random_uuid()``, ``nextval``, ``random()``,
+    ``clock_timestamp()``) is computed for every row. Without the catalog a
+    function's volatility is unknown, so only what is known evaluated once is
+    trusted: a constant (cast or not), an SQL value function (``CURRENT_TIMESTAMP``,
+    ``CURRENT_USER``, …) and :data:`_ONCE_EVALUATED`. Anything else rewrites.
+    """
+    node = raw_expr
+    while type(node).__name__ == "TypeCast":
+        node = node.arg
+    kind = type(node).__name__
+    if kind in ("A_Const", "SQLValueFunction"):
+        return False
+    if kind == "FuncCall":
+        names = [n.sval for n in node.funcname]
+        schema, name = (names[-2] if len(names) > 1 else None), names[-1]
+        return not (name in _ONCE_EVALUATED and schema in _GENERATOR_SCHEMAS and not node.args)
+    return node is not None
+
+
+def default_text_rewrites(expression: str) -> bool:
+    """:func:`default_rewrites` of a default as the model holds it: rendered text."""
+    select: Any = pglast.parse_sql(f"SELECT {expression}")[0].stmt
+    return default_rewrites(select.targetList[0].val)
 
 
 def render_default(raw_expr: Any) -> str | None:
@@ -1795,6 +1839,45 @@ def dropped_constraint(cmd: Any) -> str | None:
         return None
     name = getattr(cmd, "name", None)
     return str(name) if name else None
+
+
+_AT_CHANGE_OWNER = _pg_member("AlterTableType", "AT_ChangeOwner")
+_ACL_TARGET_OBJECT = _pg_member("GrantTargetType", "ACL_TARGET_OBJECT")
+_OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
+#: What ``COMMENT ON`` names a relation a view-like object is: a TVIEW is a table.
+_COMMENTED_RELATIONS = frozenset(
+    _pg_member("ObjectType", name) for name in ("OBJECT_VIEW", "OBJECT_MATVIEW", "OBJECT_TABLE")
+)
+
+
+def attached_relations(stmt: Any) -> list[RelationName]:
+    """The relations a ``GRANT``/``REVOKE``, ``COMMENT ON`` or ``OWNER TO`` writes on.
+
+    What a ``DROP`` of the relation takes with it, and a migration that drops it
+    to create it again has to write again (#765): its privileges, its comment and
+    its columns', and its owner. Any other statement attaches to nothing.
+    """
+    kind = type(stmt).__name__
+    if kind == "GrantStmt":
+        if enum_int(stmt.targtype) != _ACL_TARGET_OBJECT or enum_int(stmt.objtype) != (
+            _OBJECT_TABLE
+        ):
+            return []
+        return [RelationName(r.schemaname, r.relname) for r in stmt.objects or ()]
+    if kind == "CommentStmt":
+        parts = [str(getattr(p, "sval", p)) for p in getattr(stmt.object, "items", stmt.object)]
+        objtype = enum_int(stmt.objtype)
+        if objtype == _OBJECT_COLUMN:
+            parts = parts[:-1]
+        elif objtype not in _COMMENTED_RELATIONS:
+            return []
+        return [RelationName(parts[-2] if len(parts) > 1 else None, parts[-1])] if parts else []
+    if kind == "AlterTableStmt" and all(
+        enum_int(getattr(c, "subtype", None)) == _AT_CHANGE_OWNER for c in stmt.cmds or ()
+    ):
+        relation = stmt.relation
+        return [RelationName(relation.schemaname, relation.relname)]
+    return []
 
 
 def validated_constraint(cmd: Any) -> str | None:

@@ -1374,6 +1374,8 @@ SchemaChange = (
     | ObjectAdded
     | ObjectDropped
     | ObjectReplaced
+    | DependentsDropped
+    | DependentsRecreated
 )
 ```
 
@@ -1855,6 +1857,32 @@ replaced in place keeps its user indexes.
 | `new_indexes` | `tuple[Index, ...]` | `()` |
 | `index_changes` | `tuple[IndexAdded \| IndexDropped, ...]` | `()` |
 
+### `DependentsDropped`
+
+```python
+class DependentsDropped(_Rebuild)
+```
+
+The dependents a column change is refused under, dropped before any table is edited.
+
+Carried as the old tree holds them: the down creates them again from it.
+
+| Field | Type | Default |
+|---|---|---|
+| `dependents` | `tuple[Dependent, ...]` | required |
+
+### `DependentsRecreated`
+
+```python
+class DependentsRecreated(_Rebuild)
+```
+
+The dependents `DependentsDropped` dropped, created again from the new tree.
+
+| Field | Type | Default |
+|---|---|---|
+| `dependents` | `tuple[Dependent, ...]` | required |
+
 ### `DDLObject`
 
 ```python
@@ -1881,6 +1909,25 @@ bucket.
 | `create_sql` | `str` | required |
 | `signature` | `Signature \| None` | `None` |
 | `trigger` | `Trigger \| None` | `None` |
+
+### `Dependent`
+
+```python
+class Dependent
+```
+
+A view, a materialized view or a TVIEW a column change has to drop and create again.
+
+`obj` is its statement on the side it is created from, `indexes` the ones a
+materialized view or a TVIEW holds there, and `attached` what that side writes
+on it besides — its grants, its comment, its owner — which a `DROP` takes with
+it (`ddl_objects.attached_statements`).
+
+| Field | Type | Default |
+|---|---|---|
+| `obj` | `DDLObject` | required |
+| `indexes` | `tuple[Index, ...]` | `()` |
+| `attached` | `tuple[str, ...]` | `()` |
 
 ## Errors
 

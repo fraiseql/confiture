@@ -213,6 +213,16 @@ ExtraObjectsOpt = Annotated[
         "declares, as info. Also drift.extra_objects in the config",
     ),
 ]
+ExcludeOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--exclude",
+        metavar="PATTERN",
+        help="With --check-live-drift: leave the relations matching this pattern out of the "
+        "comparison, on both sides — `name` in any schema, `schema.name` in that one, each "
+        "part a case-sensitive glob (repeatable; adds to diff.exclude in the config)",
+    ),
+]
 CheckSignaturesOpt = Annotated[
     bool,
     typer.Option(
@@ -451,6 +461,7 @@ def migrate_validate(
     check_live_drift: CheckLiveDriftOpt = False,
     ignore_column_order: IgnoreColumnOrderOpt = False,
     extra_objects: ExtraObjectsOpt = None,
+    exclude: ExcludeOpt = None,
     check_signatures: CheckSignaturesOpt = False,
     check_imports: CheckImportsOpt = False,
     check_body: CheckBodyOpt = False,
@@ -593,6 +604,7 @@ def migrate_validate(
         check_live_drift=check_live_drift,
         ignore_column_order=ignore_column_order,
         extra_objects=extra_objects,
+        exclude=tuple(exclude or ()),
         check_signatures=check_signatures,
         check_body_views=check_body_views,
         check_body_replay=check_body_replay,

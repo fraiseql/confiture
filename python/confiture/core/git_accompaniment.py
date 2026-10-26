@@ -29,6 +29,8 @@ from confiture.core.schema_change import (
     ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
+    DependentsDropped,
+    DependentsRecreated,
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
@@ -72,6 +74,9 @@ def is_body_change(change: SchemaChange) -> bool:
         case ObjectReplaced(ref=ref):
             return ref.kind in BODY_KINDS
         case ObjectAdded() | ObjectDropped():
+            return False
+        case DependentsDropped() | DependentsRecreated():
+            # How a migration writes a column change, not a body edited in place.
             return False
         case TableAdded() | TableDropped() | TableRenamed():
             return False

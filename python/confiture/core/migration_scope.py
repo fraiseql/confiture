@@ -51,6 +51,10 @@ from confiture.core.sql_lexer import ParsedStatement, parse
 __all__ = ["EXEMPT", "AddedConstraint", "Created", "Scope", "Step", "Target", "targets", "walk"]
 
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
+_AT_DROP_CONSTRAINT = _pg_member("AlterTableType", "AT_DropConstraint")
+
+#: A constraint's key with its schema as written (``None`` when the statement left it out).
+WrittenKey = tuple[str | None, str, str]
 #: Subcommands that join a relation to one that already existed.
 _AT_JOINS_ANOTHER = frozenset(
     {
@@ -147,6 +151,11 @@ class Scope:
     transactional: bool = True
     #: ``(schema, table, name)``, the schema defaulted: a tightening fact.
     constraints: dict[tuple[str, str, str], AddedConstraint] = field(default_factory=dict)
+    #: The same constraints keyed as written: a loosening fact (a later ``DROP
+    #: CONSTRAINT`` of one drops nothing that existed before the file). Only an
+    #: ``ALTER TABLE`` keeps it: any other statement may have dropped the
+    #: constraint and added another under its name, so the fact is forgotten.
+    written_constraints: dict[WrittenKey, AddedConstraint] = field(default_factory=dict)
     #: ``schema.tv_name``, case-folded, as ``tview_preflight`` keys a TVIEW.
     dropped_tviews: frozenset[str] = frozenset()
     #: Keyed as written: a loosening fact.
@@ -160,6 +169,14 @@ class Scope:
         if table is None or name is None:
             return None
         return self.constraints.get((schema or self.default_schema, table, name))
+
+    def added_as_written(
+        self, schema: str | None, table: str | None, name: str | None
+    ) -> AddedConstraint | None:
+        """The constraint an earlier statement added, named exactly as this statement names it."""
+        if table is None or name is None:
+            return None
+        return self.written_constraints.get((schema, table, name))
 
     def fresh(self, schema: str | None, name: str | None) -> Created | None:
         """The relation ``schema.name`` an earlier statement created, matched as written."""
@@ -230,13 +247,23 @@ def walk(sql: str, *, default_schema: str = DEFAULT_SCHEMA) -> Iterator[Step]:
 def _after(scope: Scope, stmt: Any) -> Scope:
     """The scope *stmt* leaves."""
     dropped = _dropped_tviews(stmt)
-    added = _added_constraints(stmt, scope.default_schema)
+    added = _added_constraints(stmt)
+    written = _written_after(scope, stmt, added)
     created = _created_after(scope, stmt)
-    if not dropped and not added and created == scope.created:
+    if (
+        not dropped
+        and not added
+        and written == scope.written_constraints
+        and created == scope.created
+    ):
         return scope
     return replace(
         scope,
-        constraints={**scope.constraints, **added},
+        constraints={
+            **scope.constraints,
+            **{(key[0] or scope.default_schema, *key[1:]): fact for key, fact in added.items()},
+        },
+        written_constraints=written,
         dropped_tviews=scope.dropped_tviews | dropped,
         created=created,
     )
@@ -376,10 +403,24 @@ def _calls_a_function(stmt: Any) -> bool:
     return calls > len(tview_calls(stmt))
 
 
-def _added_constraints(
-    stmt: Any, default_schema: str
-) -> dict[tuple[str, str, str], AddedConstraint]:
-    """``ALTER TABLE … ADD CONSTRAINT name …``: each named constraint and what its ADD locks."""
+def _written_after(
+    scope: Scope, stmt: Any, added: dict[WrittenKey, AddedConstraint]
+) -> dict[WrittenKey, AddedConstraint]:
+    """The as-written constraints *stmt* leaves: an ``ALTER TABLE`` adds and drops, anything else forgets."""
+    if type(stmt).__name__ != "AlterTableStmt":
+        return {}
+    relation = relation_name(stmt.relation)
+    dropped = {
+        (relation.schema, relation.name, cmd.name)
+        for cmd in stmt.cmds or ()
+        if relation is not None and enum_int(cmd.subtype) == _AT_DROP_CONSTRAINT
+    }
+    kept = {k: v for k, v in scope.written_constraints.items() if k not in dropped}
+    return {**kept, **added}
+
+
+def _added_constraints(stmt: Any) -> dict[WrittenKey, AddedConstraint]:
+    """``ALTER TABLE … ADD CONSTRAINT name …``: each named constraint, as written, and what its ADD locks."""
     if type(stmt).__name__ != "AlterTableStmt":
         return {}
     relation = relation_name(stmt.relation)
@@ -394,7 +435,7 @@ def _added_constraints(
         read = read_constraint(node)
         foreign_key = isinstance(read, Constraint) and read.kind == "foreign_key"
         target = read.ref_table if isinstance(read, Constraint) and foreign_key else None
-        added[(relation.schema or default_schema, relation.name, name)] = AddedConstraint(
+        added[(relation.schema, relation.name, name)] = AddedConstraint(
             foreign_key=foreign_key,
             not_valid=bool(getattr(node, "skip_validation", False)),
             referenced=target.qualified if target is not None else None,

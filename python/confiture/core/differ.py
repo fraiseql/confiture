@@ -22,6 +22,7 @@ from confiture.core.ddl_walk import (
 )
 from confiture.core.linting.inventory import signatures_match
 from confiture.core.linting.quoted_names import QuotedName
+from confiture.core.relation_exclusion import Exclusion, leave_out
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -33,6 +34,10 @@ from confiture.core.schema_change import (
     ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
+    DefinitionChange,
+    Dependent,
+    DependentsDropped,
+    DependentsRecreated,
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
@@ -87,6 +92,7 @@ from confiture.core.schema_model import (
 from confiture.core.schema_read import SchemaRead, read_text
 from confiture.core.sql_utils import comment_text
 from confiture.core.type_lattice import same_type
+from confiture.core.view_dependents import dependents, in_dependency_order
 from confiture.exceptions import DifferError
 from confiture.models.warnings import BuildWarning
 
@@ -186,7 +192,10 @@ class Side:
     ``confiture build`` resolves them (#313). ``quoted`` lists every name that
     needs quotes, which :meth:`SchemaDiffer.compare_sides` refuses. ``dangling``
     holds each index written on a relation the tree had not declared when it ran
-    (``SchemaRead.dangling_indexes``, #679); a database holds none.
+    (``SchemaRead.dangling_indexes``, #679); a database holds none. ``attached``
+    is what the tree writes on each relation besides creating it — grants,
+    comments, owner — keyed by identity (``SchemaRead.attached``, #765); a database
+    side carries none.
     """
 
     model: SchemaModel = field(default_factory=SchemaModel)
@@ -195,6 +204,7 @@ class Side:
     quoted: list[QuotedName] = field(default_factory=list)
     constants: ConstantSpellings = AS_WRITTEN
     dangling: Mapping[ObjectRef, tuple[Index, ...]] = field(default_factory=dict)
+    attached: Mapping[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, read: SchemaRead, *, held: bool = False) -> Side:
@@ -206,7 +216,12 @@ class Side:
         """
         model = read.catalogued if held else read.model
         return cls(
-            model, read.declared.objects, read.warnings, read.quoted, dangling=read.dangling_indexes
+            model,
+            read.declared.objects,
+            read.warnings,
+            read.quoted,
+            dangling=read.dangling_indexes,
+            attached=read.attached,
         )
 
     @property
@@ -223,6 +238,18 @@ class Side:
     def sequences(self) -> list[Sequence]:
         """The model's sequences, in the order the tree declared them."""
         return list(self.model.sequences.values())
+
+
+def without(side: Side, exclusion: Exclusion) -> Side:
+    """*side* without the relations *exclusion* names, and what it has to say about it (#767)."""
+    kept = leave_out(exclusion, side.model, side.objects, side.dangling)
+    return replace(
+        side,
+        model=kept.model,
+        objects=kept.objects,
+        dangling=kept.dangling,
+        warnings=[*side.warnings, *kept.notes],
+    )
 
 
 def stated_side(model: SchemaModel, constants: ConstantSpellings = AS_WRITTEN) -> Side:
@@ -680,6 +707,39 @@ def _carried_indexes(model: SchemaModel, ref: ObjectRef) -> tuple[Index, ...]:
     return tuple(index for index in found if not index.backs_constraint)
 
 
+def _dependents_rebuilt(changes: list[SchemaChange], old: Side, new: Side) -> list[SchemaChange]:
+    """The views a column change is refused under, dropped and created again (#765).
+
+    A column retyped or dropped while a view reads it is refused by PostgreSQL;
+    each such view, and each view reading one of them, is dropped before any
+    table is edited and created again from the new tree after. A view only the
+    old tree defines is dropped by its own change, before these. The diff keeps
+    each one's redefinition and index changes, which drift reports; a migration
+    writes the recreate in their place (``change_order.apply_order``).
+    """
+    held = [(c.table.identity, c.column.folded) for c in changes if isinstance(c, ColumnDropped)]
+    held += [
+        (c.table.identity, column.folded)
+        for c in changes
+        if isinstance(c, ColumnTypeChanged)
+        for column in (c.old, c.new)
+    ]
+    refs = [ref for ref in dependents(old.objects, held) if new.objects.get(ref)]
+    if not refs:
+        return []
+
+    def carried(side: Side, ref: ObjectRef) -> Dependent:
+        attached = side.attached.get((ref.schema or DEFAULT_SCHEMA, ref.name), ())
+        return Dependent(side.objects[ref][-1], _carried_indexes(side.model, ref), attached)
+
+    return [
+        DependentsDropped(tuple(carried(old, ref) for ref in refs)),
+        DependentsRecreated(
+            tuple(carried(new, ref) for ref in in_dependency_order(new.objects, refs))
+        ),
+    ]
+
+
 def _with_indexes(change: SchemaChange, old: SchemaModel, new: SchemaModel) -> SchemaChange:
     """*change*, carrying the indexes of the relation it creates or drops whole.
 
@@ -817,7 +877,12 @@ class SchemaDiffer:
         return self.compare_sides(Side.of(old), Side.of(new))
 
     def compare_sides(
-        self, old: Side, new: Side, policy: ComparisonPolicy | None = None
+        self,
+        old: Side,
+        new: Side,
+        policy: ComparisonPolicy | None = None,
+        *,
+        exclude: Exclusion | None = None,
     ) -> SchemaDiff:
         """What changed from *old* to *new*: the one comparison of two schemas.
 
@@ -826,12 +891,17 @@ class SchemaDiffer:
             new: The schema after.
             policy: How to compare them; by default the one their models'
                 sources call for (:func:`policy_between`).
+            exclude: The relations another tool owns (``diff.exclude``, #767),
+                left out of both sides before anything is compared; what still
+                depends on one is said (``DIFFER_411``).
 
         Raises:
             DifferError: ``DIFFER_403`` when either side names an object that needs quotes;
                 ``DIFFER_406`` when *new* indexes a relation it does not declare and
                 *old* declares, or, as a database, does not hold.
         """
+        if exclude:
+            old, new = without(old, exclude), without(new, exclude)
         refuse_quoted_names("old", old.quoted)
         refuse_quoted_names("new", new.quoted)
         refuse_undeclared_relations(old, new)
@@ -853,6 +923,7 @@ class SchemaDiffer:
         whole = {c.ref for c in objects if c.ref.kind == "matview"}
         changes.extend(self._compare_matview_indexes(old.model, new.model, policy, whole))
         changes.extend(self._compare_tview_indexes(old.model, new.model, policy))
+        changes.extend(_dependents_rebuilt(changes, old, new))
         return SchemaDiff(
             changes=changes,
             warnings=[
@@ -960,7 +1031,7 @@ class SchemaDiffer:
 
     def _compare_objects(
         self, old: Side, new: Side, policy: ComparisonPolicy
-    ) -> tuple[list[SchemaChange], list[BuildWarning]]:
+    ) -> tuple[list[DefinitionChange], list[BuildWarning]]:
         """Added, dropped and redefined objects, in a stable order — and what cannot be written.
 
         An object present on both sides whose definition differs is a ``REPLACE``:
@@ -977,7 +1048,7 @@ class SchemaDiffer:
         the other side's, and when the other side has none, a ``DIFFER_404``
         warning rather than a change no statement can carry.
         """
-        changes: list[SchemaChange] = []
+        changes: list[DefinitionChange] = []
         unwritable: list[BuildWarning] = []
         old_held, new_held = held_by_definition(old.model), held_by_definition(new.model)
         refs = old.objects.keys() | new.objects.keys() | old_held | new_held

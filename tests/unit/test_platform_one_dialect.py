@@ -137,6 +137,14 @@ EXAMPLES: dict[type, tuple[Callable[[], object], platform.ObjectRef]] = {
         lambda: platform.ObjectReplaced(VIEW_REF, _object(), _object()),
         VIEW_REF,
     ),
+    platform.DependentsDropped: (
+        lambda: platform.DependentsDropped((platform.Dependent(_object()),)),
+        VIEW_REF,
+    ),
+    platform.DependentsRecreated: (
+        lambda: platform.DependentsRecreated((platform.Dependent(_object()),)),
+        VIEW_REF,
+    ),
 }
 
 

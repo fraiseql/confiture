@@ -8,9 +8,10 @@ statement's ``-- confiture:tier`` directive) gives the statement the renderer wr
 for it — over every kind, and over each kind compared by definition that a
 migration is derived for.
 
-Four disagreements are declared — a type change's source, an addition written
-``CREATE OR REPLACE``, an addition guarded in a ``DO`` block, and a relation
-created with its indexes, which are written plain — and each entry is asserted to **still disagree**: the day the renderer or the classifier closes one, its entry
+Five disagreements are declared — a type change's source, an addition written
+``CREATE OR REPLACE``, an addition guarded in a ``DO`` block, a relation
+created with its indexes, which are written plain, and a view dropped to be created
+again by the change after it — and each entry is asserted to **still disagree**: the day the renderer or the classifier closes one, its entry
 fails and goes. A change the renderer writes no statement for has nothing to
 agree with and is not compared.
 """
@@ -56,6 +57,11 @@ DISAGREEMENTS: dict[str, str] = {
     "ObjectAdded[tview, indexed]": (
         "written pg_tviews_create_or_replace(), which may replace a TVIEW that exists, so "
         "the TVIEW is not proven new and its plain CREATE INDEX reads lock_risky"
+    ),
+    "DependentsDropped": (
+        "its drops are classified alone here; a migration writes DependentsRecreated after "
+        "them, and the change set reads each drop the file creates again as the "
+        "replacement the pair is (change_set.rebuilt, #765)"
     ),
     "ObjectAdded[tview]": (
         "a pg_tviews TVIEW is written tviews.pg_tviews_create_or_replace() so the "

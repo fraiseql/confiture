@@ -95,6 +95,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_FOREIGN_TABLE",
     ),
     "SetOperation": ("SETOP_NONE",),
+    "GrantTargetType": ("ACL_TARGET_OBJECT",),
+    "DropBehavior": ("DROP_CASCADE",),
     "A_Expr_Kind": ("AEXPR_OP",),
     "BoolExprType": ("AND_EXPR",),
     "NullTestType": ("IS_NULL", "IS_NOT_NULL"),
@@ -124,7 +126,6 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "SVFOP_SESSION_USER",
         "SVFOP_CURRENT_SCHEMA",
     ),
-    "DropBehavior": ("DROP_CASCADE",),
     "VariableSetKind": (
         "VAR_SET_VALUE",
         "VAR_SET_CURRENT",

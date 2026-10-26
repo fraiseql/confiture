@@ -38,6 +38,7 @@ import pglast.parser
 import psycopg
 import yaml
 
+from confiture.core import backfill_gate
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.destructive import is_gated
 from confiture.core.migration_analyzer import runs_in_one_transaction
@@ -75,6 +76,11 @@ def _down_for(up_file: Path) -> Path:
 def _detect_destructive(up_file: Path) -> bool:
     """Whether the ``.up.sql`` carries the ``-- confiture:destructive`` gate directive."""
     return is_gated(up_file.read_text(encoding="utf-8"))
+
+
+def _detect_backfill_pending(up_file: Path) -> tuple[str, ...]:
+    """The targets of the ``-- confiture:backfill`` placeholders the ``.up.sql`` still carries."""
+    return tuple(backfill_gate.pending(up_file.read_text(encoding="utf-8")))
 
 
 def _detect_transactional(up_file: Path) -> bool:
@@ -169,6 +175,7 @@ class FileSQLMigration(Migration):
             self.version, self.name = parse_migration_filename(up_file.name)
             self.transactional = _detect_transactional(up_file)
             self.destructive = _detect_destructive(up_file)
+            self.backfill_pending = _detect_backfill_pending(up_file)
         if not self.up_file.exists():
             raise FileNotFoundError(f"Migration up file not found: {self.up_file}")
         if not self.down_file.exists():
@@ -267,6 +274,7 @@ class FileSQLMigration(Migration):
                 # applies it in autocommit and `preflight --against` skips it.
                 "transactional": _detect_transactional(up_file),
                 "destructive": _detect_destructive(up_file),
+                "backfill_pending": _detect_backfill_pending(up_file),
             },
         )
 

@@ -14,8 +14,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`diff.exclude` / `--exclude` leave the relations another tool owns out of every comparison**
+  (#767). A runtime that creates its own bookkeeping tables at boot (FraiseQL's `_fraiseql_*`) had
+  each one reported by `migrate diff --from db` as a table to drop, and by `confiture drift` as an
+  extra table. `diff.exclude` in the environment config lists relation patterns — `name` matches
+  the relation in any schema, `schema.name` in that schema only, each part a case-sensitive glob —
+  and a repeatable `--exclude PATTERN` on `migrate diff`, `confiture drift` and
+  `migrate validate --check-live-drift` adds to it. The exclusion is applied once, to both sides
+  `SchemaDiffer.compare_sides` is handed (its new `exclude` keyword): a table, view, materialized
+  view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers,
+  policies and rules. A foreign key that references an excluded relation, or a trigger, policy,
+  rule or index the tree writes on one, is a new `DIFFER_411` warning (exit 0) in `migrate diff`'s
+  `warnings[]` rather than skipped in silence. `confiture seed drift` skips a seeded table the
+  environment's `diff.exclude` names, with the pattern as the reason. No drift kind or severity
+  moved.
+- **`migration.locking.extra_keys` serialises `migrate up`/`down` with another tool's advisory
+  lock** (#768). confiture's lock is two `int4` keys and FraiseQL's boot-DDL lock is one `bigint`
+  (`0x4652414953450001`); PostgreSQL keeps the two forms apart, so a FraiseQL server booting
+  during `migrate up` applied its DDL at the same time. Each listed key (a signed 64-bit integer;
+  a bool, a string or a value outside int8 is refused) is now taken with
+  `pg_advisory_lock(bigint)` after confiture's own lock, in order, with the same timeout and mode,
+  held for the whole run and released in reverse on every exit — including a later key that
+  could not be taken. A key held past `--lock-timeout` fails with `LOCK_1300` (exit 6) naming it.
+  Every command that takes the migration lock takes them (`migrate up`, `--online` included,
+  `down`, `down-to`, `apply-as`, `squash-ledger`, `MigratorSession`, `Migrator.migrate_up()` via
+  `LockConfig(extra_keys=…)`); `MigratorSession(extra_lock_keys=…)` gives them without an
+  environment file.
+
 ### Changed
 
+- ⚠️ **`migrate diff --generate` passes a column change under the views that read it** (#765).
+  `ALTER COLUMN … TYPE` and `DROP COLUMN` on a column a view reads were written as they are, and
+  PostgreSQL refused them (`cannot alter type of a column used by a view or rule`): in a layout
+  where every table is read through views, nearly every column change. The diff now carries two
+  new changes around such a change: `DependentsDropped` (wire `DROP_DEPENDENTS`) drops every view,
+  materialized view and pg_tviews TVIEW that reads the column, and every view reading one of them,
+  readers first, before any table is edited; `DependentsRecreated` (wire `CREATE_DEPENDENTS`)
+  creates them again from the new tree, each after the ones it reads, with a materialized view's or
+  a TVIEW's indexes and the `GRANT`s, `COMMENT`s and `OWNER TO` the tree writes on them. The down
+  mirrors it with the old tree's definitions. A view holds a column it names, bare or after a range,
+  or every column (`*`, the whole row, `USING`, `NATURAL`); which views read which is the one TVIEW
+  read graph's answer, over each side's own statements. The tier is the replacement the rebuild is:
+  `reversible` for plain views, `lock_risky` when a materialized view or a TVIEW is rebuilt. Drift
+  is unchanged: the diff keeps each rebuilt view's redefinition and index changes, and the generated
+  migration writes the recreate in their place. A column change no view reads generates exactly what
+  it did. A database side carries no grants or comments, so a migration diffed from a live database
+  does not write them again. The `every-change` diff goldens moved (one view added to the fixture).
+- ⚠️ **A view, materialized view or TVIEW dropped and created again in one file is tiered as the
+  replacement it is** (#765). The change-set classifier pairs a `DROP VIEW`, `DROP MATERIALIZED
+  VIEW` or `pg_tviews_drop()` with a later creation of the same kind, by the name as written: the
+  drop takes `replace_view`'s tier (`reversible`) or `replace_materialized_view`'s (`lock_risky`),
+  where it was `destructive`. A `CASCADE` drop is never paired. So a materialized view's redefinition
+  — `DROP` then `CREATE`, which a generated migration has always written — is now `lock_risky`, not
+  `destructive`: a generated migration that redefines one is no longer marked
+  `-- confiture:destructive` under the `gated` policy (the `matview-indexes` goldens' tier lines
+  moved). The same holds for a view whose columns change, which is dropped and created.
+- ⚠️ **`migrate diff --generate` never writes a change the existing rows refuse** (#766). A
+  `NOT NULL` column with no default was written as one `ADD COLUMN … NOT NULL`, which fails on any
+  table with rows; so did `SET NOT NULL`, an added UNIQUE, primary key or CHECK, and a narrowing
+  retype, whenever a row disagreed. The generator now writes:
+  - a column PostgreSQL fills (a `DEFAULT`, identity, generated) as declared;
+  - an `ADD COLUMN … NOT NULL` nothing fills as: add it nullable, a `-- confiture:backfill
+    <table>.<column>` placeholder, then `CHECK (col IS NOT NULL) NOT VALID` → `VALIDATE` →
+    `SET NOT NULL` → drop the check (named `<table>_<column>_not_null_check`, because PostgreSQL 18
+    names the column's own NOT NULL `<table>_<column>_not_null`);
+  - `SET NOT NULL` as the placeholder and the same tightening;
+  - an added UNIQUE or primary key, and a narrowing retype or one with no assignment cast, behind a
+    placeholder naming the rows to fix; an added named CHECK behind a placeholder, then `NOT VALID`
+    and `VALIDATE`.
+
+  `migrate up` refuses a file that still carries a placeholder (new code **`VALID_010`**, exit 5;
+  no flag overrides it), and `migrate preflight` reports it (new issue code
+  **`PFLIGHT_BACKFILL_PENDING`**, severity error, so preflight exits 7). The author replaces the
+  placeholder with the backfill, or writes `-- confiture:backfill none`. A generated `.py`
+  migration carries the placeholders as `backfill_pending` on its class (`migrate up` refuses it;
+  preflight does not read Python migrations for it, as for `destructive`). The `-- confiture:tier`
+  each change carries is unchanged: these statements were `lock_risky` and still are. Two diff
+  goldens moved (`03-zero-downtime-migration.up.sql`, `every-change.up.sql`); the FraiseQL
+  desired-state fixture did not.
+- ⚠️ **A volatile `ADD COLUMN` default is tiered as a rewrite** (#766). `gen_random_uuid()`,
+  `random()`, `nextval(…)`, `clock_timestamp()` — anything not known to be evaluated once — is
+  computed for every row, so `ADD COLUMN … DEFAULT <volatile>` is now `lock_risky` with a rewriting
+  lock profile, nullable or not (it was `additive` when nullable, and `additive` under a live
+  database's server version when `NOT NULL`). A constant, an SQL value function
+  (`CURRENT_TIMESTAMP`) and `now()` keep their tiers.
 - **⚠️ Preflight judges an operation on a relation the same migration creates as such** (#692).
   `CREATE TABLE t (…); CREATE INDEX ix ON t (c);` used to read `window_safe: false`
   (`PFLIGHT_REPLICA_CREATE_INDEX`) with the index `lock_risky`, so every generated new table with
@@ -63,6 +147,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The `42P07` advice starts from the database's state** (`TABLE_ALREADY_EXISTS`,
   `docs/error-reference.md`): `migrate status`, then `migrate baseline` for a database built
   from DDL; `IF NOT EXISTS` only for a hand-written migration that must re-run.
+- **A `DROP CONSTRAINT` of a constraint the same file added takes its `ADD`'s tier** (#766). It was
+  `destructive`, which gated every generated `SET NOT NULL`; nothing that existed before the
+  migration is dropped. The fact matches only as written, and any statement that is not an
+  `ALTER TABLE` between the two forgets it.
+- **`seed generate` says it writes stubs, and only stubs** (#769). Its docstrings promised to
+  delegate to `fraiseql-data` when installed; the probe imported a module that does not exist
+  and nothing called it, so the command always wrote the commented-out `INSERT` stub. The dead
+  probe and `SeedBridge`'s `fraiseql_data_available=` argument are gone, the help, the
+  docstrings and the docs say it writes stubs whatever is installed and point at
+  fraiseql-semis for generated data, and a unit test pins the stub's text.
+
+### Fixed
+
+- **fraiseql-semis is linked and versioned in the docs** (#770). The README, *Building on
+  confiture*, the prep-seed validation guide and `examples/08-generated-seeds` link the PyPI
+  package and `fraiseql/semis`, and say the examples and the UUID-layout note were written
+  against fraiseql-semis 0.3.0. The prep-seed guide named `fraiseql-data` as the generator in
+  the seed workflow; it names fraiseql-semis, the generator built on `confiture.platform`.
 
 ## [1.41.0] - 2026-10-25
 

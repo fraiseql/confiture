@@ -17,6 +17,7 @@ import pglast
 import pytest
 
 from confiture.core import destructive, git_accompaniment
+from confiture.core.backfill_gate import placeholder
 from confiture.core.change_set import classify_statements
 from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.differ import SchemaDiffer
@@ -133,13 +134,16 @@ def test_both_directions_render_and_undo(old: str, new: str) -> None:
     up, down = renderer.generate_up(change), renderer.generate_down(change)
     assert _statements(up) and _statements(down)
     (back,) = _changes(new, old)
-    assert renderer.generate_up(back) == down
+    # The up of the way back writes a backfill placeholder above it (#766); a down has none.
+    assert (renderer.generate_up(back) or "").endswith(down or "-")
 
 
 def test_validating_sets_not_null_which_validates() -> None:
+    """A row may hold a NULL the NOT VALID constraint let in: the backfill comes first (#766)."""
     (change,) = _changes(NOT_VALID, VALIDATED)
-    assert (
-        DifferSQLGenerator().generate_up(change) == "ALTER TABLE t ALTER COLUMN a SET NOT NULL;\n"
+    assert DifferSQLGenerator().generate_up(change) == (
+        placeholder("t.a", "the rows of t where a is NULL")
+        + "ALTER TABLE t ALTER COLUMN a SET NOT NULL;\n"
     )
 
 

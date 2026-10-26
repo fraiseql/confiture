@@ -237,6 +237,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "DIFFER_408": 0,  # carve-out: the current tree's index written before its relation
     "DIFFER_409": 5,
     "DIFFER_410": 5,  # a tree index under a name pg_tviews uses on that TVIEW
+    "DIFFER_411": 0,  # carve-out: an object depending on a relation diff.exclude leaves out
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,
@@ -248,6 +249,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "VALID_007": 5,  # squash with no usable baseline version (#539)
     "VALID_008": 5,  # migrate up meets a baseline whose history the ledger holds in part (#539)
     "VALID_009": 5,  # squash refused by an environment it asked first (#539)
+    "VALID_010": 5,  # migrate up meets a backfill placeholder the author has not written (#766)
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,

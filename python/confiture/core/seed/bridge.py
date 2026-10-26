@@ -1,4 +1,4 @@
-"""Seed generation bridge: generate seed SQL files from schema introspection."""
+"""``confiture seed generate``: a commented-out INSERT stub for one live table."""
 
 import dataclasses
 from pathlib import Path
@@ -48,33 +48,16 @@ class SeedGenerationResult:
 
 
 class SeedBridge:
-    """Generates SQL seed files from schema introspection.
+    """Writes a commented-out ``INSERT`` stub for one table, read from a live database.
 
-    This is a lightweight bridge that generates INSERT-based seed stubs
-    from PostgreSQL table structures. For production-grade seed generation
-    with anonymization support, see the fraiseql-data package.
+    It writes stubs, never data: the column names a writer supplies and one
+    placeholder per value, to fill by hand. A tool that generates seed data builds
+    on ``confiture.platform`` — fraiseql-semis (https://pypi.org/project/fraiseql-semis/)
+    is one.
     """
 
-    def __init__(
-        self,
-        database_url: str,
-        *,
-        fraiseql_data_available: bool | None = None,
-    ) -> None:
+    def __init__(self, database_url: str) -> None:
         self._database_url = database_url
-        self._fraiseql_data = fraiseql_data_available
-
-    def _check_fraiseql_data(self) -> bool:
-        """Check if fraiseql-data package is available."""
-        if self._fraiseql_data is not None:
-            return self._fraiseql_data
-        try:
-            # Reason: optional dependency — extra 'seed-uuid'; imported where used so the core never requires it
-            import fraiseql.data  # noqa: F401  # ty: ignore[unresolved-import]
-
-            return True
-        except ImportError:
-            return False
 
     def _get_table_columns(self, table: str, schema: str = "public") -> list[dict[str, Any]]:
         """Introspect columns for a given table; ``writable`` is whether a writer supplies it.
@@ -142,8 +125,8 @@ class SeedBridge:
     def generate(self, config: SeedGenerationConfig) -> SeedGenerationResult:
         """Generate a seed file for a table.
 
-        If fraiseql-data is available, delegates to it for richer generation.
-        Otherwise, produces a commented-out stub with correct column names.
+        Always a commented-out stub with the table's writable column names; no
+        other package is consulted, whatever is installed.
         ``output_path`` is where the stub goes, whether or not one is written.
         """
         output_path = config.output_dir / config.env / f"{config.table}.sql"
