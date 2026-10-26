@@ -47,6 +47,8 @@ from confiture.core.schema_change import (
     ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
+    DependentsDropped,
+    DependentsRecreated,
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
@@ -644,6 +646,8 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
     ObjectAdded: (None, DriftSeverity.CRITICAL),
     ObjectDropped: (None, DriftSeverity.INFO),
     ObjectReplaced: (None, DriftSeverity.WARNING),
+    DependentsDropped: "how a migration writes a column change a view reads, not a difference",
+    DependentsRecreated: "how a migration writes a column change a view reads, not a difference",
 }
 
 #: Each kind whose redefinition (``ObjectReplaced``) drift has no finding for, and

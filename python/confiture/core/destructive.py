@@ -29,6 +29,8 @@ from confiture.core.schema_change import (
     ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
+    DependentsDropped,
+    DependentsRecreated,
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
@@ -174,6 +176,9 @@ def data_loss_reason(change: SchemaChange) -> str | None:
         case EnumTypeAdded() | EnumTypeDropped() | EnumValuesChanged() | SequenceAdded():
             return None
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
+            return None
+        case DependentsDropped() | DependentsRecreated():
+            # A view holds no rows of its own; a materialized one recomputes them.
             return None
         case _:
             assert_never(change)

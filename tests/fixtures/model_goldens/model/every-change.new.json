@@ -676,6 +676,13 @@
       "schema": null
     },
     {
+      "definition": "SELECT id, size FROM things",
+      "indexes": [],
+      "materialized": false,
+      "name": "v_sizes",
+      "schema": null
+    },
+    {
       "definition": "SELECT id, code FROM things",
       "indexes": [],
       "materialized": false,

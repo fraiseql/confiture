@@ -15,7 +15,7 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ux_order_count_customer ON mv_ord
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_customer AS SELECT DISTINCT customer FROM tb_order;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_customer ON mv_customer (customer);
 
--- confiture:tier destructive
+-- confiture:tier lock_risky
 DROP MATERIALIZED VIEW IF EXISTS mv_order_total;
 CREATE MATERIALIZED VIEW IF NOT EXISTS mv_order_total AS SELECT customer, sum(total) AS total, max(total) AS largest FROM tb_order GROUP BY customer;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_order_total_customer ON mv_order_total (customer);

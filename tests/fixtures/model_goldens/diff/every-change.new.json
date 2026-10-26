@@ -66,11 +66,16 @@
       },
       {
         "type": "ADD_VIEW",
+        "details": "ADD VIEW v_sizes",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
         "details": "ADD VIEW v_things",
         "irreversible_reason": null
       }
     ],
-    "change_count": 13,
+    "change_count": 14,
     "migration_generated": true,
     "migration_file": "<version>_golden.up.sql",
     "error": null,

@@ -82,6 +82,9 @@ CHANGES = (
     "ObjectAdded",
     "ObjectDropped",
     "ObjectReplaced",
+    "DependentsDropped",
+    "DependentsRecreated",
+    "Dependent",
     "DDLObject",
     "BuildWarning",
     "RiskTier",
@@ -452,6 +455,13 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("old_indexes", "tuple[Index, ...]"),
         ("new_indexes", "tuple[Index, ...]"),
         ("index_changes", "tuple[IndexAdded | IndexDropped, ...]"),
+    ),
+    "DependentsDropped": (("dependents", "tuple[Dependent, ...]"),),
+    "DependentsRecreated": (("dependents", "tuple[Dependent, ...]"),),
+    "Dependent": (
+        ("obj", "DDLObject"),
+        ("indexes", "tuple[Index, ...]"),
+        ("attached", "tuple[str, ...]"),
     ),
 }
 

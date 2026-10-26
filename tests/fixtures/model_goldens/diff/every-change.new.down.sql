@@ -5,6 +5,9 @@
 DROP VIEW IF EXISTS v_things;
 
 -- confiture:tier destructive
+DROP VIEW IF EXISTS v_sizes;
+
+-- confiture:tier destructive
 DROP VIEW IF EXISTS v_added;
 
 -- confiture:tier irreversible

@@ -45,6 +45,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "_pglast_enums.py": (CRATE, TRANSFORM),
     "backfill_gate.py": (CRATE, TRANSFORM),
     "change_order.py": (CRATE, TRANSFORM),
+    "view_dependents.py": (CRATE, TRANSFORM),
     "change_set": (CRATE, TRANSFORM),
     "cor_extractor.py": (CRATE, TRANSFORM),
     "data_assertions.py": (CRATE, TRANSFORM),

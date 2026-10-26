@@ -37,6 +37,7 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
+from confiture.core.change_set.rebuilt import Rebuilt
 from confiture.core.migration_scope import walk
 from confiture.core.sql_lexer import ParsedStatement
 
@@ -93,8 +94,11 @@ _AST_SKIP: Final = frozenset(
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
     """Each statement's entries, in order, read in the scope the statements before it leave."""
     entries: list[ChangeEntry] = []
+    rebuilt = Rebuilt()
     for step in walk(sql, default_schema=ctx.default_schema):
-        entries.extend(_ast_statement(step.statement, sql, replace(ctx, scope=step.before)))
+        found = _ast_statement(step.statement, sql, replace(ctx, scope=step.before))
+        rebuilt.read(step.statement.stmt, entries, found)
+        entries.extend(found)
     return entries
 
 
