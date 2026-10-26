@@ -1249,6 +1249,16 @@ def column_is_not_null(coldef: object) -> bool:
     return False
 
 
+def column_default(coldef: object) -> Any:
+    """A column definition's ``DEFAULT`` expression node, or ``None``."""
+    if (raw := getattr(coldef, "raw_default", None)) is not None:
+        return raw
+    for c in getattr(coldef, "constraints", None) or ():
+        if enum_int(getattr(c, "contype", None)) == _CONSTR_DEFAULT:
+            return getattr(c, "raw_expr", None)
+    return None
+
+
 def column_has_default(coldef: object) -> bool:
     if getattr(coldef, "raw_default", None) is not None:
         return True
@@ -1389,6 +1399,40 @@ def default_kind(raw_expr: Any) -> DefaultKind | None:
         if name in VALUE_GENERATORS and schema in _GENERATOR_SCHEMAS and not node.args:
             return "generator"
     return None if node is None else "expression"
+
+
+#: Functions PostgreSQL marks stable or immutable that a default commonly calls: an
+#: ``ADD COLUMN`` default calling one is evaluated once and stored in the catalog.
+_ONCE_EVALUATED = frozenset({"now", "transaction_timestamp", "statement_timestamp"})
+
+
+def default_rewrites(raw_expr: Any) -> bool:
+    """Whether ``ADD COLUMN … DEFAULT <raw_expr>`` rewrites a table that has rows.
+
+    PostgreSQL 11+ stores a non-volatile default in the catalog and rewrites
+    nothing; a volatile one (``gen_random_uuid()``, ``nextval``, ``random()``,
+    ``clock_timestamp()``) is computed for every row. Without the catalog a
+    function's volatility is unknown, so only what is known evaluated once is
+    trusted: a constant (cast or not), an SQL value function (``CURRENT_TIMESTAMP``,
+    ``CURRENT_USER``, …) and :data:`_ONCE_EVALUATED`. Anything else rewrites.
+    """
+    node = raw_expr
+    while type(node).__name__ == "TypeCast":
+        node = node.arg
+    kind = type(node).__name__
+    if kind in ("A_Const", "SQLValueFunction"):
+        return False
+    if kind == "FuncCall":
+        names = [n.sval for n in node.funcname]
+        schema, name = (names[-2] if len(names) > 1 else None), names[-1]
+        return not (name in _ONCE_EVALUATED and schema in _GENERATOR_SCHEMAS and not node.args)
+    return node is not None
+
+
+def default_text_rewrites(expression: str) -> bool:
+    """:func:`default_rewrites` of a default as the model holds it: rendered text."""
+    select: Any = pglast.parse_sql(f"SELECT {expression}")[0].stmt
+    return default_rewrites(select.targetList[0].val)
 
 
 def render_default(raw_expr: Any) -> str | None:

@@ -13,6 +13,7 @@ from typing import Any
 
 import pglast
 
+from confiture.core import backfill_gate
 from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_order import apply_order
@@ -405,7 +406,7 @@ class {class_name}(Migration):
 
     version = "{version}"
     name = "{name}"
-{destructive}{transactional}
+{destructive}{backfill}{transactional}
     def up(self) -> None:
         """Apply migration."""
 {up_statements}
@@ -424,6 +425,7 @@ class {class_name}(Migration):
                 if gated
                 else ""
             ),
+            backfill=self._backfill_attribute(changes),
             transactional=(
                 "    transactional = False  # a statement here cannot run in a transaction:"
                 " migrate up runs it in autocommit\n"
@@ -432,6 +434,18 @@ class {class_name}(Migration):
             ),
             up_statements=up_statements,
             down_statements=down_statements,
+        )
+
+    def _backfill_attribute(self, changes: list[SchemaChange]) -> str:
+        """``backfill_pending``: the placeholders the up holds, which ``migrate up`` refuses (``VALID_010``)."""
+        targets = backfill_gate.pending(
+            "\n".join(sql for change in changes if (sql := self._change_to_up_sql(change)))
+        )
+        if not targets:
+            return ""
+        return (
+            f"    backfill_pending = {tuple(targets)!r}"
+            "  # write each backfill in up(), then remove this line\n"
         )
 
     def _to_class_name(self, snake_case: str) -> str:

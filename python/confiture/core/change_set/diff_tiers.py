@@ -28,6 +28,7 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
     tier_for_type_change,
 )
+from confiture.core.ddl_walk import default_text_rewrites
 from confiture.core.differ_sql import REPLACED_BY_DROP_AND_CREATE
 from confiture.core.lock_profile import profile_for_kind
 from confiture.core.risk_tier import RiskTier, worst_tier
@@ -119,7 +120,9 @@ def _column_tier(change: ColumnChange) -> RiskTier | None:
     match change:
         case ColumnAdded(_, column):
             return tier_for_add_column(
-                nullable=not column.not_null, has_default=column.default is not None
+                nullable=not column.not_null,
+                has_default=column.default is not None,
+                rewrites=column.default is not None and default_text_rewrites(column.default),
             )
         case ColumnDropped():
             return _TIER_BY_KIND["drop_column"]

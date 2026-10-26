@@ -84,6 +84,7 @@ module moves, not when one grows.
 | Module | Bucket |
 |---|---|
 | `_pglast_enums.py` | DDL transform |
+| `backfill_gate.py` | DDL transform |
 | `change_order.py` | DDL transform |
 | `change_set/` | DDL transform |
 | `cor_extractor.py` | DDL transform |

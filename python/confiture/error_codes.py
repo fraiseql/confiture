@@ -248,6 +248,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "VALID_007": 5,  # squash with no usable baseline version (#539)
     "VALID_008": 5,  # migrate up meets a baseline whose history the ledger holds in part (#539)
     "VALID_009": 5,  # squash refused by an environment it asked first (#539)
+    "VALID_010": 5,  # migrate up meets a backfill placeholder the author has not written (#766)
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,

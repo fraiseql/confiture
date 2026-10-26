@@ -530,6 +530,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         ),
     },
     {
+        "code": "VALID_010",
+        "message_template": (
+            "Migration refused: a backfill step is still the generator's placeholder: {migrations}"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Replace each -- confiture:backfill placeholder with the statements that fix the rows "
+            "it names, or with -- confiture:backfill none when no row needs it"
+        ),
+    },
+    {
         "code": "VERIFY_001",
         "message_template": "Verify file contains forbidden SQL",
         "severity": "error",
