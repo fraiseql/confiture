@@ -35,6 +35,7 @@ from confiture.core.ddl_objects import (
     declared_objects,
     declared_triggers,
 )
+from confiture.core.ddl_walk import attached_relations
 from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
 from confiture.core.linting.inventory import (
     Inventory,
@@ -164,6 +165,23 @@ class SchemaRead:
         for index in self.inventory.unattached_indexes:
             grouped.setdefault(index.table.ref(), []).append(index)
         return {ref: tuple(found) for ref, found in grouped.items()}
+
+    @cached_property
+    def attached(self) -> dict[tuple[str, str], tuple[str, ...]]:
+        """What the tree writes on each relation besides creating it, keyed by identity (#765).
+
+        Its ``GRANT``s and ``REVOKE``s, its comments and its owner
+        (``ddl_walk.attached_relations``), each statement as written, in tree
+        order: what a migration that drops a view to create it again writes after.
+        """
+        found: dict[tuple[str, str], list[str]] = {}
+        for parsed in self.files:
+            for raw in parsed.statements:
+                for relation in attached_relations(raw.stmt):
+                    start = raw.stmt_location or 0
+                    text = parsed.text[start : start + raw.stmt_len if raw.stmt_len else None]
+                    found.setdefault(relation.identity, []).append(f"{text.strip()};\n")
+        return {identity: tuple(statements) for identity, statements in found.items()}
 
     @cached_property
     def quoted(self) -> list[QuotedName]:

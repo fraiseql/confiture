@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Final
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_walk import column_default, default_rewrites
 from confiture.core.ddl_walk import (
     column_has_default as _column_has_default,
 )
@@ -36,6 +37,7 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
+from confiture.core.change_set.rebuilt import Rebuilt
 from confiture.core.migration_scope import walk
 from confiture.core.sql_lexer import ParsedStatement
 
@@ -92,8 +94,11 @@ _AST_SKIP: Final = frozenset(
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
     """Each statement's entries, in order, read in the scope the statements before it leave."""
     entries: list[ChangeEntry] = []
+    rebuilt = Rebuilt()
     for step in walk(sql, default_schema=ctx.default_schema):
-        entries.extend(_ast_statement(step.statement, sql, replace(ctx, scope=step.before)))
+        found = _ast_statement(step.statement, sql, replace(ctx, scope=step.before))
+        rebuilt.read(step.statement.stmt, entries, found)
+        entries.extend(found)
     return entries
 
 
@@ -134,6 +139,7 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
             column = getattr(coldef, "colname", None)
             nullable = not _column_is_not_null(coldef)
             has_default = _column_has_default(coldef)
+            rewrites = has_default and default_rewrites(column_default(coldef))
             entries.append(
                 ctx.entry(
                     "add_column",
@@ -142,10 +148,14 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
                         nullable=nullable,
                         has_default=has_default,
                         server_version=ctx.server_version,
+                        rewrites=rewrites,
                     ),
-                    detail=_add_column_detail(column, nullable=nullable, has_default=has_default),
+                    detail=_add_column_detail(
+                        column, nullable=nullable, has_default=has_default, rewrites=rewrites
+                    ),
                     has_default=has_default,
                     nullable=nullable,
+                    rewrites=rewrites,
                 )
             )
         elif subtype == _AT_DROP_COLUMN:
@@ -167,13 +177,7 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
         elif subtype == _AT_ADD_CONSTRAINT:
             entries.append(ctx.add_constraint(schema, table, cmd.def_))
         elif subtype == _AT_DROP_CONSTRAINT:
-            entries.append(
-                ctx.entry(
-                    "drop_constraint",
-                    ctx.qualified(schema, table, name),
-                    detail=f"DROP CONSTRAINT {_ident(name)}",
-                )
-            )
+            entries.append(ctx.drop_constraint(schema, table, name))
         elif subtype == _AT_COLUMN_DEFAULT:
             setting = cmd.def_ is not None
             entries.append(
@@ -215,8 +219,12 @@ def _ast_alter_table(node: object, ctx: _Context) -> list[ChangeEntry]:
     return entries
 
 
-def _add_column_detail(column: str | None, *, nullable: bool, has_default: bool) -> str:
+def _add_column_detail(
+    column: str | None, *, nullable: bool, has_default: bool, rewrites: bool = False
+) -> str:
     detail = f"ADD COLUMN {_ident(column)}"
+    if rewrites:
+        return detail + " with a volatile DEFAULT — computed for every row, rewrites the table"
     if nullable:
         return detail + " NULL"
     detail += " NOT NULL"

@@ -268,11 +268,9 @@ class TestPlainCreates:
 class TestAutocommitCreates:
     """A file with a concurrent index runs in autocommit; a failed run retries from the top."""
 
-    OLD = "CREATE TABLE t (a INT, b INT);\n"
+    OLD = "CREATE TABLE t (a INT, b TEXT);\n"
     NEW = (
-        "CREATE TABLE t (a INT, b INT NOT NULL);\n"
-        "CREATE INDEX ix_t_a ON t (a);\n"
-        "CREATE TABLE u (id INT);\n"
+        "CREATE TABLE t (a INT, b INT);\nCREATE INDEX ix_t_a ON t (a);\nCREATE TABLE u (id INT);\n"
     )
 
     def _up(self, url: str, tmp_path: Path) -> tuple[int, str]:
@@ -291,17 +289,27 @@ class TestAutocommitCreates:
         assert "CREATE TABLE IF NOT EXISTS u" in up
         assert "CONCURRENTLY" in up
         assert not [d for d in sql_lexer.directives(up) if d.name == "creates"]
+        # The author answers the backfill gate (#766) wrongly: a row that does not cast
+        # is left, so the file fails at the type change, after the table it creates.
+        [up_file] = migrations.glob("*.up.sql")
+        up_file.write_text(
+            "\n".join(
+                "-- confiture:backfill none" if line.startswith("-- confiture:backfill ") else line
+                for line in up.splitlines()
+            )
+            + "\n"
+        )
 
         conn = psycopg.connect(fresh_database, autocommit=True)
         _apply(conn, self.OLD)
-        conn.execute("INSERT INTO t VALUES (1, NULL)")
+        conn.execute("INSERT INTO t VALUES (1, 'x')")
 
         code, output = self._up(fresh_database, tmp_path)
         assert code != 0, output
         assert "u" in _relations(conn)
         assert conn.execute("SELECT count(*) FROM tb_confiture").fetchone() == (0,)
 
-        conn.execute("UPDATE t SET b = 0")
+        conn.execute("UPDATE t SET b = '0'")
         code, output = self._up(fresh_database, tmp_path)
         assert code == 0, output
         assert conn.execute("SELECT version FROM tb_confiture").fetchall() == [("20260101000000",)]

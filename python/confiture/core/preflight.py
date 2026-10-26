@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 import pglast.parser
 
+from confiture.core import backfill_gate
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     discover_migration_files,
@@ -272,6 +273,7 @@ def run_preflight(
                 parse_error_line=parse_error_line,
                 destructive=is_gated(sql_content),
                 irreversible_reasons=irreversible_reasons(sql_content),
+                backfill_pending=backfill_gate.pending(sql_content),
                 online_available=plans is not None,
                 online_stages=_online_stages(plans),
             )

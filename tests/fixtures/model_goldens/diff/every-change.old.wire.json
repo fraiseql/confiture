@@ -338,6 +338,18 @@
       },
       {
         "type": "ADD_VIEW",
+        "table": "v_sizes",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_sizes AS SELECT id, size FROM things",
+        "details": {
+          "kind": "view",
+          "name": "v_sizes",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
         "table": "v_things",
         "column": null,
         "old_value": null,

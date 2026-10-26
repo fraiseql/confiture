@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from confiture.core import live_catalog
+from confiture.core import backfill_gate, live_catalog
 from confiture.core._migrator import online as _online
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator import squashed as _squashed
@@ -307,7 +307,39 @@ def _before_apply(session: SessionHost, plan: _Plan, options: UpOptions) -> Migr
                 error_code="VALID_002",
                 resolution_hint="Review the migration, then run migrate up --allow-destructive",
             )
+    _refuse_pending_backfills(session, plan, target)
     return None
+
+
+def _backfill_pending(session: SessionHost, plan: _Plan, path: Path) -> tuple[str, ...]:
+    """The placeholders a pending migration still carries.
+
+    A ``.up.sql`` file is read as text, so a file the loader cannot load is left
+    to the apply loop to report; a Python migration says so in ``backfill_pending``.
+    """
+    if path.name.endswith(".up.sql"):
+        return tuple(backfill_gate.pending(path.read_text(encoding="utf-8")))
+    targets = getattr(_migration_class(session, plan, path), "backfill_pending", ())
+    return targets if isinstance(targets, tuple) else ()
+
+
+def _refuse_pending_backfills(session: SessionHost, plan: _Plan, target: str | None) -> None:
+    """Refuse the run while a pending migration still carries a backfill placeholder (``VALID_010``)."""
+    unfilled = [
+        f"{path.name} ({', '.join(targets)})"
+        for path, version in zip(plan.pending_files, plan.pending_versions, strict=True)
+        if not (target and version > target) and (targets := _backfill_pending(session, plan, path))
+    ]
+    if unfilled:
+        raise ValidationError(
+            "Migration refused: a backfill step is still the generator's placeholder: "
+            + ", ".join(unfilled),
+            error_code="VALID_010",
+            resolution_hint=(
+                "Replace each -- confiture:backfill placeholder with the statements that fix "
+                "the rows it names, or with -- confiture:backfill none when no row needs it"
+            ),
+        )
 
 
 def _apply_pending(

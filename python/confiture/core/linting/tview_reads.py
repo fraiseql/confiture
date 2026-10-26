@@ -61,6 +61,9 @@ class Holder:
     queries: list[Query] = field(default_factory=list)
     views: list[str] = field(default_factory=list)
     routines: list[str] = field(default_factory=list)
+    #: Every relation its text names, a table as well as a view: ``(schema, name)``
+    #: as written and folded, ``None`` where no schema is written.
+    relations: list[tuple[str | None, str]] = field(default_factory=list)
     #: Why some of its text was not read, or ``None``.
     unread: str | None = None
 
@@ -219,6 +222,7 @@ class ReadGraph:
             if kind == "RangeVar":
                 if node.schemaname is None and node.relname in local:
                     continue
+                holder.relations.append(_relation(node))
                 holder.views.extend(
                     key(o)
                     for o in self.inventory.find_all(
@@ -228,7 +232,18 @@ class ReadGraph:
             elif kind == "FuncCall":
                 holder.routines.extend(key(r) for r in self.routines_called(node))
 
-    # -- Chains ----------------------------------------------------------------
+    # -- What a holder reads of a relation -------------------------------------
+
+    def reads_column(self, holder: Holder, relation: tuple[str, str], column: str) -> bool:
+        """Whether *holder*'s text may read *column* of *relation* (``(schema, name)``, folded).
+
+        PostgreSQL records which columns a view reads, and refuses to retype or
+        drop one of them. A query reads a column when it names it — bare, or after
+        a range — or names every column of the range: ``*``, the whole row, a
+        ``NATURAL`` join, ``USING``. Answered by name and leaning to yes: a name
+        that may belong to another range of the query still counts.
+        """
+        return any(_reads_column(q.root, relation, column) for q in holder.queries)
 
     def chain(self, target: Target, *, routines: bool = True) -> Iterator[tuple[Holder, Path]]:
         """Each holder *target* reaches, once, with the holders that lead to it first.
@@ -261,6 +276,50 @@ class ReadGraph:
             for holder, _ in self.chain(target, routines=routines)
             if holder.unread is not None
         }
+
+
+def _relation(node: Any) -> tuple[str | None, str]:
+    schema = node.schemaname
+    return (
+        identifier_identity(schema) if schema is not None else None,
+        identifier_identity(node.relname),
+    )
+
+
+def names_relation(written: tuple[str | None, str], relation: tuple[str, str]) -> bool:
+    """Whether a relation as a query writes it may be *relation*: no schema matches any."""
+    schema, name = written
+    return name == relation[1] and (schema is None or schema == relation[0])
+
+
+def _reads_column(root: Any, relation: tuple[str, str], column: str) -> bool:
+    nodes = list(walk_nodes(root))
+    ranges = [
+        n
+        for n in nodes
+        if type(n).__name__ == "RangeVar" and names_relation(_relation(n), relation)
+    ]
+    if not ranges:
+        return False
+    row_names = {identifier_identity(r.relname) for r in ranges} | {
+        identifier_identity(r.alias.aliasname) for r in ranges if r.alias is not None
+    }
+    for node in nodes:
+        kind = type(node).__name__
+        if kind == "ColumnRef":
+            fields = node.fields or ()
+            last = fields[-1] if fields else None
+            if type(last).__name__ == "A_Star":
+                return True
+            name = identifier_identity(getattr(last, "sval", "") or "")
+            if name == column or (len(fields) == 1 and name in row_names):
+                return True
+        elif kind == "JoinExpr" and (
+            node.isNatural
+            or any(identifier_identity(u.sval) == column for u in node.usingClause or ())
+        ):
+            return True
+    return False
 
 
 def spelled(obj: SchemaObject) -> str:

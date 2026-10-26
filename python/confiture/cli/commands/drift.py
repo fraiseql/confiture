@@ -11,6 +11,7 @@ from confiture.cli.helpers import console, emit, is_json, open_connection
 from confiture.cli.options import (
     CONFITURE_YAML,
     config_option,
+    exclude_option,
     format_option,
     scratch_url_option,
 )
@@ -26,6 +27,7 @@ from confiture.core.drift import (
     drift_config_from,
     extra_objects_of,
 )
+from confiture.core.relation_exclusion import exclusion_from
 from confiture.core.validation.config_loaders import (
     load_acl_expectations,
     load_ownership_expectation,
@@ -47,6 +49,7 @@ class _DriftRequest:
     fail_on_warning: bool
     scratch_url: str | None = None
     extra_objects: str | None = None
+    exclude: tuple[str, ...] = ()
 
 
 def _run_drift(
@@ -94,6 +97,7 @@ def _run_drift(
                 column_order_severity=drift_cfg.column_order_severity,
                 scratch_url=scratch_url_from_config(config_data, request.scratch_url),
                 extra_objects=extra_objects_of(request.extra_objects, drift_cfg.extra_objects),
+                exclude=exclusion_from(config_data, request.exclude),
             ).compare_with_schema_file(str(request.schema), default_schema=request.default_schema)
         if request.check_acls:
             drift_report = _merge(drift_report, AclDriftDetector(conn).check(expectations))
@@ -179,6 +183,7 @@ def drift(
         help="Demote MISSING_GRANT items from critical to warning (progressive rollout)",
     ),
     scratch_url: str | None = scratch_url_option(),
+    exclude: list[str] | None = exclude_option(),
     extra_objects: str | None = typer.Option(
         None,
         "--extra-objects",
@@ -250,6 +255,7 @@ def drift(
         fail_on_warning=fail_on_warning,
         scratch_url=scratch_url,
         extra_objects=extra_objects,
+        exclude=tuple(exclude or ()),
     )
     try:
         _run_drift(config, request, format_output=format_output, json_mode=json_mode)

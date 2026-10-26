@@ -28,6 +28,7 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
     tier_for_type_change,
 )
+from confiture.core.ddl_walk import default_text_rewrites
 from confiture.core.differ_sql import REPLACED_BY_DROP_AND_CREATE
 from confiture.core.lock_profile import profile_for_kind
 from confiture.core.risk_tier import RiskTier, worst_tier
@@ -45,6 +46,8 @@ from confiture.core.schema_change import (
     ColumnRenamed,
     ColumnTypeChanged,
     DefinitionChange,
+    DependentsDropped,
+    DependentsRecreated,
     EnumOrSequenceChange,
     EnumTypeAdded,
     EnumTypeDropped,
@@ -60,6 +63,7 @@ from confiture.core.schema_change import (
     ObjectReplaced,
     PrimaryKeyAdded,
     PrimaryKeyDropped,
+    RebuildChange,
     SchemaChange,
     SequenceAdded,
     SequenceDropped,
@@ -119,7 +123,9 @@ def _column_tier(change: ColumnChange) -> RiskTier | None:
     match change:
         case ColumnAdded(_, column):
             return tier_for_add_column(
-                nullable=not column.not_null, has_default=column.default is not None
+                nullable=not column.not_null,
+                has_default=column.default is not None,
+                rewrites=column.default is not None and default_text_rewrites(column.default),
             )
         case ColumnDropped():
             return _TIER_BY_KIND["drop_column"]
@@ -195,13 +201,23 @@ def _definition_tier(change: DefinitionChange) -> RiskTier | None:
         case ObjectDropped():
             return _TIER_BY_KIND.get(f"drop_{noun}")
         case ObjectReplaced() if change.ref.kind in REPLACED_BY_DROP_AND_CREATE:
+            # Dropped and created again in one file: a replacement (``change_set.rebuilt``).
             return worst_tier(
-                (_TIER_BY_KIND.get(f"drop_{noun}"), _TIER_BY_KIND.get(f"create_{noun}"))
+                (_TIER_BY_KIND.get(f"replace_{noun}"), _TIER_BY_KIND.get(f"create_{noun}"))
             )
         case ObjectReplaced():
             return _TIER_BY_KIND.get(f"replace_{noun}")
         case _:
             assert_never(change)
+
+
+def _rebuild_tier(change: RebuildChange) -> RiskTier | None:
+    """A view dropped and created again in one migration loses nothing it cannot rebuild.
+
+    It is a replacement, tiered as one: a plain view's is cheap, a materialized
+    view's or a TVIEW's recomputes its rows while its readers wait (#765).
+    """
+    return worst_tier(_TIER_BY_KIND.get(f"replace_{_noun(d.ref.kind)}") for d in change.dependents)
 
 
 def tier_of(change: SchemaChange) -> RiskTier | None:
@@ -251,5 +267,7 @@ def tier_of(change: SchemaChange) -> RiskTier | None:
             return _enum_or_sequence_tier(change)
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return _definition_tier(change)
+        case DependentsDropped() | DependentsRecreated():
+            return _rebuild_tier(change)
         case _:
             assert_never(change)

@@ -37,3 +37,5 @@ CREATE INDEX things_new_ix ON things (code, qty);
 
 CREATE VIEW v_added AS SELECT 2 AS two;
 CREATE VIEW v_things AS SELECT id, code FROM things;
+-- Reads a column the pair retypes: dropped and created again around it (#765).
+CREATE VIEW v_sizes AS SELECT id, size FROM things;

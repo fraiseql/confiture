@@ -15,6 +15,11 @@ from pglast.stream import RawStream
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_clauses import constraint_body
 from confiture.core.ddl_walk import (
+    column_default,
+    default_rewrites,
+    read_constraint,
+)
+from confiture.core.ddl_walk import (
     column_has_default as _column_has_default,
 )
 from confiture.core.ddl_walk import (
@@ -28,9 +33,6 @@ from confiture.core.ddl_walk import (
 )
 from confiture.core.ddl_walk import (
     qualified_relname as _relname,
-)
-from confiture.core.ddl_walk import (
-    read_constraint,
 )
 from confiture.core.ddl_walk import (
     type_name as _type_name,
@@ -172,6 +174,7 @@ class AddColumn(DdlOperation):
     has_default: bool = False
     type_sql: str | None = None  # the type as written, for a plan that re-adds the column
     default_sql: str | None = None  # the DEFAULT expression as written, for a backfill
+    rewrites: bool = False  # a volatile default, computed for every row (ddl_walk.default_rewrites)
 
 
 @dataclass(frozen=True)
@@ -386,6 +389,7 @@ class OperationClassifier:
                         has_default=has_default,
                         type_sql=_deparse(getattr(coldef, "typeName", None)),
                         default_sql=_column_default_sql(coldef),
+                        rewrites=has_default and default_rewrites(column_default(coldef)),
                     )
                 )
             elif subtype == _AT_DROP_COLUMN:

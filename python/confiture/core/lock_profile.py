@@ -242,7 +242,10 @@ def profile_for_kind(
     """
     if kind == "add_column":
         return _add_column(
-            has_default=has_default, nullable=nullable, server_version=server_version
+            has_default=has_default,
+            nullable=nullable,
+            server_version=server_version,
+            rewrites=bool(rewrites),
         )
     if kind == "set_not_null":
         return _set_not_null(server_version, proven_by_check=proven_by_check)
@@ -430,13 +433,28 @@ def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> Lock
         nullable=getattr(op, "nullable", True),
         concurrently=getattr(op, "concurrently", False),
         not_valid=getattr(op, "not_valid", False),
+        rewrites=getattr(op, "rewrites", None),
         server_version=server_version,
     )
 
 
-def _add_column(*, has_default: bool, nullable: bool, server_version: int | None) -> LockProfile:
-    """`ADD COLUMN` is metadata-only; a default is too, once a server says it can be."""
+def _add_column(
+    *, has_default: bool, nullable: bool, server_version: int | None, rewrites: bool = False
+) -> LockProfile:
+    """`ADD COLUMN` is metadata-only; a default is too, once a server says it can be.
+
+    A volatile default (``rewrites``) is computed for every row: a rewrite on every version.
+    """
     del nullable  # named for the call sites; both NOT NULL forms cost the same
+    if rewrites:
+        return LockProfile(
+            lock=LockLevel.ACCESS_EXCLUSIVE,
+            rewrites_table=True,
+            blocks_reads=True,
+            blocks_writes=True,
+            duration=Duration.MINUTES_PLUS,
+            note="a volatile default is computed for every row, which rewrites the table",
+        )
     if not has_default:
         return _METADATA_ALTER
     if server_version is not None:

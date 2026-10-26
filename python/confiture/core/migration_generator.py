@@ -13,15 +13,22 @@ from typing import Any
 
 import pglast
 
+from confiture.core import backfill_gate
 from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_order import apply_order
 from confiture.core.change_set import classify_statements
+from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.created_relations import creates_line
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.risk_tier import RiskTier, worst_tier
-from confiture.core.schema_change import SchemaChange, SchemaDiff
+from confiture.core.schema_change import (
+    DependentsDropped,
+    DependentsRecreated,
+    SchemaChange,
+    SchemaDiff,
+)
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import comment_text, strip_transaction_wrappers
 from confiture.exceptions import DifferError, ExternalGeneratorError
@@ -50,12 +57,23 @@ def _python_literal(sql: str) -> str:
     return repr(sql)
 
 
-def _tier_of(statement: str) -> RiskTier | None:
-    """The tier the change-set classifier — the one ``migrate preflight`` runs — gives ``statement``."""
+def _tier_of(statement: str, change: SchemaChange | None = None) -> RiskTier | None:
+    """The tier the change-set classifier — the one ``migrate preflight`` runs — gives ``statement``.
+
+    A view dropped for a column change is created again by a later block of the
+    same file, and the classifier, reading the file whole, tiers the pair as the
+    replacement it is (``change_set.rebuilt``); a block of the pair read alone
+    cannot see the other half, so it carries the tier the change declares, which
+    is that replacement's.
+    """
+    if isinstance(change, DependentsDropped | DependentsRecreated):
+        return tier_of(change)
     return worst_tier(entry.tier for entry in classify_statements(statement))
 
 
-def _with_tier(statement: str, *, floor: RiskTier | None = None) -> str:
+def _with_tier(
+    statement: str, *, floor: RiskTier | None = None, change: SchemaChange | None = None
+) -> str:
     """Prefix ``statement`` with its tier directive.
 
     Read from the same classifier as preflight, so the file and the report
@@ -64,7 +82,7 @@ def _with_tier(statement: str, *, floor: RiskTier | None = None) -> str:
     tier (a bare comment, SQL it cannot parse) gets no directive: five tiers,
     no "unknown".
     """
-    tier = worst_tier((_tier_of(statement), floor))
+    tier = worst_tier((_tier_of(statement, change), floor))
     if tier is None:
         return statement
     return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
@@ -245,7 +263,7 @@ class MigrationGenerator:
             sql
             for change in diff.changes
             if (sql := self._change_to_up_sql(change)) is not None
-            and _destructive.gates(_tier_of(_terminated(sql)))
+            and _destructive.gates(_tier_of(_terminated(sql), change))
         ]
         if not losing:
             return False
@@ -285,7 +303,7 @@ class MigrationGenerator:
                 change, has_down=downs[id(change)] is not None
             )
             statement = _with_tier(
-                _terminated(sql), floor=RiskTier.IRREVERSIBLE if reason else None
+                _terminated(sql), floor=RiskTier.IRREVERSIBLE if reason else None, change=change
             )
             if reason:
                 statement = f"{_destructive.irreversible_line(reason)}\n{statement}"
@@ -302,7 +320,7 @@ class MigrationGenerator:
             if sql is None:
                 statements.append(_destructive.irreversible_line(_destructive.no_rollback(change)))
             else:
-                statement = _with_tier(_terminated(sql))
+                statement = _with_tier(_terminated(sql), change=change)
                 statements.append(self._declaring(change, statement, down=True, plain=plain))
         return "\n\n".join(statements) + "\n"
 
@@ -443,7 +461,7 @@ class {class_name}(Migration):
 
     version = "{version}"
     name = "{name}"
-{destructive}{transactional}
+{destructive}{backfill}{transactional}
     def up(self) -> None:
         """Apply migration."""
 {up_statements}
@@ -462,6 +480,7 @@ class {class_name}(Migration):
                 if gated
                 else ""
             ),
+            backfill=self._backfill_attribute(changes),
             transactional=(
                 "    transactional = False  # a statement here cannot run in a transaction:"
                 " migrate up runs it in autocommit\n"
@@ -470,6 +489,18 @@ class {class_name}(Migration):
             ),
             up_statements=up_statements,
             down_statements=down_statements,
+        )
+
+    def _backfill_attribute(self, changes: list[SchemaChange]) -> str:
+        """``backfill_pending``: the placeholders the up holds, which ``migrate up`` refuses (``VALID_010``)."""
+        targets = backfill_gate.pending(
+            "\n".join(sql for change in changes if (sql := self._change_to_up_sql(change)))
+        )
+        if not targets:
+            return ""
+        return (
+            f"    backfill_pending = {tuple(targets)!r}"
+            "  # write each backfill in up(), then remove this line\n"
         )
 
     def _to_class_name(self, snake_case: str) -> str:
