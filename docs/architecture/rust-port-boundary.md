@@ -112,6 +112,7 @@ module moves, not when one grows.
 | `path_globs.py` | DDL transform |
 | `plpgsql_fragments.py` | DDL transform |
 | `plpgsql_parse.py` | DDL transform |
+| `relation_exclusion.py` | DDL transform |
 | `replica/` | DDL transform |
 | `risk_tier.py` | DDL transform |
 | `schema_change.py` | DDL transform |

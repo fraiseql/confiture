@@ -1,7 +1,9 @@
 # Generated seeds
 
 A seed generator written against `confiture.platform` and nothing else. It is the
-shape a tool like fraiseql-semis takes. It reads the schema into confiture's
+shape a tool like [fraiseql-semis](https://pypi.org/project/fraiseql-semis/)
+([source](https://github.com/fraiseql/semis)) takes; this example was written
+against fraiseql-semis 0.3.0. It reads the schema into confiture's
 model, walks the tables parents first, and supplies only the columns a writer may.
 Each value respects what the schema promises for its column. The files it writes
 load through `confiture seed apply` and pass all five prep-seed validation levels.

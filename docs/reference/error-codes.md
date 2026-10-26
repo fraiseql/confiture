@@ -69,6 +69,7 @@ resolution hint surfaced in the envelope.
 | `DIFFER_408` | 0 | warning | Index '{index}' is written before {table}, the relation it is on: the current schema's build fails at it, so it is not compared | Move the index after the statement that creates its relation; confiture lint reports it as build_004 |
 | `DIFFER_409` | 5 | error | {change} '{identity}' carries no statement: the side it came from is compared, never generated from | Generate from a side read from a tree (Side.of) or a database (database_side); a stated or slot side is compared, never generated from |
 | `DIFFER_410` | 5 | error | Index '{index}' on TVIEW {tview} has the name of an index pg_tviews created on it, and is another index: pg_tviews skipped its CREATE INDEX, so the database does not hold it | Rename the index in the schema: pg_tviews reserves the names of its own indexes on a TVIEW (tviews.registry.managed_indexes) |
+| `DIFFER_411` | 0 | warning | {kind} '{identity}' depends on {relation}, which diff.exclude leaves out of the comparison: the diff says nothing about it | Narrow the diff.exclude / --exclude pattern so it leaves the relation in, or move the object to the tool that owns the relation |
 | `GEN_001` | 1 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |

@@ -13,7 +13,7 @@ import hmac
 import os
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from string.templatelib import Template
 from typing import Any, Literal
@@ -28,6 +28,7 @@ from confiture.core.connection import open_connection, open_target, resolve_targ
 from confiture.core.linting.inventory import label_for
 from confiture.core.linting.schema_linter import first_line
 from confiture.core.linting.seed_secrets import secret_kind
+from confiture.core.relation_exclusion import Exclusion
 from confiture.core.schema_model import RelationName
 from confiture.core.schema_read import SchemaRead
 from confiture.core.schema_sources import read_schema
@@ -89,15 +90,18 @@ def scope_for(
     *,
     seeds_dir: Path | None = None,
     build: bool = False,
+    exclude: Sequence[str] = (),
 ) -> SeedDriftReport:
     """What a seed-drift run of *env* would compare, compared with nothing (``--list-scope``)."""
     root = project_dir or Path.cwd()
+    environment = Environment.load(env, project_dir=project_dir)
     files = seed_files(env, project_dir, seeds_dir=seeds_dir)
     scope = seed_scope(
         [(label_for(path, root), path.read_text(encoding="utf-8")) for path in files],
         read_schema(env=env, project_dir=project_dir),
-        Environment.load(env, project_dir=project_dir).seed_drift,
+        environment.seed_drift,
     )
+    scope = excluding(scope, Exclusion.of(environment.diff.exclude, exclude))
     return SeedDriftReport(
         seed_side="built" if build else "database",
         against=None,
@@ -105,6 +109,25 @@ def scope_for(
         not_compared=scope.not_compared,
         unused=scope.unused,
         compared=False,
+    )
+
+
+def excluding(scope: SeedScope, exclusion: Exclusion) -> SeedScope:
+    """*scope* with each table *exclusion* names moved to its skipped tables (#767)."""
+    left = {
+        table.relation.qualified: pattern
+        for table in scope.tables
+        if (pattern := exclusion.pattern_for(*table.relation.identity)) is not None
+    }
+    if not left:
+        return scope
+    return replace(
+        scope,
+        tables=tuple(t for t in scope.tables if t.relation.qualified not in left),
+        skipped=(
+            *scope.skipped,
+            *((name, f"diff.exclude: {pattern.written}") for name, pattern in left.items()),
+        ),
     )
 
 
@@ -567,8 +590,12 @@ def run(
     seeds_dir: Path | None = None,
     build: bool = False,
     scratch_url: str | None = None,
+    exclude: Sequence[str] = (),
 ) -> SeedDriftReport:
     """Compare *env*'s seeded rows with *against*'s.
+
+    A table ``diff.exclude`` or *exclude* names is another tool's: it is skipped,
+    with the pattern as the reason.
 
     The seed side is *env*'s own database, or with *build* a scratch database on
     *scratch_url* (else the environment's ``scratch_url``, never its
@@ -591,6 +618,7 @@ def run(
         read,
         settings,
     )
+    scope = excluding(scope, Exclusion.of(environment.diff.exclude, exclude))
     server = scratch_url or environment.scratch_url
     if build and server is None:
         raise ConfigurationError(

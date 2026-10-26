@@ -13,6 +13,7 @@ import psycopg
 
 from confiture.core.connection import create_connection, load_config, scratch_url_from_config
 from confiture.core.drift import SchemaDriftDetector, drift_config_from, extra_objects_of
+from confiture.core.relation_exclusion import exclusion_from
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
@@ -29,6 +30,7 @@ def check_live_drift(
     ignore_column_order: bool = False,
     extra_objects: str | None = None,
     scratch_url: str | None = None,
+    exclude: tuple[str, ...] = (),
 ):
     """Compare the live schema against *schema_file*.
 
@@ -41,6 +43,8 @@ def check_live_drift(
             never opened.
         scratch_url: ``--scratch-url``: the server the tree is built on and read
             back from; it wins over the environment's ``scratch_url``.
+        exclude: ``--exclude``: relation patterns left out of the comparison, added
+            to the config's ``diff.exclude``.
 
     Returns:
         The :class:`~confiture.core.drift.DriftReport`.
@@ -64,7 +68,7 @@ def check_live_drift(
                 f"Database connection failed: {exc}", error_code="CONFIG_006"
             ) from exc
         return _detector(
-            shared, config_path, ignore_column_order, extra_objects, scratch_url
+            shared, config_path, ignore_column_order, extra_objects, scratch_url, exclude
         ).compare_with_schema_file(str(schema_file))
 
     config_data = load_config(config_path)
@@ -77,7 +81,7 @@ def check_live_drift(
 
     try:
         return _detector(
-            conn, config_path, ignore_column_order, extra_objects, scratch_url
+            conn, config_path, ignore_column_order, extra_objects, scratch_url, exclude
         ).compare_with_schema_file(str(schema_file))
     finally:
         conn.close()
@@ -89,6 +93,7 @@ def _detector(
     ignore_column_order: bool,
     extra_objects: str | None = None,
     scratch_url: str | None = None,
+    exclude: tuple[str, ...] = (),
 ) -> SchemaDriftDetector:
     """A detector honouring the config's ``drift:`` block, its ``scratch_url`` and the CLI flags (#226)."""
 
@@ -100,4 +105,5 @@ def _detector(
         column_order_severity=cfg.column_order_severity,
         scratch_url=scratch_url_from_config(config_data, scratch_url),
         extra_objects=extra_objects_of(extra_objects, cfg.extra_objects),
+        exclude=exclusion_from(config_data, exclude),
     )

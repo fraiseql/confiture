@@ -300,6 +300,19 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "on a TVIEW (tviews.registry.managed_indexes)"
         ),
     },
+    {
+        "code": "DIFFER_411",
+        "message_template": (
+            "{kind} '{identity}' depends on {relation}, which diff.exclude leaves out of "
+            "the comparison: the diff says nothing about it"
+        ),
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Narrow the diff.exclude / --exclude pattern so it leaves the relation in, or "
+            "move the object to the tool that owns the relation"
+        ),
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",

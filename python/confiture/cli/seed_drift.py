@@ -69,7 +69,8 @@ def drift(
     migrate-only one gets only the rows a migration inserts. Every table the seed
     tree writes is compared, matched by a key the seed itself writes: rows only
     the seed side holds, rows only the live side holds, and rows whose columns
-    differ. Exit 0: no difference nothing explains; 1: drift, or a seed_drift entry
+    differ. A table the environment's diff.exclude names is another tool's, and is
+    skipped. Exit 0: no difference nothing explains; 1: drift, or a seed_drift entry
     that matches nothing; 2: a table could not be compared (this wins over 1); 3: a
     database did not answer; 5: configuration (no scratch server for --build, an
     unknown environment). Guide: docs/guides/seed-drift.md.

@@ -1160,6 +1160,7 @@ confiture migrate diff [OPTIONS] [old_schema] [new_schema]
 | `--to-env` | - | str | - | Desired state: the environment's build — the files `confiture build --env` selects, in build order (a fragment composed through include_dirs). Instead of --to |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` |
 | `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
+| `--exclude` | - | str | - | Leave the relations matching this pattern out of the comparison, on both sides: `name` in any schema, `schema.name` in that one, each part a case-sensitive glob (repeatable; adds to diff.exclude in the config) |
 | `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |
 | `--name` | - | str | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
@@ -1803,6 +1804,7 @@ confiture migrate validate [OPTIONS]
 | `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files and report each difference by kind: missing_table / extra_table, missing_column / extra_column, type_mismatch, nullable_mismatch, default_mismatch, column_order_mismatch, missing_index / extra_index, missing_constraint / extra_constraint, constraint_mismatch, missing_view / extra_view, missing_matview / extra_matview, missing_trigger / extra_trigger, missing_routine / extra_routine, missing_tview / extra_tview / tview_option_mismatch (pg_tviews), missing_object / extra_object (an extension, schema, domain, policy, … — subject.kind says which), object_definition_mismatch (a domain, type, policy or rule defined otherwise), view_definition_mismatch (a view's or matview's query, with a scratch server). Sequences are not compared; grants and ownership are separate checks (--check-acls, --check-ownership-coverage). Requires --config and a database connection. |
 | `--ignore-column-order` | - | Flag | off | With --check-live-drift: do not report column_order_mismatch (#226) |
 | `--extra-objects` | - | str | - | With --check-live-drift: 'all' reports every stray schema, extension, policy, … as a warning extra_object; 'declared' (default) only those of a kind the DDL declares, as info. Also drift.extra_objects in the config |
+| `--exclude` | - | str | - | With --check-live-drift: leave the relations matching this pattern out of the comparison, on both sides — `name` in any schema, `schema.name` in that one, each part a case-sensitive glob (repeatable; adds to diff.exclude in the config) |
 | `--check-signatures` | - | Flag | off | Compare function signatures in --schema against the live DB. Detects stale overloads created by CREATE OR REPLACE with changed param types. Companion to --require-migration (static pre-commit check, no DB needed). Requires --config (or --env) and --schema. |
 | `--check-imports` | - | Flag | off | Import-check pending Python migration modules. Level 1: catches syntax errors and missing imports. Level 2: verifies version, name, up(), down() are defined. No database connection required. |
 | `--check-body` | - | Flag | off | Compare function bodies (prosrc) between source SQL and the live database. Requires --check-signatures. Opt-in because body comparison is heavier than signature-only comparison. |
@@ -2573,6 +2575,7 @@ confiture migrate validate [OPTIONS]
 | `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files and report each difference by kind: missing_table / extra_table, missing_column / extra_column, type_mismatch, nullable_mismatch, default_mismatch, column_order_mismatch, missing_index / extra_index, missing_constraint / extra_constraint, constraint_mismatch, missing_view / extra_view, missing_matview / extra_matview, missing_trigger / extra_trigger, missing_routine / extra_routine, missing_tview / extra_tview / tview_option_mismatch (pg_tviews), missing_object / extra_object (an extension, schema, domain, policy, … — subject.kind says which), object_definition_mismatch (a domain, type, policy or rule defined otherwise), view_definition_mismatch (a view's or matview's query, with a scratch server). Sequences are not compared; grants and ownership are separate checks (--check-acls, --check-ownership-coverage). Requires --config and a database connection. |
 | `--ignore-column-order` | - | Flag | off | With --check-live-drift: do not report column_order_mismatch (#226) |
 | `--extra-objects` | - | str | - | With --check-live-drift: 'all' reports every stray schema, extension, policy, … as a warning extra_object; 'declared' (default) only those of a kind the DDL declares, as info. Also drift.extra_objects in the config |
+| `--exclude` | - | str | - | With --check-live-drift: leave the relations matching this pattern out of the comparison, on both sides — `name` in any schema, `schema.name` in that one, each part a case-sensitive glob (repeatable; adds to diff.exclude in the config) |
 | `--check-signatures` | - | Flag | off | Compare function signatures in --schema against the live DB. Detects stale overloads created by CREATE OR REPLACE with changed param types. Companion to --require-migration (static pre-commit check, no DB needed). Requires --config (or --env) and --schema. |
 | `--check-imports` | - | Flag | off | Import-check pending Python migration modules. Level 1: catches syntax errors and missing imports. Level 2: verifies version, name, up(), down() are defined. No database connection required. |
 | `--check-body` | - | Flag | off | Compare function bodies (prosrc) between source SQL and the live database. Requires --check-signatures. Opt-in because body comparison is heavier than signature-only comparison. |
@@ -3309,6 +3312,7 @@ confiture drift [OPTIONS]
 | `--check-ownership` | - | Flag | off | Also compare live `pg_class.relowner` against the `ownership:` block |
 | `--warn-only` | - | Flag | off | Demote MISSING_GRANT items from critical to warning (progressive rollout) |
 | `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
+| `--exclude` | - | str | - | Leave the relations matching this pattern out of the comparison, on both sides: `name` in any schema, `schema.name` in that one, each part a case-sensitive glob (repeatable; adds to diff.exclude in the config) |
 | `--extra-objects` | - | str | - | Which stray schemas, extensions, domains, policies, … to report as extra_object: 'declared' (default) only of a kind the DDL declares, as info; 'all' of every kind, as a warning. Also drift.extra_objects in the config |
 | `--format` | `-f` | str | `table` | Output format: table or json |
 | `--fail-on-warning` | - | Flag | off | Exit with code 1 on warnings as well as critical drift (default: off) |
@@ -3847,7 +3851,12 @@ confiture seed convert [OPTIONS]
 
 ### `confiture seed generate`
 
-Generate a seed SQL stub for a PostgreSQL table.
+Write a commented-out `INSERT` stub for a PostgreSQL table: the columns a writer
+supplies and one placeholder per value, to fill by hand. It writes stubs, never
+data, whatever is installed. To generate seed data, use a generator built on
+`confiture.platform`, such as
+[fraiseql-semis](https://pypi.org/project/fraiseql-semis/)
+([source](https://github.com/fraiseql/semis)).
 
 <!-- BEGIN GENERATED: cli confiture seed generate -->
 
@@ -3861,7 +3870,7 @@ confiture seed generate [OPTIONS] {table}
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `table` | str | yes | Table name to generate seed data for |
+| `table` | str | yes | Table to write a seed stub for |
 
 **Options**
 

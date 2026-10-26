@@ -17,7 +17,7 @@ These guards keep that division honest:
   two libraries occupy *different lanes*: confiture validates format (a superset),
   fraiseql-uuid validates structure (a subset).
 
-End-to-end workflow ("confiture build → fraiseql-data seed → confiture
+End-to-end workflow ("confiture build → fraiseql-semis seed → confiture
 seed-validate") is documented in ``docs/guides/prep-seed-validation.md``.
 """
 

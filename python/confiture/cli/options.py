@@ -97,6 +97,19 @@ def scratch_url_option(help: str | None = None) -> Any:
     )
 
 
+def exclude_option(help: str | None = None) -> Any:
+    """``--exclude``: a relation another tool owns, left out of the comparison (repeatable)."""
+    return _option(
+        None,
+        ("--exclude",),
+        help
+        or "Leave the relations matching this pattern out of the comparison, on both sides: "
+        "`name` in any schema, `schema.name` in that one, each part a case-sensitive glob "
+        "(repeatable; adds to diff.exclude in the config)",
+        metavar="PATTERN",
+    )
+
+
 def output_option(
     default: Any = None,
     *aliases: str,

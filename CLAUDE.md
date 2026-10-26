@@ -655,6 +655,7 @@ confiture/
 │   │   ├── preflight.py          # Pre-flight migration checks
 │   │   ├── progress.py           # Progress tracking for long-running operations
 │   │   ├── psql_applier.py       # Shared COPY-aware SQL applier backed by ``psql``
+│   │   ├── relation_exclusion.py # The relations another tool owns, left out of a comparison: ``diff.exclu…
 │   │   ├── restorer.py           # Three-phase pg_restore orchestrator
 │   │   ├── risk_tier.py          # Risk-tier taxonomy for the migration-adapter seam (issue #197)
 │   │   ├── schema_analyzer.py    # Schema analysis and validation for dry-run mode

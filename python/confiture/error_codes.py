@@ -237,6 +237,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "DIFFER_408": 0,  # carve-out: the current tree's index written before its relation
     "DIFFER_409": 5,
     "DIFFER_410": 5,  # a tree index under a name pg_tviews uses on that TVIEW
+    "DIFFER_411": 0,  # carve-out: an object depending on a relation diff.exclude leaves out
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,
