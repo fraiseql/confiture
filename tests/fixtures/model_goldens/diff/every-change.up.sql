@@ -43,6 +43,9 @@ ALTER TABLE people RENAME COLUMN full_name TO display_name;
 ALTER TABLE rekeyed DROP CONSTRAINT IF EXISTS rekeyed_pk;
 
 -- confiture:tier lock_risky
+-- confiture:backfill rekeyed.rekeyed_pk
+-- Replace this block with the statements that fix the rows of rekeyed whose (a, b) repeats or holds a NULL,
+-- or with `-- confiture:backfill none` when no row needs it: migrate up refuses this file until then.
 ALTER TABLE rekeyed ADD CONSTRAINT rekeyed_pk PRIMARY KEY (a, b);
 
 -- confiture:tier destructive
@@ -71,6 +74,9 @@ ALTER TABLE things ADD COLUMN created_at TIMESTAMPTZ;
 ALTER TABLE things ALTER COLUMN note DROP NOT NULL;
 
 -- confiture:tier lock_risky
+-- confiture:backfill things.qty
+-- Replace this block with the statements that fix the rows of things where qty is NULL,
+-- or with `-- confiture:backfill none` when no row needs it: migrate up refuses this file until then.
 ALTER TABLE things ALTER COLUMN qty SET NOT NULL;
 
 ALTER TABLE things ALTER COLUMN size TYPE VARCHAR(100);
@@ -86,9 +92,16 @@ ALTER TABLE things ADD CONSTRAINT things_new_fk FOREIGN KEY (pid) REFERENCES par
 ALTER TABLE things VALIDATE CONSTRAINT things_new_fk;
 
 -- confiture:tier lock_risky
-ALTER TABLE things ADD CONSTRAINT things_new_ck CHECK (qty >= 0);
+-- confiture:backfill things.things_new_ck
+-- Replace this block with the statements that fix the rows of things that fail CHECK (qty >= 0),
+-- or with `-- confiture:backfill none` when no row needs it: migrate up refuses this file until then.
+ALTER TABLE things ADD CONSTRAINT things_new_ck CHECK (qty >= 0) NOT VALID;
+ALTER TABLE things VALIDATE CONSTRAINT things_new_ck;
 
 -- confiture:tier lock_risky
+-- confiture:backfill things.things_new_uq
+-- Replace this block with the statements that fix the rows of things whose (code, qty) repeats,
+-- or with `-- confiture:backfill none` when no row needs it: migrate up refuses this file until then.
 ALTER TABLE things ADD CONSTRAINT things_new_uq UNIQUE (code, qty);
 
 -- confiture:tier lock_risky

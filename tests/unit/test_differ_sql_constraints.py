@@ -13,6 +13,7 @@ a name confiture made up comes back as a name.
 import pglast
 import pytest
 
+from confiture.core.backfill_gate import placeholder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
@@ -57,7 +58,13 @@ class TestACheckConstraintIsGeneratedAsItsExpression:
             CheckConstraintAdded,
         )
         assert _parses(sql)
-        assert sql.strip() == "ALTER TABLE tenant.t ADD CONSTRAINT ck CHECK (id > 0);"
+        # The rows the CHECK can refuse are fixed first, then it is validated apart (#766).
+        assert sql == placeholder(
+            "tenant.t.ck", "the rows of tenant.t that fail CHECK (id > 0)"
+        ) + (
+            "ALTER TABLE tenant.t ADD CONSTRAINT ck CHECK (id > 0) NOT VALID;\n"
+            "ALTER TABLE tenant.t VALIDATE CONSTRAINT ck;\n"
+        )
 
     def test_a_check_has_no_column_list(self) -> None:
         sql = _up(

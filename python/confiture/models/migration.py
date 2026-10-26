@@ -173,6 +173,10 @@ class Migration(ABC):
     # generator sets it under the ``gated`` policy, a SQL migration carries it
     # as the ``-- confiture:destructive`` directive.
     destructive: bool = False
+    # The targets of backfill steps the generator left for the author to write
+    # (``core/backfill_gate``). ``migrate up`` refuses the migration while any is
+    # left; a SQL migration carries them as ``-- confiture:backfill`` directives.
+    backfill_pending: tuple[str, ...] = ()
     # ``confiture migrate up --batched --batch-size N --batch-sleep S`` hands the
     # session a BatchConfig; the session sets it here before ``up()`` runs so a
     # migration using ``BatchedMigration(self.connection, self.batch_config)``

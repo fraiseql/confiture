@@ -45,6 +45,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **`migrate diff --generate` never writes a change the existing rows refuse** (#766). A
+  `NOT NULL` column with no default was written as one `ADD COLUMN … NOT NULL`, which fails on any
+  table with rows; so did `SET NOT NULL`, an added UNIQUE, primary key or CHECK, and a narrowing
+  retype, whenever a row disagreed. The generator now writes:
+  - a column PostgreSQL fills (a `DEFAULT`, identity, generated) as declared;
+  - an `ADD COLUMN … NOT NULL` nothing fills as: add it nullable, a `-- confiture:backfill
+    <table>.<column>` placeholder, then `CHECK (col IS NOT NULL) NOT VALID` → `VALIDATE` →
+    `SET NOT NULL` → drop the check (named `<table>_<column>_not_null_check`, because PostgreSQL 18
+    names the column's own NOT NULL `<table>_<column>_not_null`);
+  - `SET NOT NULL` as the placeholder and the same tightening;
+  - an added UNIQUE or primary key, and a narrowing retype or one with no assignment cast, behind a
+    placeholder naming the rows to fix; an added named CHECK behind a placeholder, then `NOT VALID`
+    and `VALIDATE`.
+
+  `migrate up` refuses a file that still carries a placeholder (new code **`VALID_010`**, exit 5;
+  no flag overrides it), and `migrate preflight` reports it (new issue code
+  **`PFLIGHT_BACKFILL_PENDING`**, severity error, so preflight exits 7). The author replaces the
+  placeholder with the backfill, or writes `-- confiture:backfill none`. A generated `.py`
+  migration carries the placeholders as `backfill_pending` on its class (`migrate up` refuses it;
+  preflight does not read Python migrations for it, as for `destructive`). The `-- confiture:tier`
+  each change carries is unchanged: these statements were `lock_risky` and still are. Two diff
+  goldens moved (`03-zero-downtime-migration.up.sql`, `every-change.up.sql`); the FraiseQL
+  desired-state fixture did not.
+- ⚠️ **A volatile `ADD COLUMN` default is tiered as a rewrite** (#766). `gen_random_uuid()`,
+  `random()`, `nextval(…)`, `clock_timestamp()` — anything not known to be evaluated once — is
+  computed for every row, so `ADD COLUMN … DEFAULT <volatile>` is now `lock_risky` with a rewriting
+  lock profile, nullable or not (it was `additive` when nullable, and `additive` under a live
+  database's server version when `NOT NULL`). A constant, an SQL value function
+  (`CURRENT_TIMESTAMP`) and `now()` keep their tiers.
+- **A `DROP CONSTRAINT` of a constraint the same file added takes its `ADD`'s tier** (#766). It was
+  `destructive`, which gated every generated `SET NOT NULL`; nothing that existed before the
+  migration is dropped. The fact matches only as written, and any statement that is not an
+  `ALTER TABLE` between the two forgets it.
 - **`seed generate` says it writes stubs, and only stubs** (#769). Its docstrings promised to
   delegate to `fraiseql-data` when installed; the probe imported a module that does not exist
   and nothing called it, so the command always wrote the commented-out `INSERT` stub. The dead

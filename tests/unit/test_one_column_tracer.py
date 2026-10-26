@@ -31,6 +31,10 @@ ALLOWED: dict[str, str] = {
         "an expression read as `SELECT <expr>` to compare its value: the one expression, "
         "not a view's output"
     ),
+    "core.ddl_walk:default_text_rewrites": (
+        "a column default read as `SELECT <expr>` to know whether ADD COLUMN computes it "
+        "for every row: the one expression, not a view's output"
+    ),
     "core.ddl_walk:expression_columns": (
         "the columns a CHECK's or a default's expression names, read as `SELECT <expr>`"
     ),

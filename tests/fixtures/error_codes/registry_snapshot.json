@@ -383,6 +383,12 @@
     "exit_code": 5,
     "resolution_hint": "Deploy the squashed migrations there first, cut at an older version, or list an environment that cannot be reached in db/project.yaml squash.skip_environments"
   },
+  "VALID_010": {
+    "message_template": "Migration refused: a backfill step is still the generator's placeholder: {migrations}",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Replace each -- confiture:backfill placeholder with the statements that fix the rows it names, or with -- confiture:backfill none when no row needs it"
+  },
   "CONFIG_014": {
     "message_template": "pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported}",
     "severity": "error",

@@ -110,6 +110,7 @@ resolution hint surfaced in the envelope.
 | `VALID_007` | 5 | error | squash refused: the baseline needs a version after {through} | Pass --version with a version that sorts after the cut |
 | `VALID_008` | 5 | error | migration {version} is the baseline of {count} squashed migration(s), and this database's ledger holds part of that history | Bring the database to the squashed version with the archived migrations first, or restore the squashed files |
 | `VALID_009` | 5 | error | squash refused: {environment} {problem} | Deploy the squashed migrations there first, cut at an older version, or list an environment that cannot be reached in db/project.yaml squash.skip_environments |
+| `VALID_010` | 5 | error | Migration refused: a backfill step is still the generator's placeholder: {migrations} | Replace each -- confiture:backfill placeholder with the statements that fix the rows it names, or with -- confiture:backfill none when no row needs it |
 | `VERIFY_001` | 5 | error | Verify file contains forbidden SQL | Verify files must only contain SELECT queries |
 <!-- END GENERATED -->
 
@@ -172,6 +173,7 @@ warnings → 0 unless `--strict`.
 | `PFLIGHT_DOWN_EMPTY` | warning | A `.py` migration's `down()` does nothing (absent, or only a docstring, `pass`, `...`, a bare `return` or `raise NotImplementedError`), read from its source and never imported |
 | `PFLIGHT_DOWN_UNVERIFIED` | info | A `.py` migration's `down()` is not read: whether `migrate down` undoes it is not checked (`details.down`: `present` — it has statements; `unknown` — another base class may supply it) |
 | `PFLIGHT_DESTRUCTIVE_GATED` | warning | Migration carries `-- confiture:destructive`: `migrate up` refuses it without `--allow-destructive` |
+| `PFLIGHT_BACKFILL_PENDING` | error | Migration still carries a `-- confiture:backfill <target>` placeholder the generator wrote: `migrate up` refuses it (`VALID_010`) until the author writes the backfill or `-- confiture:backfill none` (`details.targets`) |
 | `PFLIGHT_IRREVERSIBLE` | info | Migration declares `-- confiture:irreversible <reason>`: `migrate down` runs but does not restore what the reasons name (`details.irreversible`) |
 | `PFLIGHT_NON_TRANSACTIONAL` | warning | Migration contains a statement that can't run in a transaction (e.g. `CREATE INDEX CONCURRENTLY`) |
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |

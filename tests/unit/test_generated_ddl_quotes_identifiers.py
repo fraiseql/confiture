@@ -87,7 +87,9 @@ def test_a_changed_column_is_named_by_its_name() -> None:
         *_up("ColumnDefaultChanged"),
     ]
 
-    assert {cmd.name for s in changed for cmd in s.cmds} == {"Mixed Col"}
+    # SET NOT NULL is proven by a CHECK it adds, validates and drops by name (#766).
+    named = {cmd.name for s in changed for cmd in s.cmds if cmd.name}
+    assert named == {"Mixed Col", "Order Line_Mixed Col_not_null_check"}
     assert {(s.relation.schemaname, s.relation.relname) for s in changed} == {("app", "Order Line")}
 
 
