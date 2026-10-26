@@ -577,7 +577,7 @@ seed_app.command("drift")(seed_drift)
 @seed_app.command("generate")
 @cli_boundary
 def seed_generate(
-    table: str = typer.Argument(..., help="Table name to generate seed data for"),
+    table: str = typer.Argument(..., help="Table to write a seed stub for"),
     database_url: str = database_url_option(...),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema name"),
     seed_env: str = typer.Option(
@@ -594,12 +594,14 @@ def seed_generate(
     ),
     format_type: str = format_option("text", "json"),
 ) -> None:
-    """Generate a seed SQL stub for a PostgreSQL table.
+    """Write a commented-out INSERT stub for a PostgreSQL table.
 
     Connects to the database, introspects the table's column structure,
     and writes a commented-out INSERT template to db/seeds/<env>/<table>.sql.
-    A stub to fill by hand, not a generator: a tool that writes seed data builds
-    on confiture.platform (docs/guides/building-on-confiture.md).
+    It writes stubs, never data, whatever is installed: fill the placeholders
+    by hand. To generate seed data, use a generator built on confiture.platform,
+    such as fraiseql-semis (https://pypi.org/project/fraiseql-semis/); see
+    docs/guides/building-on-confiture.md.
 
     EXAMPLES:
       confiture seed generate users --database-url $DATABASE_URL

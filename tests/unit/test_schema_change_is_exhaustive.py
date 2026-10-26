@@ -32,6 +32,7 @@ from confiture.core.schema_change import (
     ColumnChange,
     DefinitionChange,
     EnumOrSequenceChange,
+    RebuildChange,
     SchemaChange,
     TableChange,
     TableObjectChange,
@@ -75,7 +76,14 @@ def test_the_fixture_holds_a_sample_of_every_kind() -> None:
 
 
 def test_the_renderer_groups_partition_the_union() -> None:
-    groups = [TableChange, ColumnChange, TableObjectChange, EnumOrSequenceChange, DefinitionChange]
+    groups = [
+        TableChange,
+        ColumnChange,
+        TableObjectChange,
+        EnumOrSequenceChange,
+        DefinitionChange,
+        RebuildChange,
+    ]
     members = [kind for group in groups for kind in group.__args__]
     assert sorted(members, key=_kind_id) == sorted(KINDS, key=_kind_id)
 
@@ -173,4 +181,4 @@ def test_the_wire_types_are_spelled_only_by_the_serialiser() -> None:
 
 
 def test_the_serialiser_spells_every_fixed_wire_type() -> None:
-    assert len(_wire_spellings((PACKAGE / SERIALISER).read_text(encoding="utf-8"))) == 28
+    assert len(_wire_spellings((PACKAGE / SERIALISER).read_text(encoding="utf-8"))) == 30

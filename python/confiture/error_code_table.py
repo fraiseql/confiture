@@ -300,6 +300,19 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "on a TVIEW (tviews.registry.managed_indexes)"
         ),
     },
+    {
+        "code": "DIFFER_411",
+        "message_template": (
+            "{kind} '{identity}' depends on {relation}, which diff.exclude leaves out of "
+            "the comparison: the diff says nothing about it"
+        ),
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Narrow the diff.exclude / --exclude pattern so it leaves the relation in, or "
+            "move the object to the tool that owns the relation"
+        ),
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",
@@ -527,6 +540,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": (
             "Deploy the squashed migrations there first, cut at an older version, or list an "
             "environment that cannot be reached in db/project.yaml squash.skip_environments"
+        ),
+    },
+    {
+        "code": "VALID_010",
+        "message_template": (
+            "Migration refused: a backfill step is still the generator's placeholder: {migrations}"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Replace each -- confiture:backfill placeholder with the statements that fix the rows "
+            "it names, or with -- confiture:backfill none when no row needs it"
         ),
     },
     {

@@ -429,6 +429,7 @@ jobs:
           tests/integration/test_tview_migrate.py \
           tests/integration/test_tview_restore.py \
           tests/integration/test_generated_examples_apply.py \
+          tests/integration/test_generated_migration_meets_views.py \
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
           tests/unit/test_tview_indexes.py \
@@ -486,7 +487,7 @@ jobs:
         # formatter style), so an unpinned install can turn CI red on an
         # unrelated PR. Keep in lockstep with [dependency-groups] ruff and
         # .pre-commit-config.yaml's rev, deliberately.
-        uv pip install 'ruff==0.16.10'
+        uv pip install 'ruff==0.17.1'
     - name: Run ruff check
       run: uv run ruff check .
     - name: Run ruff format check

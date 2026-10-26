@@ -42,3 +42,5 @@ ALTER TABLE things ADD CONSTRAINT things_qty_nn NOT NULL qty NOT VALID;
 
 CREATE VIEW v_retired AS SELECT 1 AS one;
 CREATE VIEW v_things AS SELECT id FROM things;
+-- Reads a column the pair retypes: dropped and created again around it (#765).
+CREATE VIEW v_sizes AS SELECT id, size FROM things;

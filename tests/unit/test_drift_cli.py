@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.relation_exclusion import Exclusion
 
 runner = CliRunner()
 
@@ -431,6 +432,7 @@ class TestMigrateValidateCheckLiveDrift:
             column_order_severity="warning",
             scratch_url=None,
             extra_objects="declared",
+            exclude=Exclusion(),
         )
         mock_detector.compare_with_schema_file.assert_called_once_with(str(schema_file))
 

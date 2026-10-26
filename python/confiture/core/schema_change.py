@@ -57,6 +57,9 @@ __all__ = [
     "ColumnRenamed",
     "ColumnTypeChanged",
     "DefinitionChange",
+    "Dependent",
+    "DependentsDropped",
+    "DependentsRecreated",
     "EnumOrSequenceChange",
     "EnumTypeAdded",
     "EnumTypeDropped",
@@ -70,6 +73,7 @@ __all__ = [
     "ObjectAdded",
     "ObjectDropped",
     "ObjectReplaced",
+    "RebuildChange",
     "SchemaChange",
     "SchemaDiff",
     "SequenceAdded",
@@ -936,6 +940,87 @@ class ObjectReplaced(_ObjectChange):
         }
 
 
+@dataclass(frozen=True)
+class Dependent:
+    """A view, a materialized view or a TVIEW a column change has to drop and create again.
+
+    ``obj`` is its statement on the side it is created from, ``indexes`` the ones a
+    materialized view or a TVIEW holds there, and ``attached`` what that side writes
+    on it besides — its grants, its comment, its owner — which a ``DROP`` takes with
+    it (``ddl_objects.attached_statements``).
+    """
+
+    obj: DDLObject
+    indexes: tuple[Index, ...] = ()
+    attached: tuple[str, ...] = ()
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The dependent's key."""
+        return self.obj.ref
+
+
+class _Rebuild(_Change):
+    """The relations PostgreSQL will not let a column change pass under (#765).
+
+    ``ALTER COLUMN … TYPE`` and ``DROP COLUMN`` are refused while a view reads the
+    column, and a view on that view holds the first one in place. A migration
+    drops them first, in reverse dependency order (:class:`DependentsDropped`),
+    and creates them again from the new tree once every table is edited, in
+    dependency order (:class:`DependentsRecreated`). ``dependents`` are in
+    dependency order: each after the ones it reads.
+    """
+
+    __slots__ = ()
+
+    TEMPLATE: ClassVar[str] = "{verb} {name}"
+    VERB: ClassVar[str]
+
+    dependents: tuple[Dependent, ...]
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The first dependent: the view the others are created after."""
+        return self.dependents[0].ref
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {
+            "table": self.ref.qualified,
+            "details": {
+                "dependents": [
+                    {"kind": d.ref.kind, "name": d.ref.qualified} for d in self.dependents
+                ]
+            },
+        }
+
+    def _text(self, wire: WireChange) -> str:
+        names = ", ".join(d["name"] for d in (wire.details or {}).get("dependents", ()))
+        return self.TEMPLATE.format(verb=self.VERB, name=names)
+
+
+@dataclass(frozen=True)
+class DependentsDropped(_Rebuild):
+    """The dependents a column change is refused under, dropped before any table is edited.
+
+    Carried as the old tree holds them: the down creates them again from it.
+    """
+
+    WIRE: ClassVar[str] = "DROP_DEPENDENTS"
+    VERB: ClassVar[str] = "DROP DEPENDENTS"
+
+    dependents: tuple[Dependent, ...]
+
+
+@dataclass(frozen=True)
+class DependentsRecreated(_Rebuild):
+    """The dependents :class:`DependentsDropped` dropped, created again from the new tree."""
+
+    WIRE: ClassVar[str] = "CREATE_DEPENDENTS"
+    VERB: ClassVar[str] = "CREATE DEPENDENTS"
+
+    dependents: tuple[Dependent, ...]
+
+
 SchemaChange = (
     TableAdded
     | TableDropped
@@ -968,10 +1053,12 @@ SchemaChange = (
     | ObjectAdded
     | ObjectDropped
     | ObjectReplaced
+    | DependentsDropped
+    | DependentsRecreated
 )
 """One difference between two schema trees. Closed: a new kind is a new variant here."""
 
-#: The union in the five groups a renderer answers for, each a function of its own:
+#: The union in the six groups a renderer answers for, each a function of its own:
 #: a 25-arm ``match`` is past the complexity a function here may have.
 TableChange = TableAdded | TableDropped | TableRenamed
 ColumnChange = (
@@ -1002,6 +1089,7 @@ EnumOrSequenceChange = (
     EnumTypeAdded | EnumTypeDropped | EnumValuesChanged | SequenceAdded | SequenceDropped
 )
 DefinitionChange = ObjectAdded | ObjectDropped | ObjectReplaced
+RebuildChange = DependentsDropped | DependentsRecreated
 
 #: Every variant, for the guards that must answer for each.
 KINDS: frozenset[type[SchemaChange]] = frozenset(get_args(SchemaChange))
