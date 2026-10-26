@@ -193,9 +193,10 @@ class Side:
     needs quotes, which :meth:`SchemaDiffer.compare_sides` refuses. ``dangling``
     holds each index written on a relation the tree had not declared when it ran
     (``SchemaRead.dangling_indexes``, #679); a database holds none. ``attached``
-    is what the tree writes on each relation besides creating it — grants,
-    comments, owner — keyed by identity (``SchemaRead.attached``, #765); a database
-    side carries none.
+    is what each view, materialized view and TVIEW carries besides its definition —
+    grants, comments, owner — as the statements that set it, keyed by identity: a
+    tree's as it writes them (``SchemaRead.attached``, #765), a database's as its
+    catalog holds them (``live_catalog.attached``, #787).
     """
 
     model: SchemaModel = field(default_factory=SchemaModel)
@@ -728,14 +729,21 @@ def _dependents_rebuilt(changes: list[SchemaChange], old: Side, new: Side) -> li
     if not refs:
         return []
 
-    def carried(side: Side, ref: ObjectRef) -> Dependent:
-        attached = side.attached.get((ref.schema or DEFAULT_SCHEMA, ref.name), ())
+    def carried(side: Side, other: Side, ref: ObjectRef) -> Dependent:
+        """*ref* as *side* creates it, with what a drop of *other*'s takes and what *side* writes.
+
+        Grants, comments and owner are not compared: a view created again keeps
+        those the database held, then takes the ones *side* writes (#787).
+        """
+        identity = (ref.schema or DEFAULT_SCHEMA, ref.name)
+        taken = (*other.attached.get(identity, ()), *side.attached.get(identity, ()))
+        attached = tuple(dict.fromkeys(taken))
         return Dependent(side.objects[ref][-1], _carried_indexes(side.model, ref), attached)
 
     return [
-        DependentsDropped(tuple(carried(old, ref) for ref in refs)),
+        DependentsDropped(tuple(carried(old, new, ref) for ref in refs)),
         DependentsRecreated(
-            tuple(carried(new, ref) for ref in in_dependency_order(new.objects, refs))
+            tuple(carried(new, old, ref) for ref in in_dependency_order(new.objects, refs))
         ),
     ]
 
