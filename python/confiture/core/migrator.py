@@ -127,8 +127,9 @@ class Migrator(MigrationEngine):
             force: If True, skip migration state checks and apply all migrations
             migrations_dir: Custom migrations directory (default: db/migrations)
             target: Target migration version (applies all if None)
-            lock_config: ``enabled`` and ``timeout_ms`` are honoured (default:
-                enabled, 30s). Pass ``LockConfig(enabled=False)`` to disable locking.
+            lock_config: ``enabled``, ``timeout_ms`` and ``extra_keys`` are honoured
+                (default: enabled, 30s, no extra key). Pass ``LockConfig(enabled=False)``
+                to disable locking.
             checksum_config: ``enabled`` and ``on_mismatch`` are honoured (default:
                 enabled, fail on mismatch).
             progress: Optional ProgressManager advanced once per applied migration
@@ -148,7 +149,9 @@ class Migrator(MigrationEngine):
         """
         lock_config = lock_config or LockConfig()
         checksum_config = checksum_config or ChecksumConfig()
-        session = MigratorSession.attached(self, migrations_dir or Path("db/migrations"))
+        session = MigratorSession.attached(
+            self, migrations_dir or Path("db/migrations"), extra_lock_keys=lock_config.extra_keys
+        )
         result = session.up(
             target=target,
             force=force,

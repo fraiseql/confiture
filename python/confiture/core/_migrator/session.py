@@ -16,7 +16,7 @@ of each signature — the ``Args:`` block, the forwarding call, and the fence in
 ``docs/api/migrator.md`` — against the signature itself.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import TracebackType
 from typing import Any, ClassVar
@@ -33,7 +33,12 @@ from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.events import UpObserver
 from confiture.core._migrator.loader import load_migration_class
 from confiture.core._migrator.options import UpOptions
-from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
+from confiture.core.locking import (
+    LockConfig,
+    MigrationLock,
+    resolve_extra_lock_keys,
+    resolve_lock_settings,
+)
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import (
     CurrentRevision,
@@ -101,6 +106,7 @@ class MigratorSession:
         command: str | None = None,
         connection_factory: Callable[[Any], Connection] | None = None,
         migration_loader: Callable[[Path], type] | None = None,
+        extra_lock_keys: Sequence[int] | None = None,
     ) -> None:
         self._config = config
         self._connection_factory = connection_factory
@@ -112,6 +118,15 @@ class MigratorSession:
         self._migration_table_override = migration_table_override
         self._command = command  # recorded in the lock-holder metadata (#147)
         self._owns_connection = True
+        # Other tools' advisory keys every verb that takes the lock takes too (#768):
+        # given, else the environment's migration.locking.extra_keys.
+        self._extra_lock_keys = (
+            tuple(extra_lock_keys)
+            if extra_lock_keys is not None
+            else resolve_extra_lock_keys(
+                getattr(getattr(config, "migration", None), "locking", None)
+            )
+        )
 
     @property
     def connection_factory(self) -> Callable[[Any], Connection]:
@@ -139,6 +154,7 @@ class MigratorSession:
         *,
         config: Environment | None = None,
         command: str | None = None,
+        extra_lock_keys: Sequence[int] | None = None,
     ) -> MigratorSession:
         """A session over an engine that already owns its connection.
 
@@ -146,7 +162,7 @@ class MigratorSession:
         the connection. This is how :meth:`MigrationEngine.migrate_up` runs the one
         apply loop without opening a second connection.
         """
-        session = cls(config, migrations_dir, command=command)
+        session = cls(config, migrations_dir, command=command, extra_lock_keys=extra_lock_keys)
         session._conn = migrator.connection
         session._migrator = migrator
         session._owns_connection = False
@@ -212,11 +228,17 @@ class MigratorSession:
     def _migration_lock(
         self, *, no_lock: bool, lock_timeout: int, command: str | None = None
     ) -> MigrationLock:
-        """The migration lock for one run of a verb, on this session's connection."""
+        """The migration lock for one run of a verb, on this session's connection.
+
+        Every verb that takes the lock takes it here, so the extra keys come with it.
+        """
         return type(self).default_lock(
             self._conn,
             LockConfig(
-                enabled=not no_lock, timeout_ms=lock_timeout, command=command or self._command
+                enabled=not no_lock,
+                timeout_ms=lock_timeout,
+                command=command or self._command,
+                extra_keys=self._extra_lock_keys,
             ),
         )
 

@@ -452,8 +452,8 @@ See [Tracking Table](./tracking-table.md) for the full table schema and columns.
 
 ### `migration.locking`
 
-**Type**: Object (`enabled`, `timeout_ms`)
-**Default**: `enabled: true`, `timeout_ms: 30000`
+**Type**: Object (`enabled`, `timeout_ms`, `extra_keys`)
+**Default**: `enabled: true`, `timeout_ms: 30000`, `extra_keys: []`
 **Description**: The advisory lock every `migrate up` / `migrate down` / `migrate apply-as`
 takes so two deployments never apply concurrently. The CLI flags `--lock-timeout` and
 `--no-lock` override it for one run; the library reads it through
@@ -464,7 +464,39 @@ migration:
   locking:
     enabled: true        # false = never lock (single-writer environments only)
     timeout_ms: 30000    # how long to wait for the lock before exit 6
+    extra_keys:          # other tools' advisory keys, taken too (see below)
+      - 0x4652414953450001   # FraiseQL's boot-DDL lock (= 5063410935656677377)
 ```
+
+#### `extra_keys`: serialising with another tool's DDL
+
+confiture's own lock is `pg_advisory_lock(classid, objid)`: two `int4` keys, the
+second derived from the database name. Another tool that runs DDL against the same
+database takes its own key, in its own form — FraiseQL's server takes
+`pg_advisory_xact_lock(0x4652414953450001)`, one `bigint`, in the transaction that
+applies its boot DDL. PostgreSQL keeps the one-`bigint` and the two-`int4` forms in
+separate key spaces, so these two locks never contend, whatever the numbers: a
+FraiseQL server booting during `confiture migrate up` applies its DDL at the same
+time. The two serialise only when one side takes the other's key, and
+`extra_keys` is confiture taking it.
+
+Each key is a signed 64-bit integer (−2⁶³ … 2⁶³−1; YAML reads `0x…` as an
+integer; a bool or a string is refused). Every command that takes the migration
+lock — `migrate up` (`--online` included), `migrate down`, `migrate down-to`,
+`migrate apply-as`, `migrate squash-ledger`, and `MigratorSession` /
+`Migrator.migrate_up()` in the library — then also takes each key with
+`pg_advisory_lock(bigint)`, at session level:
+
+- **after** confiture's own lock, in the order listed, so every confiture run
+  acquires in one order;
+- in the same mode as the main lock, each key waiting up to `timeout_ms`
+  (`--lock-timeout`); a key another session holds past it fails the run with
+  `LOCK_1300` (exit 6), naming the key, before anything is applied;
+- held for the whole run and released in reverse order on every exit — success,
+  a failing migration, an exception, or a later key that could not be taken.
+
+`enabled: false` (or `--no-lock`) takes none of them. `migrate steps --resume`
+takes no lock, so it takes no extra key either.
 
 ---
 
@@ -679,6 +711,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 |---|---|---|---|
 | `enabled` | bool | `true` | Whether locking is enabled (default: True) |
 | `timeout_ms` | int | `30000` | Lock acquisition timeout in milliseconds (default: 30000) |
+| `extra_keys` | list[Annotated[int, Strict(strict=True), FieldInfo(annotation=NoneType, required=True, metadata=[Ge(ge=-9223372036854775808), Le(le=9223372036854775807)])]] | `[]` | Other tools' advisory lock keys, each a signed 64-bit integer, that ``migrate up`` and ``migrate down`` also take, in the one-``bigint`` form, after confiture's own lock and in this order, holding them for the whole run (default: none). FraiseQL's boot DDL takes ``0x4652414953450001``. |
 
 #### `MigrationGeneratorConfig`
 
@@ -930,6 +963,7 @@ migration:
   locking:
     enabled: true
     timeout_ms: 30000
+    extra_keys: []
   view_helpers: auto
   migration_generators:
     <name>:

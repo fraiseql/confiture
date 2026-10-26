@@ -49,7 +49,11 @@ from confiture.core.backfill import BackfillSettings
 from confiture.core.checksum import ChecksumVerificationError
 from confiture.core.error_handler import print_error_to_console
 from confiture.core.large_tables import BatchConfig
-from confiture.core.locking import LockAcquisitionError, resolve_lock_settings
+from confiture.core.locking import (
+    LockAcquisitionError,
+    resolve_extra_lock_keys,
+    resolve_lock_settings,
+)
 from confiture.core.migrator import find_duplicate_migration_versions
 from confiture.error_codes import FINDINGS, USAGE, exit_code_of
 from confiture.exceptions import MigrationConflictError
@@ -335,6 +339,7 @@ def migrate_up(
             migration_table_override=_get_tracking_table(config_data),
             command="confiture migrate up",
             connection_factory=connect,
+            extra_lock_keys=resolve_extra_lock_keys(env_cfg.migration.locking if env_cfg else None),
         ) as session:
             if dry_run or dry_run_execute:
                 if not is_json(format_output):
