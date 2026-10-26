@@ -625,6 +625,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `infrastructure` | [InfrastructureConfig](#infrastructureconfig) | (nested) | Deployment topology — the read replicas the replica-safety policy takes into account (``infrastructure.replicas``). |
 | `seed` | [SeedConfig](#seedconfig) | (nested) | Seed data application configuration |
 | `drift` | [DriftConfig](#driftconfig) | (nested) | How ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (``drift.ignore_column_order``, ``drift.column_order_severity``). |
+| `diff` | [DiffConfig](#diffconfig) | (nested) | What every schema comparison leaves out: ``diff.exclude``, the relations another tool owns (``migrate diff``, ``confiture drift``, ``migrate validate --check-live-drift``, ``seed drift``). |
 | `ssh_tunnel` | [SshTunnelConfig](#sshtunnelconfig) \| NoneType | - | SSH tunnel to reach a database that is not directly routable; ``null`` means connect directly. |
 | `acls` | list[[AclTableExpectation](#acltableexpectation)] | `[]` | Expected table grants per schema for ``drift --check-acls`` and the ``acl_001`` lint (list of ``AclTableExpectation``). |
 | `acls_lint_enabled` | bool | `false` | Run the static ``acl_001`` grant-coverage lint over migrations; ``acls:`` alone only feeds ``drift --check-acls``. |
@@ -749,6 +750,12 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `ignore_column_order` | bool | `false` | Never report ``column_order_mismatch`` (default: false). |
 | `column_order_severity` | `warning` \| `critical` | `warning` | Severity of a ``column_order_mismatch`` item: ``warning`` (default) or ``critical`` (fails the run). |
 | `extra_objects` | `declared` \| `all` | `declared` | ``declared`` (default): an ``extra_object`` (info) only of a kind the DDL declares, in a schema it declares. ``all``: one of any kind, a policy or rule nobody declared included, graded ``warning`` so a deploy gate can escalate it. The default schema is never reported unless the DDL creates it. |
+
+#### `DiffConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `exclude` | list[str] | `[]` | Relation patterns left out of every comparison, on both sides: ``name`` matches the relation's name in any schema, ``schema.name`` that schema's only; each part is a case-sensitive glob (``*``, ``?``, ``[…]``). A table, view, materialized view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers, policies and rules; a foreign key or trigger of the tree's own on one is reported (``DIFFER_411``). |
 
 #### `SshTunnelConfig`
 
@@ -984,6 +991,8 @@ drift:
   ignore_column_order: false
   column_order_severity: warning
   extra_objects: declared
+diff:
+  exclude: []
 ssh_tunnel:
   host: null
   user: null

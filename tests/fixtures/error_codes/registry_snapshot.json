@@ -173,6 +173,12 @@
     "exit_code": 5,
     "resolution_hint": "Rename the index in the schema: pg_tviews reserves the names of its own indexes on a TVIEW (tviews.registry.managed_indexes)"
   },
+  "DIFFER_411": {
+    "message_template": "{kind} '{identity}' depends on {relation}, which diff.exclude leaves out of the comparison: the diff says nothing about it",
+    "severity": "warning",
+    "exit_code": 0,
+    "resolution_hint": "Narrow the diff.exclude / --exclude pattern so it leaves the relation in, or move the object to the tool that owns the relation"
+  },
   "ROLLBACK_600": {
     "message_template": "Cannot rollback: irreversible change",
     "severity": "critical",

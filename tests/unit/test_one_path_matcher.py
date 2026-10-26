@@ -28,6 +28,10 @@ ALLOWED: dict[str, str] = {
         "`--check-acls` / `--check-ownership` scope by object name — `relname` and "
         "`schema.name` — never by file path"
     ),
+    "core/relation_exclusion.py": (
+        "`diff.exclude` / `--exclude` match an object name, not a path: a relation's "
+        "`name` or its `schema` and `name`, apart"
+    ),
     "core/linting/unresolved.py": (
         "`lint.ignore_objects` excuses an object `build_003` cannot find, matched against "
         "`schema.name`"

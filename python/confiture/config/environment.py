@@ -831,6 +831,23 @@ class DriftConfig(BaseModel):
     extra_objects: Literal["declared", "all"] = "declared"
 
 
+class DiffConfig(BaseModel):
+    """``diff:`` — what every schema comparison leaves out (#767).
+
+    ``exclude`` names the relations another tool owns — a runtime's bookkeeping
+    tables, created at boot and never declared in the tree — so ``migrate diff``,
+    ``confiture drift``, ``migrate validate --check-live-drift`` and ``seed drift``
+    neither report nor drop them. ``--exclude`` on ``migrate diff``, ``confiture
+    drift`` and ``migrate validate`` adds to the list; ``seed drift`` skips the
+    tables it names.
+
+    Attributes:
+        exclude: Relation patterns left out of every comparison, on both sides: ``name`` matches the relation's name in any schema, ``schema.name`` that schema's only; each part is a case-sensitive glob (``*``, ``?``, ``[…]``). A table, view, materialized view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers, policies and rules; a foreign key or trigger of the tree's own on one is reported (``DIFFER_411``).
+    """
+
+    exclude: list[str] = Field(default_factory=list)
+
+
 def _read_config_yaml(config_path: Path, *, allow_empty: bool = False) -> dict[str, Any]:
     """The YAML mapping at ``config_path``; anything else is a ``ConfigurationError``.
 
@@ -1011,6 +1028,7 @@ class Environment(BaseModel):
         superuser_dirs: Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash.
         infrastructure: Deployment topology — the read replicas the replica-safety policy takes into account (``infrastructure.replicas``).
         drift: How ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (``drift.ignore_column_order``, ``drift.column_order_severity``).
+        diff: What every schema comparison leaves out: ``diff.exclude``, the relations another tool owns (``migrate diff``, ``confiture drift``, ``migrate validate --check-live-drift``, ``seed drift``).
         ssh_tunnel: SSH tunnel to reach a database that is not directly routable; ``null`` means connect directly.
         acls: Expected table grants per schema for ``drift --check-acls`` and the ``acl_001`` lint (list of ``AclTableExpectation``).
         acls_lint_enabled: Run the static ``acl_001`` grant-coverage lint over migrations; ``acls:`` alone only feeds ``drift --check-acls``.
@@ -1054,6 +1072,7 @@ class Environment(BaseModel):
     infrastructure: InfrastructureConfig = Field(default_factory=InfrastructureConfig)
     seed: SeedConfig = Field(default_factory=SeedConfig)
     drift: DriftConfig = Field(default_factory=DriftConfig)
+    diff: DiffConfig = Field(default_factory=DiffConfig)
     ssh_tunnel: SshTunnelConfig | None = None
     acls: list[AclExpectation] = Field(default_factory=list)
     # Opt-in switch for the ACL coverage lint rule.  Defaults to False so a

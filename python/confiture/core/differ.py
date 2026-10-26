@@ -22,6 +22,7 @@ from confiture.core.ddl_walk import (
 )
 from confiture.core.linting.inventory import signatures_match
 from confiture.core.linting.quoted_names import QuotedName
+from confiture.core.relation_exclusion import Exclusion, leave_out
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -223,6 +224,18 @@ class Side:
     def sequences(self) -> list[Sequence]:
         """The model's sequences, in the order the tree declared them."""
         return list(self.model.sequences.values())
+
+
+def without(side: Side, exclusion: Exclusion) -> Side:
+    """*side* without the relations *exclusion* names, and what it has to say about it (#767)."""
+    kept = leave_out(exclusion, side.model, side.objects, side.dangling)
+    return replace(
+        side,
+        model=kept.model,
+        objects=kept.objects,
+        dangling=kept.dangling,
+        warnings=[*side.warnings, *kept.notes],
+    )
 
 
 def stated_side(model: SchemaModel, constants: ConstantSpellings = AS_WRITTEN) -> Side:
@@ -817,7 +830,12 @@ class SchemaDiffer:
         return self.compare_sides(Side.of(old), Side.of(new))
 
     def compare_sides(
-        self, old: Side, new: Side, policy: ComparisonPolicy | None = None
+        self,
+        old: Side,
+        new: Side,
+        policy: ComparisonPolicy | None = None,
+        *,
+        exclude: Exclusion | None = None,
     ) -> SchemaDiff:
         """What changed from *old* to *new*: the one comparison of two schemas.
 
@@ -826,12 +844,17 @@ class SchemaDiffer:
             new: The schema after.
             policy: How to compare them; by default the one their models'
                 sources call for (:func:`policy_between`).
+            exclude: The relations another tool owns (``diff.exclude``, #767),
+                left out of both sides before anything is compared; what still
+                depends on one is said (``DIFFER_411``).
 
         Raises:
             DifferError: ``DIFFER_403`` when either side names an object that needs quotes;
                 ``DIFFER_406`` when *new* indexes a relation it does not declare and
                 *old* declares, or, as a database, does not hold.
         """
+        if exclude:
+            old, new = without(old, exclude), without(new, exclude)
         refuse_quoted_names("old", old.quoted)
         refuse_quoted_names("new", new.quoted)
         refuse_undeclared_relations(old, new)
