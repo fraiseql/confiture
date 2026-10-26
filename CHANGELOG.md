@@ -29,6 +29,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LockConfig(extra_keys=…)`); `MigratorSession(extra_lock_keys=…)` gives them without an
   environment file.
 
+### Changed
+
+- **`seed generate` says it writes stubs, and only stubs** (#769). Its docstrings promised to
+  delegate to `fraiseql-data` when installed; the probe imported a module that does not exist
+  and nothing called it, so the command always wrote the commented-out `INSERT` stub. The dead
+  probe and `SeedBridge`'s `fraiseql_data_available=` argument are gone, the help, the
+  docstrings and the docs say it writes stubs whatever is installed and point at
+  fraiseql-semis for generated data, and a unit test pins the stub's text.
+
+### Fixed
+
+- **fraiseql-semis is linked and versioned in the docs** (#770). The README, *Building on
+  confiture*, the prep-seed validation guide and `examples/08-generated-seeds` link the PyPI
+  package and `fraiseql/semis`, and say the examples and the UUID-layout note were written
+  against fraiseql-semis 0.3.0. The prep-seed guide named `fraiseql-data` as the generator in
+  the seed workflow; it names fraiseql-semis, the generator built on `confiture.platform`.
+
 ## [1.41.0] - 2026-10-25
 
 ### Added
