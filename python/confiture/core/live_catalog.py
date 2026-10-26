@@ -974,6 +974,73 @@ def relations(
     return [(schema, name) for _oid, schema, name in rows]
 
 
+#: The relations named in the two arrays: each one's kind, owner and comment (a
+#: literal PostgreSQL quoted).
+_OWNED = """
+SELECT n.nspname, c.relname, c.relkind, pg_get_userbyid(c.relowner),
+       quote_literal(obj_description(c.oid, 'pg_class'))
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN unnest(%s::text[], %s::text[]) AS wanted(schema_name, relation_name)
+  ON wanted.schema_name = n.nspname AND wanted.relation_name = c.relname
+ORDER BY n.nspname, c.relname
+"""
+
+#: Each privilege granted on those relations to a role other than the owner:
+#: ``NULL`` for ``PUBLIC``.
+_GRANTED = """
+SELECT n.nspname, c.relname,
+       CASE a.grantee WHEN 0 THEN NULL ELSE pg_get_userbyid(a.grantee) END,
+       a.privilege_type, a.is_grantable
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN unnest(%s::text[], %s::text[]) AS wanted(schema_name, relation_name)
+  ON wanted.schema_name = n.nspname AND wanted.relation_name = c.relname
+CROSS JOIN LATERAL aclexplode(c.relacl) a
+WHERE a.grantee <> c.relowner
+ORDER BY 1, 2, 3 NULLS FIRST, 5, 4
+"""
+
+#: How ``ALTER``, ``COMMENT ON`` and ``GRANT … ON`` name a relation of each ``relkind``.
+_RELATION_KEYWORDS = {"v": "VIEW", "m": "MATERIALIZED VIEW", "r": "TABLE"}
+
+
+def attached(
+    conn: psycopg.Connection, relations: Iterable[tuple[str, str]]
+) -> dict[tuple[str, str], tuple[str, ...]]:
+    """What a ``DROP`` of each of *relations* takes with it: its owner, comment and grants (#787).
+
+    Keyed ``(schema, name)``, each as the statement that sets it again:
+    ``ALTER … OWNER TO``, ``COMMENT ON … IS``, one ``GRANT`` per grantee, in the
+    order ``pg_dump`` writes them. A relation's owner holds its own privileges,
+    so a grant to the owner is not written. None of it is compared: it is what a
+    migration that drops a view to create it again writes after, as a tree's
+    ``SchemaRead.attached`` is.
+    """
+    wanted = list(relations)
+    names = ([schema for schema, _ in wanted], [name for _, name in wanted])
+    found: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for schema, name, kind, owner, comment in conn.execute(_OWNED, names).fetchall():
+        keyword = _RELATION_KEYWORDS.get(kind, "TABLE")
+        relation = _qualified(schema, name)
+        found[(schema, name)].append(
+            f"ALTER {keyword} {relation} OWNER TO {quote_identifier(owner)};\n"
+        )
+        if comment is not None:
+            found[(schema, name)].append(f"COMMENT ON {keyword} {relation} IS {comment};\n")
+    grants: dict[tuple[str, str, str | None, bool], list[str]] = defaultdict(list)
+    for schema, name, grantee, privilege, grantable in conn.execute(_GRANTED, names).fetchall():
+        grants[(schema, name, grantee, grantable)].append(privilege)
+    for (schema, name, grantee, grantable), privileges in grants.items():
+        to = "PUBLIC" if grantee is None else quote_identifier(grantee)
+        found[(schema, name)].append(
+            f"GRANT {', '.join(privileges)} ON {_qualified(schema, name)} TO {to}"
+            + (" WITH GRANT OPTION" if grantable else "")
+            + ";\n"
+        )
+    return {key: tuple(statements) for key, statements in found.items()}
+
+
 #: Every schema the current role can use: the rule ``information_schema.schemata``
 #: applies, so a schema the role could not drop or read is not listed.
 _SCHEMAS = """

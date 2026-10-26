@@ -66,6 +66,33 @@ def in_dependency_order(
     return read.ordered({_ref_identity(ref) for ref in refs} & read.holders.keys())
 
 
+def with_what_they_read(
+    objects: Mapping[ObjectRef, list[DDLObject]],
+    rebuilt: Iterable[ObjectRef],
+    added: Iterable[ObjectRef],
+) -> list[ObjectRef]:
+    """*rebuilt*, and the *added* views they read, directly or through one another (#787).
+
+    In dependency order, as *objects* define them: a view the rebuild creates again
+    after the views a migration adds that it reads. An added view none of them
+    reads is left out: it is created where a migration creates views.
+    """
+    read = _Read(objects)
+    found = {_ref_identity(ref) for ref in rebuilt} & read.holders.keys()
+    candidates = {_ref_identity(ref) for ref in added} & read.holders.keys()
+    while more := {
+        other
+        for other in candidates - found
+        if any(
+            names_relation(written, other)
+            for identity in found
+            for written in read.holders[identity].relations
+        )
+    }:
+        found |= more
+    return read.ordered(found)
+
+
 def _ref_identity(ref: ObjectRef) -> tuple[str, str]:
     return (ref.schema or DEFAULT_SCHEMA, ref.name)
 

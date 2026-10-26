@@ -945,9 +945,9 @@ class Dependent:
     """A view, a materialized view or a TVIEW a column change has to drop and create again.
 
     ``obj`` is its statement on the side it is created from, ``indexes`` the ones a
-    materialized view or a TVIEW holds there, and ``attached`` what that side writes
-    on it besides — its grants, its comment, its owner — which a ``DROP`` takes with
-    it (``ddl_objects.attached_statements``).
+    materialized view or a TVIEW holds there, and ``attached`` its grants, comment
+    and owner: what the other side holds, which a ``DROP`` takes with it, then what
+    this side writes, each statement once (#787).
     """
 
     obj: DDLObject
