@@ -126,6 +126,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   then what its own side writes, each statement once; a diff between two trees that write the
   same ones generates what it did.
 
+- **A generated migration that runs outside a transaction can be run again after its `VALIDATE`
+  fails on a row** (#785). Each statement of such a file (one that also holds a `CONCURRENTLY`
+  index) commits on its own, so when #766's tightening failed on a row it had already added the
+  column and the `NOT VALID` constraint, and the run after the fix stopped at `already exists`. The
+  column nothing fills is now added `IF NOT EXISTS`, and each constraint added `NOT VALID` (the
+  `<table>_<column>_not_null_check`, a named CHECK) is preceded by `DROP CONSTRAINT IF EXISTS` of
+  its name. The change set pairs that drop with the `ADD` that follows on the same table, by the
+  name as written (never after `CASCADE`), and tiers it as the `ADD` (`reversible`) instead of
+  `destructive`, so the file's tier and `window_safe` do not move. The `03-zero-downtime-migration`
+  diff golden gains two lines and `every-change` one.
+
 - **fraiseql-semis is linked and versioned in the docs** (#770). The README, *Building on
   confiture*, the prep-seed validation guide and `examples/08-generated-seeds` link the PyPI
   package and `fraiseql/semis`, and say the examples and the UUID-layout note were written
