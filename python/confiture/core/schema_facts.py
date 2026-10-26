@@ -13,6 +13,8 @@ one is already open, because none is recoverable from the migration SQL:
   tables a migration touches are large enough for ``migrate up --batched``.
 * **Which indexes are INVALID** — what a ``CREATE INDEX … IF NOT EXISTS`` would
   silently skip.
+* **Which relations exist, and where an unqualified ``CREATE`` lands** — whether a
+  ``CREATE TABLE IF NOT EXISTS`` creates its table new (#692).
 
 Collection never raises: a database that refuses the introspection query yields
 empty facts, and every consumer degrades to the static answer. Losing the
@@ -55,6 +57,13 @@ class SchemaFacts:
     """``(schema, name)``, case kept, of each index a failed concurrent build left
     INVALID (#689), which a ``CREATE INDEX … IF NOT EXISTS`` of that name skips."""
 
+    relations: frozenset[tuple[str, str]] | None = None
+    """``(schema, name)``, case kept, of every relation of every kind (#692); ``None``
+    when it was not read, so no relation is ever said absent from a database nobody asked."""
+
+    current_schema: str | None = None
+    """The schema an unqualified ``CREATE`` lands in (``current_schema()``), or ``None``."""
+
     def column_type(self, qualified: str | None) -> str | None:
         """The current type of ``schema.table.column``, or ``None`` if unknown."""
         if not qualified:
@@ -69,6 +78,7 @@ class SchemaFacts:
             or bool(self.tviews)
             or bool(self.invalid_indexes)
             or self.row_estimates is not None
+            or self.relations is not None
         )
 
 
@@ -87,6 +97,8 @@ def collect_schema_facts(conn: Any) -> SchemaFacts:
         row_estimates=_row_estimates(conn),
         tviews=_tviews(conn),
         invalid_indexes=_invalid_indexes(conn),
+        relations=_relations(conn),
+        current_schema=_current_schema(conn),
     )
 
 
@@ -130,6 +142,22 @@ def _invalid_indexes(conn: Any) -> frozenset[tuple[str, str]]:
         lambda: frozenset(live_catalog.invalid_indexes(conn, live_catalog.user_schemas(conn))),
         frozenset(),
     )
+
+
+def _relations(conn: Any) -> frozenset[tuple[str, str]] | None:
+    """Every relation's name, as ``live_catalog`` reads it; ``None`` if unread."""
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    from confiture.core import live_catalog
+
+    return _advisory(lambda: live_catalog.relation_names(conn), None)
+
+
+def _current_schema(conn: Any) -> str | None:
+    """Where an unqualified ``CREATE`` lands, as ``live_catalog`` reads it; ``None`` if unread."""
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    from confiture.core import live_catalog
+
+    return _advisory(lambda: live_catalog.current_schema(conn), None)
 
 
 def _row_estimates(conn: Any) -> dict[str, int | None] | None:

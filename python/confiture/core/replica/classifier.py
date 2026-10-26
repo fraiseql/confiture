@@ -35,7 +35,7 @@ from confiture.core.ddl_walk import (
 from confiture.core.ddl_walk import (
     type_name as _type_name,
 )
-from confiture.core.migration_scope import Scope, targets, walk
+from confiture.core.migration_scope import Present, Scope, targets, walk
 from confiture.core.schema_model import Constraint
 from confiture.core.type_lattice import canonical_type
 
@@ -303,23 +303,24 @@ class Other(DdlOperation):
 class OperationClassifier:
     """Parse migration SQL into a list of typed :class:`DdlOperation`."""
 
-    def classify(self, sql: str) -> list[DdlOperation]:
+    def classify(self, sql: str, *, start: Present | None = None) -> list[DdlOperation]:
         """Return the ordered DDL operations in ``sql``.
 
-        Parses with pglast, the one parser.
+        Parses with pglast, the one parser. *start* is what the database holds
+        before the file runs, when a caller read it (``migration_scope.walk``).
         """
         # pglast.parser.ParseError propagates: the caller reports the file as
         # unclassifiable instead of reading a guess.
-        return self._classify_ast(sql)
+        return self._classify_ast(sql, start)
 
     # ------------------------------------------------------------------ #
     # pglast backend
     # ------------------------------------------------------------------ #
 
-    def _classify_ast(self, sql: str) -> list[DdlOperation]:
+    def _classify_ast(self, sql: str, start: Present | None) -> list[DdlOperation]:
 
         ops: list[DdlOperation] = []
-        for step in walk(sql):
+        for step in walk(sql, start=start):
             node = step.statement.stmt
             ops.extend(_with_provenance(node, self._ast_statement(node), step.before))
         return ops

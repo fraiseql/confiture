@@ -37,7 +37,7 @@ from confiture.core.change_set.models import (
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
 from confiture.core.lock_profile import on_created_relation
-from confiture.core.migration_scope import Scope, targets, walk
+from confiture.core.migration_scope import Present, Scope, Target, targets, walk
 from confiture.core.risk_tier import RiskTier
 from confiture.core.sql_lexer import ParsedStatement
 
@@ -91,10 +91,10 @@ _AST_SKIP: Final = frozenset(
 )
 
 
-def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
+def _ast_entries(sql: str, ctx: _Context, start: Present | None = None) -> list[ChangeEntry]:
     """Each statement's entries, in order, read in the scope the statements before it leave."""
     entries: list[ChangeEntry] = []
-    for step in walk(sql, default_schema=ctx.default_schema):
+    for step in walk(sql, default_schema=ctx.default_schema, start=start):
         statement = _ast_statement(step.statement, sql, replace(ctx, scope=step.before))
         entries.extend(_with_provenance(step.statement.stmt, statement, step.before))
     return entries
@@ -110,17 +110,26 @@ def _with_provenance(node: object, entries: list[ChangeEntry], scope: Scope) -> 
     if len(found) != len(entries):
         return entries
     return [
-        _on_created_relation(entry) if scope.exempts_target(entry.kind, target) else entry
+        _on_created_relation(entry, _read_live(scope, target))
+        if scope.exempts_target(entry.kind, target)
+        else entry
         for entry, target in zip(entries, found, strict=True)
     ]
 
 
-def _on_created_relation(entry: ChangeEntry) -> ChangeEntry:
+def _read_live(scope: Scope, target: Target | None) -> bool:
+    """Whether the database, not the statement, proved *target*'s relation new."""
+    created = None if target is None else scope.fresh(*target.relation)
+    return created is not None and created.read_live
+
+
+def _on_created_relation(entry: ChangeEntry, read_live: bool) -> ChangeEntry:
     head = (entry.detail or entry.kind).split(" — ")[0]
+    why = " (the database does not hold it)" if read_live else ""
     return replace(
         entry,
         tier=RiskTier.ADDITIVE,
-        detail=f"{head} — on a relation this migration creates",
+        detail=f"{head} — on a relation this migration creates{why}",
         lock=None if entry.lock is None else on_created_relation(entry.lock),
     )
 

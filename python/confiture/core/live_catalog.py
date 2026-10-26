@@ -974,6 +974,36 @@ def relations(
     return [(schema, name) for _oid, schema, name in rows]
 
 
+#: Every name ``pg_class`` holds — table, index, sequence, view, matview, foreign
+#: table, composite type, an extension's own — outside the TOAST and temporary
+#: namespaces: the names a ``CREATE … IF NOT EXISTS`` finds taken.
+_EVERY_RELATION = """
+SELECT n.nspname, c.relname
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname <> 'pg_toast' AND n.nspname !~ '^pg_(toast_)?temp_'
+"""
+
+
+def relation_names(conn: psycopg.Connection) -> frozenset[tuple[str, str]]:
+    """``(schema, name)`` of every relation of every kind, as the catalog holds them.
+
+    What a migration's ``CREATE TABLE IF NOT EXISTS`` would find already there:
+    any ``pg_class`` entry of that name makes it skip, whatever its kind.
+    """
+    return frozenset((schema, name) for schema, name in conn.execute(_EVERY_RELATION).fetchall())
+
+
+def current_schema(conn: psycopg.Connection) -> str | None:
+    """Where an unqualified ``CREATE`` lands for this session: ``current_schema()``.
+
+    Read under the session's own ``search_path`` (never :data:`READ_PATH`): it is
+    that path's answer that is asked. ``None`` when the path names no existing schema.
+    """
+    row = conn.execute(t"SELECT current_schema()").fetchone()
+    return None if row is None else row[0]
+
+
 #: Every schema the current role can use: the rule ``information_schema.schemata``
 #: applies, so a schema the role could not drop or read is not listed.
 _SCHEMAS = """

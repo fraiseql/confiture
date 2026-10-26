@@ -9,7 +9,7 @@ and the one question that needs one: which migrations a ledger has not applied
 (:func:`pending_scope`, ``migrate preflight --scope pending``).
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +27,7 @@ from confiture.core.expand_contract import StagedPlan, plannable
 from confiture.core.ledger import find_ledger_relations
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.migration_down import read_python_down
+from confiture.core.migration_scope import Present, leaves
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
 from confiture.core.risk_tier import RiskTier
 from confiture.core.sql_lexer import parse_file
@@ -35,6 +36,35 @@ from confiture.models.results import MigrationPreflightInfo, PreflightIssue, Pre
 
 if TYPE_CHECKING:
     from confiture.core.change_set.models import ChangeEntry
+    from confiture.core.schema_facts import SchemaFacts
+
+
+def pending_starts(pending: Sequence[Path], facts: SchemaFacts) -> dict[str, Present]:
+    """What the ``--against`` database holds before each pending file runs, by file name (#692).
+
+    The live relations are the state before the first pending file; each later
+    file starts from what the earlier ones leave (``migration_scope.leaves``),
+    so a pending ``RENAME big TO t`` holds ``t`` and a pending ``DROP`` frees it.
+    A file the fold cannot read — a ``.py`` migration, one the parser rejects, one
+    that runs a statement it cannot read — ends the map: nothing after it is
+    proven absent. No relations read, no starts: every file is judged statically.
+    """
+    if facts.relations is None or facts.current_schema is None:
+        return {}
+    held: Present | None = Present(facts.relations, facts.current_schema)
+    starts: dict[str, Present] = {}
+    for path in pending:
+        if held is None:
+            break
+        starts[path.name] = held
+        if not path.name.endswith(".up.sql"):
+            held = None
+            continue
+        try:
+            held = leaves(path.read_text(encoding="utf-8"), held)
+        except pglast.parser.ParseError, OSError:
+            held = None
+    return starts
 
 
 def invalid_index_issues(

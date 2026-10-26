@@ -207,7 +207,12 @@ the TVIEWs it dropped). The replica classifier, the change-set walker and the TV
 preflight read it; `tests/unit/test_one_migration_walk.py` fails on one of them calling
 the lexer itself. A fact that **tightens** a verdict (a constraint added → its
 validation is `lock_risky`) matches by identity; one that **loosens** a verdict
-matches only as written, and a statement the fold cannot read is never assumed.
+matches only as written, and a statement the fold cannot read is never assumed. What the
+database holds is the one outside fact: `walk(sql, start=Present(...))`, plain data
+(never a connection, never `SchemaFacts` — that is glue), read under `migrate preflight
+--against` and folded across the pending files by `preflight.pending_starts` through
+`leaves`; absence loosens, so a name is held wherever it may be and anything unreadable
+forgets the set.
 The loosening fact they share is **a relation the file creates**: a plain `CREATE TABLE`,
 `CREATE TABLE … AS`, `CREATE MATERIALIZED VIEW` or `pg_tviews_create()`, which PostgreSQL
 proves new. `Scope.exempts(kind, …)` says whether an operation reaches only that relation

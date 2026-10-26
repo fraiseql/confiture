@@ -1,0 +1,139 @@
+{
+  "change_set": {
+    "changes": [
+      {
+        "detail": "CREATE TABLE",
+        "kind": "create_table",
+        "migration": "20261001000001",
+        "object": "public.tb_note",
+        "tier": "additive"
+      },
+      {
+        "detail": "CREATE INDEX — blocks writes",
+        "kind": "create_index",
+        "migration": "20261001000001",
+        "object": "public.tb_note.ix_note_title",
+        "tier": "lock_risky"
+      },
+      {
+        "detail": "RENAME TO tb_old",
+        "kind": "rename_object",
+        "migration": "20261001000002",
+        "object": "public.tb_big",
+        "tier": "reversible"
+      },
+      {
+        "detail": "DROP TABLE",
+        "kind": "drop_table",
+        "migration": "20261001000002",
+        "object": "public.tb_gone",
+        "tier": "irreversible"
+      },
+      {
+        "detail": "CREATE TABLE",
+        "kind": "create_table",
+        "migration": "20261001000002",
+        "object": "public.tb_gone",
+        "tier": "additive"
+      },
+      {
+        "detail": "CREATE INDEX CONCURRENTLY",
+        "kind": "create_index",
+        "migration": "20261001000002",
+        "object": "public.tb_gone.ix_gone_id",
+        "tier": "additive"
+      },
+      {
+        "detail": "CREATE TABLE",
+        "kind": "create_table",
+        "migration": "20261001000003",
+        "object": "public.tb_tag",
+        "tier": "additive"
+      },
+      {
+        "detail": "CREATE INDEX — on a relation this migration creates",
+        "kind": "create_index",
+        "migration": "20261001000003",
+        "object": "public.tb_tag.ux_tag_name",
+        "tier": "additive"
+      }
+    ],
+    "contract_version": 1
+  },
+  "command": "migrate preflight",
+  "issues": [
+    {
+      "actionable": "Add a matching .down.sql sibling, or mark the migration explicitly non-reversible.",
+      "code": "PFLIGHT_MISSING_DOWN",
+      "details": {},
+      "file": "20261001000002_moves.up.sql",
+      "line": null,
+      "message": "Migration 20261001000002 (moves) is not reversible: no matching .down.sql.",
+      "migration": "20261001000002",
+      "severity": "error"
+    },
+    {
+      "actionable": "Run with --allow-non-transactional to apply it in autocommit, or split the statement out of the transactional migration.",
+      "code": "PFLIGHT_NON_TRANSACTIONAL",
+      "details": {
+        "statements": [
+          "CREATE INDEX CONCURRENTLY: ix_gone_id"
+        ]
+      },
+      "file": "20261001000002_moves.up.sql",
+      "line": null,
+      "message": "Migration 20261001000002 (moves) has non-transactional statement(s): CREATE INDEX CONCURRENTLY: ix_gone_id.",
+      "migration": "20261001000002",
+      "severity": "warning"
+    },
+    {
+      "actionable": "use CREATE INDEX CONCURRENTLY in its own non-transactional migration",
+      "code": "PFLIGHT_REPLICA_CREATE_INDEX",
+      "details": {
+        "operation": "CreateIndex",
+        "table": "tb_note"
+      },
+      "file": "20261001000001_notes.up.sql",
+      "line": null,
+      "message": "a non-concurrent index blocks writes; the lock propagates to replicas Multi-step fix: use CREATE INDEX CONCURRENTLY in its own non-transactional migration.",
+      "migration": "20261001000001",
+      "severity": "warning"
+    },
+    {
+      "actionable": "add the new name → migrate readers → retire the old name",
+      "code": "PFLIGHT_REPLICA_RENAME_OBJECT",
+      "details": {
+        "operation": "RenameObject",
+        "table": "tb_big"
+      },
+      "file": "20261001000002_moves.up.sql",
+      "line": null,
+      "message": "readers reference the old object name during the lag window Multi-step fix: add the new name → migrate readers → retire the old name.",
+      "migration": "20261001000002",
+      "severity": "warning"
+    },
+    {
+      "actionable": "stop reading the table → wait one release → drop it",
+      "code": "PFLIGHT_REPLICA_DROP_TABLE",
+      "details": {
+        "operation": "DropTable",
+        "table": "tb_gone"
+      },
+      "file": "20261001000002_moves.up.sql",
+      "line": null,
+      "message": "readers on the old version still SELECT from the table Multi-step fix: stop reading the table → wait one release → drop it.",
+      "migration": "20261001000002",
+      "severity": "warning"
+    }
+  ],
+  "ok": false,
+  "reversible": false,
+  "scope": "all",
+  "summary": {
+    "errors": 1,
+    "info": 0,
+    "migrations_checked": 3,
+    "warnings": 4
+  },
+  "window_safe": false
+}
