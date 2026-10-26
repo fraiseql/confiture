@@ -32,6 +32,7 @@ Configuration Structure
     locking:
       enabled: true
       timeout_ms: 30000
+      extra_keys: [0x4652414953450001]  # another tool's advisory key
 
 Environment Variables
 ====================
@@ -51,13 +52,14 @@ File Discovery
 
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictInt,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -233,6 +235,10 @@ class SeedConfig(BaseModel):
             ) from None
 
 
+#: A key ``pg_advisory_lock(bigint)`` takes: a signed 64-bit integer, never a bool.
+_AdvisoryKey = Annotated[StrictInt, Field(ge=-(2**63), le=2**63 - 1)]
+
+
 class LockingConfig(BaseModel):
     """Distributed locking configuration.
 
@@ -242,10 +248,12 @@ class LockingConfig(BaseModel):
     Attributes:
         enabled: Whether locking is enabled (default: True)
         timeout_ms: Lock acquisition timeout in milliseconds (default: 30000)
+        extra_keys: Other tools' advisory lock keys, each a signed 64-bit integer, that ``migrate up`` and ``migrate down`` also take, in the one-``bigint`` form, after confiture's own lock and in this order, holding them for the whole run (default: none). FraiseQL's boot DDL takes ``0x4652414953450001``.
     """
 
     enabled: bool = True
     timeout_ms: int = 30000  # 30 seconds default
+    extra_keys: list[_AdvisoryKey] = Field(default_factory=list)
 
 
 class MigrationGeneratorConfig(BaseModel):
