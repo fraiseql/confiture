@@ -17,10 +17,11 @@ import hashlib
 import logging
 import os
 import socket
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
+from string.templatelib import Template
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -133,6 +134,9 @@ class LockConfig:
         timeout_ms: Lock acquisition timeout in milliseconds (default: 30000)
         lock_id: Custom lock ID (auto-generated from database name if None)
         mode: Lock acquisition mode (blocking or non-blocking)
+        extra_keys: Other tools' advisory keys, each taken in the one-``bigint``
+            form after confiture's own lock, in this order, in the same mode and
+            with the same timeout, and released in reverse (issue #768)
 
     Example:
         >>> config = LockConfig(timeout_ms=60000)  # 1 minute timeout
@@ -145,6 +149,7 @@ class LockConfig:
     lock_id: int | None = None  # Custom lock ID (auto-generated if None)
     mode: LockMode = field(default=LockMode.BLOCKING)
     command: str | None = None  # confiture command for the lock-holder metadata (#147)
+    extra_keys: tuple[int, ...] = ()
 
 
 class LockAcquisitionError(Exception):
@@ -213,6 +218,7 @@ class MigrationLock:
         self.config = config or LockConfig()
         self._lock_held = False
         self._lock_id: int | None = None
+        self._extra_held: list[int] = []
 
     def _get_lock_id(self) -> int:
         """Get or generate the lock ID.
@@ -281,92 +287,104 @@ class MigrationLock:
             self._release_lock()
 
     def _acquire_lock(self) -> None:
-        """Acquire the advisory lock.
+        """Acquire the advisory lock, then every extra key in order.
 
         Raises:
-            LockAcquisitionError: If lock cannot be acquired
+            LockAcquisitionError: If the lock or an extra key cannot be acquired.
+                Whatever was taken before it stays recorded, and ``acquire``'s
+                ``finally`` releases it.
         """
         lock_id = self._get_lock_id()
+        namespace = self.DEFAULT_LOCK_NAMESPACE
 
-        if self.config.mode == LockMode.NON_BLOCKING:
-            self._acquire_non_blocking(lock_id)
-        else:
-            self._acquire_blocking(lock_id)
-
-        self._lock_held = True
-        logger.info(
-            f"Acquired migration lock (namespace={self.DEFAULT_LOCK_NAMESPACE}, id={lock_id})"
+        self._take(
+            t"SELECT pg_try_advisory_lock({namespace}, {lock_id})",
+            t"SELECT pg_advisory_lock({namespace}, {lock_id})",
+            self._lock_refused,
         )
+        self._lock_held = True
+        logger.info(f"Acquired migration lock (namespace={namespace}, id={lock_id})")
+        for key in self.config.extra_keys:
+            self._take(
+                t"SELECT pg_try_advisory_lock({key}::bigint)",
+                t"SELECT pg_advisory_lock({key}::bigint)",
+                lambda timed_out, key=key: self._extra_key_refused(key, timed_out),
+            )
+            self._extra_held.append(key)
+            logger.info(f"Acquired extra advisory lock (key={key})")
         # Best-effort diagnostic identity (#147) — never blocks the migration.
         self._write_holder_metadata(lock_id)
 
-    def _acquire_blocking(self, lock_id: int) -> None:
-        """Acquire lock with timeout.
+    def _take(
+        self,
+        attempt: Template,
+        wait: Template,
+        refused: Callable[[bool], LockAcquisitionError],
+    ) -> None:
+        """Take one advisory lock in the configured mode.
 
-        Uses SET LOCAL statement_timeout to implement lock timeout.
-        This setting only affects the current transaction.
+        Non-blocking runs *attempt* (a ``pg_try_advisory_lock``), which answers at
+        once. Blocking runs *wait* under ``SET LOCAL statement_timeout``, which
+        only affects the current transaction; on timeout the transaction is
+        rolled back — a session-level advisory lock taken earlier survives it.
 
         Args:
-            lock_id: Lock object ID
+            attempt: The ``pg_try_advisory_lock`` call.
+            wait: The ``pg_advisory_lock`` call.
+            refused: Builds the error, given whether the wait timed out.
 
         Raises:
-            LockAcquisitionError: If timeout expires
+            LockAcquisitionError: The lock is held by another session.
         """
-
-        timeout_sec = self.config.timeout_ms / 1000
-
         with self.connection.cursor() as cur:
+            if self.config.mode == LockMode.NON_BLOCKING:
+                cur.execute(attempt)
+                result = cur.fetchone()
+                if not (result[0] if result else False):
+                    raise refused(False)
+                return
+
             # SET takes no parameters: the timeout is written in, as a literal (ms).
             cur.execute(t"SET LOCAL statement_timeout = {self.config.timeout_ms:l}")
-
             try:
-                cur.execute(
-                    "SELECT pg_advisory_lock(%s, %s)",
-                    (self.DEFAULT_LOCK_NAMESPACE, lock_id),
-                )
-                # Reset statement timeout on success
+                cur.execute(wait)
                 cur.execute("SET LOCAL statement_timeout = '0'")
             except psycopg.errors.QueryCanceled as e:
                 # Rollback the failed transaction to clear the error state
                 with contextlib.suppress(Exception):
                     self.connection.rollback()
-                holder = self._safe_read_lock_holder()
-                raise LockAcquisitionError(
-                    f"Could not acquire migration lock within {timeout_sec}s.{_holder_phrase(holder)} "
-                    "Use --no-lock to bypass (dangerous in multi-pod environments).",
-                    timeout=True,
-                    holder=holder,
-                ) from e
+                raise refused(True) from e
 
-    def _acquire_non_blocking(self, lock_id: int) -> None:
-        """Try to acquire lock without waiting.
-
-        Uses pg_try_advisory_lock which returns immediately with
-        true (acquired) or false (locked by another session).
-
-        Args:
-            lock_id: Lock object ID
-
-        Raises:
-            LockAcquisitionError: If lock is held by another process
-        """
-        with self.connection.cursor() as cur:
-            cur.execute(
-                "SELECT pg_try_advisory_lock(%s, %s)",
-                (self.DEFAULT_LOCK_NAMESPACE, lock_id),
+    def _lock_refused(self, timed_out: bool) -> LockAcquisitionError:
+        """The error for confiture's own lock, naming its holder (#147)."""
+        holder = self._safe_read_lock_holder()
+        if timed_out:
+            return LockAcquisitionError(
+                f"Could not acquire migration lock within {self.config.timeout_ms / 1000}s."
+                f"{_holder_phrase(holder)} "
+                "Use --no-lock to bypass (dangerous in multi-pod environments).",
+                timeout=True,
+                holder=holder,
             )
-            result = cur.fetchone()
-            acquired = result[0] if result else False
+        return LockAcquisitionError(
+            f"Migration lock is held by another process.{_holder_phrase(holder)} "
+            "Try again later or use blocking mode with --lock-timeout.",
+            timeout=False,
+            holder=holder,
+        )
 
-            if not acquired:
-                # Identify who holds the lock (issue #147).
-                holder = self._safe_read_lock_holder()
-                raise LockAcquisitionError(
-                    f"Migration lock is held by another process.{_holder_phrase(holder)} "
-                    "Try again later or use blocking mode with --lock-timeout.",
-                    timeout=False,
-                    holder=holder,
-                )
+    def _extra_key_refused(self, key: int, timed_out: bool) -> LockAcquisitionError:
+        """The error for an extra key: another tool holds it, so no confiture holder."""
+        held = (
+            f"within {self.config.timeout_ms / 1000}s"
+            if timed_out
+            else "at once: another session holds it"
+        )
+        return LockAcquisitionError(
+            f"Could not acquire advisory lock {key} (migration.locking.extra_keys) {held}. "
+            "Another tool sharing this database is running its DDL; retry when it is done.",
+            timeout=timed_out,
+        )
 
     def _release_lock(self) -> None:
         """Release the advisory lock.
@@ -378,6 +396,7 @@ class MigrationLock:
         if not self._lock_held:
             return
 
+        self._release_extra_keys()
         lock_id = self._get_lock_id()
 
         try:
@@ -403,6 +422,21 @@ class MigrationLock:
             self._lock_held = False
             # Best-effort: clear the diagnostic identity row (#147).
             self._clear_holder_metadata(lock_id)
+
+    def _release_extra_keys(self) -> None:
+        """Release the extra keys taken, newest first; a failure is logged, never raised."""
+        while self._extra_held:
+            key = self._extra_held.pop()
+            try:
+                with self.connection.cursor() as cur:
+                    cur.execute(t"SELECT pg_advisory_unlock({key}::bigint)")
+                logger.info(f"Released extra advisory lock (key={key})")
+            except psycopg.Error as e:
+                # The session ending releases it; clear the aborted transaction so
+                # the keys before it can still be released now.
+                logger.warning(f"Error releasing extra advisory lock (key={key}): {e}")
+                with contextlib.suppress(Exception):
+                    self.connection.rollback()
 
     # ------------------------------------------------------------------ #
     # Lock-holder identity metadata (issue #147) — diagnostic, best-effort #
@@ -600,6 +634,15 @@ class MigrationLock:
 
 
 DEFAULT_LOCK_TIMEOUT_MS = 30000
+
+
+def resolve_extra_lock_keys(locking: Any) -> tuple[int, ...]:
+    """The other tools' advisory keys ``migration.locking.extra_keys`` names (#768).
+
+    ``locking`` is the environment's ``LockingConfig`` or ``None`` when no
+    environment file is in play (no extra key then).
+    """
+    return tuple(getattr(locking, "extra_keys", None) or ())
 
 
 def resolve_lock_settings(

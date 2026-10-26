@@ -17,6 +17,7 @@ from confiture.cli.helpers import (
 )
 from confiture.cli.options import (
     config_option,
+    exclude_option,
     format_option,
     migrations_dir_option,
     scratch_url_option,
@@ -34,10 +35,11 @@ from confiture.core.differ import (
     refuse_undeclared_relations,
 )
 from confiture.core.migration_generator import MigrationGenerator
+from confiture.core.relation_exclusion import Exclusion, exclusion_from
 from confiture.core.schema_read import SchemaRead, read_segments
 from confiture.core.schema_sources import database_side, materialised_side
 from confiture.error_codes import FAILURE
-from confiture.exceptions import DifferError, ValidationError
+from confiture.exceptions import ConfigurationError, DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
 _TO_ENV_HELP = (
@@ -71,6 +73,7 @@ def migrate_diff(
     to_env: str | None = typer.Option(None, "--to-env", help=_TO_ENV_HELP),
     config: Path = config_option(help="Environment config, read for `--from db`"),
     scratch_url: str | None = scratch_url_option(),
+    exclude: list[str] | None = exclude_option(),
     generate: bool = typer.Option(
         False,
         "--generate",
@@ -132,11 +135,14 @@ def migrate_diff(
             report=report_file,
         )
         desired_read = read_segments(desired.segments())
+        exclusion = _exclusion(config, exclude, json_mode=is_json(format_type), report=report_file)
         try:
             current_side, desired_side, policy, fidelity = _compared(
                 current, desired, desired_read, config=config, scratch_url=scratch_url
             )
-            diff = SchemaDiffer().compare_sides(current_side, desired_side, policy)
+            diff = SchemaDiffer().compare_sides(
+                current_side, desired_side, policy, exclude=exclusion
+            )
         except DifferError as exc:  # a name that needs quotes (DIFFER_403) carries its own code
             fail(exc, json_mode=is_json(format_type), output_file=report_file)
 
@@ -327,6 +333,20 @@ def _compared(
     refuse_undeclared_relations(database, tree)
     built = materialised_side(desired.read(), scratch, read=desired_read)
     return database, built, replace(MATERIALISED, author="new"), "materialised"
+
+
+def _exclusion(
+    config: Path, cli: list[str] | None, *, json_mode: bool, report: Path | None
+) -> Exclusion:
+    """``diff.exclude`` from ``config`` when there is one, then the ``--exclude`` patterns.
+
+    A malformed block or pattern is a configuration error (exit 5).
+    """
+    try:
+        data = _core_connection.load_config(config) if config.exists() else {}
+        return exclusion_from(data, cli)
+    except ConfigurationError as exc:
+        fail(exc, json_mode=json_mode, output_file=report)
 
 
 def _destructive_policy(

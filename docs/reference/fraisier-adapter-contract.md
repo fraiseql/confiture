@@ -318,6 +318,7 @@ set to its version:
 | `PFLIGHT_MISSING_DOWN` | error | no `.down.sql` |
 | `PFLIGHT_DOWN_EMPTY` | warning | a `.py` whose `down()` does nothing (read from its source; `migrate down` refuses it, `ROLLBACK_600`) |
 | `PFLIGHT_DOWN_UNVERIFIED` | info | a `.py` whose `down()` confiture does not read (`details.down`: `present` or `unknown`) |
+| `PFLIGHT_BACKFILL_PENDING` | error | the migration still carries a generated `-- confiture:backfill` placeholder: `migrate up` refuses it (`VALID_010`, exit 5) until it is filled in (`details.targets`) |
 | `PFLIGHT_IRREVERSIBLE` | info | the migration declares `-- confiture:irreversible <reason>`: its down runs and does not restore what `details.irreversible` names |
 | `PFLIGHT_DESTRUCTIVE_GATED` | warning | the migration is gated as destructive: data is lost when it applies |
 | `PFLIGHT_NON_TRANSACTIONAL` | warning | an autocommit migration can stop part way, in a state its down was not written for |

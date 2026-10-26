@@ -70,6 +70,7 @@ _FLAG_DEPENDENCIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("--show-diff", ("--check-body", "--check-body-views", "--check-body-replay")),
     ("--fail-on-unanalyzable", ("--idempotent",)),
     ("--extra-objects", ("--check-live-drift",)),
+    ("--exclude", ("--check-live-drift",)),
 )
 
 
@@ -115,6 +116,7 @@ class ValidateOptions:
     check_live_drift: bool = False
     ignore_column_order: bool = False
     extra_objects: str | None = None
+    exclude: tuple[str, ...] = ()
     check_signatures: bool = False
     check_body_views: bool = False
     check_body_replay: bool = False
@@ -171,6 +173,7 @@ def validate_flag_dependencies(opts: ValidateOptions) -> None:
         "--fail-on-unanalyzable": opts.fail_on_unanalyzable,
         "--idempotent": opts.idempotent,
         "--extra-objects": opts.extra_objects is not None,
+        "--exclude": bool(opts.exclude),
         "--check-live-drift": opts.check_live_drift,
     }
     for modifier, required in _FLAG_DEPENDENCIES:
@@ -489,6 +492,7 @@ def _run_live_drift(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
         ignore_column_order=opts.ignore_column_order,
         extra_objects=opts.extra_objects,
         scratch_url=opts.scratch_url,
+        exclude=opts.exclude,
     )
     payload = render_live_drift(report, json_mode=opts.json_mode)
     return CheckOutcome("live_drift", passed=not report.has_critical_drift, payload=payload)

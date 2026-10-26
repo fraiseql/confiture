@@ -81,4 +81,7 @@ CREATE TABLE ren.tb_orders_archive (
 CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one;
 
 -- confiture:tier reversible
+CREATE OR REPLACE VIEW v_sizes AS SELECT id, size FROM things;
+
+-- confiture:tier reversible
 CREATE OR REPLACE VIEW v_things AS SELECT id FROM things;

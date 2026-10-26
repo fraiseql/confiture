@@ -34,6 +34,7 @@ from confiture.core.differ import (
     stated_side,
 )
 from confiture.core.ledger import bookkeeping_tables
+from confiture.core.relation_exclusion import Exclusion
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -46,6 +47,8 @@ from confiture.core.schema_change import (
     ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
+    DependentsDropped,
+    DependentsRecreated,
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
@@ -643,6 +646,8 @@ DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, Severity] | str] = {
     ObjectAdded: (None, DriftSeverity.CRITICAL),
     ObjectDropped: (None, DriftSeverity.INFO),
     ObjectReplaced: (None, DriftSeverity.WARNING),
+    DependentsDropped: "how a migration writes a column change a view reads, not a difference",
+    DependentsRecreated: "how a migration writes a column change a view reads, not a difference",
 }
 
 #: Each kind whose redefinition (``ObjectReplaced``) drift has no finding for, and
@@ -1307,6 +1312,7 @@ class SchemaDriftDetector:
         column_order_severity: str = "warning",
         scratch_url: str | None = None,
         extra_objects: ExtraObjects = "declared",
+        exclude: Exclusion | None = None,
     ):
         """Initialize drift detector.
 
@@ -1322,8 +1328,11 @@ class SchemaDriftDetector:
             extra_objects: ``declared`` reports a stray schema, extension, policy, …
                 (``extra_object``, info) only of a kind the DDL declares; ``all``
                 reports one of any kind, as a warning.
+            exclude: The relations another tool owns (``diff.exclude``, #767), left
+                out of the comparison on both sides.
         """
         self.connection = connection
+        self.exclude = exclude
         self.scratch_url = scratch_url
         self.extra_objects: ExtraObjects = extra_objects
         self.ignore_column_order = ignore_column_order
@@ -1376,7 +1385,9 @@ class SchemaDriftDetector:
             fidelity=policy.fidelity,
         )
         expected, actual = self._kept(expected), self._kept(actual)
-        diff = SchemaDiffer().compare_sides(stated_side(actual), stated_side(expected), policy)
+        diff = SchemaDiffer().compare_sides(
+            stated_side(actual), stated_side(expected), policy, exclude=self.exclude
+        )
         _Findings(expected, actual, self.column_order_severity, self.extra_objects).render(
             diff.changes, report, column_order=not self.ignore_column_order
         )

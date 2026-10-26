@@ -410,6 +410,36 @@
           "name": "v_things",
           "keyword": "VIEW"
         }
+      },
+      {
+        "type": "DROP_DEPENDENTS",
+        "table": "v_sizes",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "dependents": [
+            {
+              "kind": "view",
+              "name": "v_sizes"
+            }
+          ]
+        }
+      },
+      {
+        "type": "CREATE_DEPENDENTS",
+        "table": "v_sizes",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "dependents": [
+            {
+              "kind": "view",
+              "name": "v_sizes"
+            }
+          ]
+        }
       }
     ],
     "ok": true,

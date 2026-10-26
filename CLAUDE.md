@@ -192,6 +192,10 @@ it; a query pglast rejects is an unread holder, reported `degraded`.
 `tests/unit/test_one_tview_read_graph.py` fails on a module that pairs `tview_calls` with
 `tview_query_tree` or resolves a `RangeVar` to an inventory view itself; its allow-list
 names `tview_preflight` (registered queries against a migration, no tree).
+The graph also keeps every relation a holder names and answers whether it reads a column
+(`reads_column`): `core/view_dependents.py` reads it, over each side's own statements, for
+the views a column change must drop and create again (`DependentsDropped`/`DependentsRecreated`,
+#765).
 
 **`plpgsql_check` is an analysis engine, not a second parser** (`core/linting/bodies.py`,
 the `body` rule family). Only a built schema knows that `v_pk` is `UUID`, so the DDL is
@@ -618,6 +622,7 @@ confiture/
 │   │   ├── __init__.py           # Core migration execution and schema building components
 │   │   ├── _pglast_enums.py      # Name-resolved PostgreSQL parse-node enum members (issue #192)
 │   │   ├── backfill.py           # The batched backfill between expand and contract: bounded, observable,…
+│   │   ├── backfill_gate.py      # The backfill gate: a generated step the author completes before ``migra…
 │   │   ├── baseline_detector.py  # Which migration level a live database is at, read against the schema-hi…
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
 │   │   ├── build_order.py        # Whether a build order survived a renumbering: the build's selection at…
@@ -681,6 +686,7 @@ confiture/
 │   │   ├── preflight.py          # Pre-flight migration checks
 │   │   ├── progress.py           # Progress tracking for long-running operations
 │   │   ├── psql_applier.py       # Shared COPY-aware SQL applier backed by ``psql``
+│   │   ├── relation_exclusion.py # The relations another tool owns, left out of a comparison: ``diff.exclu…
 │   │   ├── restorer.py           # Three-phase pg_restore orchestrator
 │   │   ├── risk_tier.py          # Risk-tier taxonomy for the migration-adapter seam (issue #197)
 │   │   ├── schema_analyzer.py    # Schema analysis and validation for dry-run mode
@@ -714,10 +720,11 @@ confiture/
 │   │   ├── type_lattice.py       # Is an `ALTER COLUMN … TYPE` widening or narrowing (issue #199)?
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
+│   │   ├── view_dependents.py    # The views a column change is refused under: what a migration drops and…
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
 │   │   ├── _migrator/            # (23 modules)
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
-│   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
+│   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (6 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (20 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (5 modules)

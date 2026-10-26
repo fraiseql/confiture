@@ -830,6 +830,8 @@ class MigrationPreflightInfo:
     # -- confiture:destructive gate (PFLIGHT_DESTRUCTIVE_GATED) and its -- confiture:irreversible reasons
     destructive: bool = False
     irreversible_reasons: list[str] = field(default_factory=list)
+    # -- confiture:backfill placeholders still in the file (PFLIGHT_BACKFILL_PENDING)
+    backfill_pending: list[str] = field(default_factory=list)
     online_available: bool = (
         False  # every statement has an expand/contract plan (migrate up --online)
     )
@@ -983,6 +985,18 @@ class PreflightResult:
         )
         out.extend(
             PreflightIssue.of(
+                "PFLIGHT_BACKFILL_PENDING",
+                f"Migration {m.version} ({m.name}) still carries the generator's backfill "
+                f"placeholder for {', '.join(m.backfill_pending)}: migrate up refuses it.",
+                migration=m.version,
+                file=m.filename,
+                details={"targets": list(m.backfill_pending)},
+            )
+            for m in self.migrations
+            if m.backfill_pending
+        )
+        out.extend(
+            PreflightIssue.of(
                 "PFLIGHT_IRREVERSIBLE",
                 f"Migration {m.version} ({m.name}) declares that migrate down does not undo it: "
                 f"{'; '.join(m.irreversible_reasons)}.",
@@ -1090,6 +1104,11 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
     "PFLIGHT_DESTRUCTIVE_GATED": (
         "warning",
         "Review the migration, then run migrate up --allow-destructive to apply it.",
+    ),
+    "PFLIGHT_BACKFILL_PENDING": (
+        "error",
+        "Replace each -- confiture:backfill placeholder with the statements that fix the rows "
+        "it names, or with -- confiture:backfill none when no row needs it.",
     ),
     "PFLIGHT_IRREVERSIBLE": (
         "info",

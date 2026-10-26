@@ -118,6 +118,27 @@ class _Context:
             lock=validated_under(held),
         )
 
+    def drop_constraint(
+        self, schema: str | None, table: str | None, name: str | None
+    ) -> ChangeEntry:
+        """``DROP CONSTRAINT``; one an earlier statement of the file added takes its ADD's tier.
+
+        The constraint did not exist before the migration, so dropping it loses
+        nothing: expand/contract's ``SET NOT NULL`` drops the CHECK it proved
+        itself with. The match is as written (a loosening fact).
+        """
+        target = self.qualified(schema, table, name)
+        added = self.scope.added_as_written(schema, table, name)
+        if added is None:
+            return self.entry("drop_constraint", target, detail=f"DROP CONSTRAINT {_ident(name)}")
+        return self.entry(
+            "drop_constraint",
+            target,
+            tier=tier_for_add_constraint(not_valid=added.not_valid),
+            detail=f"DROP CONSTRAINT {_ident(name)} — added earlier in this migration: "
+            "nothing that existed before is dropped",
+        )
+
     def unclassified(self, kind: str, obj: str | None, detail: str) -> ChangeEntry:
         """An entry confiture will not tier. Explicitly tier-less, never dropped."""
         return ChangeEntry(

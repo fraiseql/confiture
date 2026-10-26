@@ -140,7 +140,11 @@ that cannot be taken raises `LockAcquisitionError`; a failing migration is a
 
 - `lock_timeout` / `no_lock`: `None` — the default for both — reads
   `migration.locking` from the environment (`timeout_ms`, else 30000; `enabled`,
-  else take the lock). An explicit argument wins.
+  else take the lock). An explicit argument wins. The lock also takes each of
+  `migration.locking.extra_keys` (another tool's advisory keys, in the one-`bigint`
+  form), after confiture's own and released in reverse; `MigratorSession(...,
+  extra_lock_keys=[...])` gives them when no environment does, and
+  `Migrator.migrate_up()` reads them from `LockConfig(extra_keys=...)`.
 - `allow_destructive`: apply migrations the destructive gate holds back — a
   `-- confiture:destructive` directive, or `destructive = True` on a Python
   migration. The default refuses them with `VALID_002` before anything is applied.

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import typer
 
+from confiture.cli.commands.migrate._settings import _load_environment_if_present
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, connect, console, emit, is_json
 from confiture.cli.options import (
@@ -30,6 +31,7 @@ from confiture.cli.options import (
 from confiture.config._env_vars import expand_env_vars
 from confiture.core import migrator as _core_migrator
 from confiture.core.connection import load_config
+from confiture.core.locking import resolve_extra_lock_keys
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -129,6 +131,7 @@ def migrate_apply_as(
         )
 
     tracking_table = _get_tracking_table(config_data)
+    env_cfg = _load_environment_if_present(config)
     try:
         with _core_migrator.MigratorSession(
             None,
@@ -137,6 +140,7 @@ def migrate_apply_as(
             migration_table_override=tracking_table,
             command="confiture migrate apply-as",
             connection_factory=connect,
+            extra_lock_keys=resolve_extra_lock_keys(env_cfg.migration.locking if env_cfg else None),
         ) as session:
             try:
                 applied = session.apply_one(version, applied_by=role)

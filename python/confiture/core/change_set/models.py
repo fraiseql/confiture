@@ -207,9 +207,17 @@ def tier_for_type_change(direction: TypeChange, *, rewrites_table: bool) -> Risk
 
 
 def tier_for_add_column(
-    *, nullable: bool, has_default: bool, server_version: int | None = None
+    *,
+    nullable: bool,
+    has_default: bool,
+    server_version: int | None = None,
+    rewrites: bool = False,
 ) -> RiskTier:
     """`ADD COLUMN`: additive when nullable, otherwise a lock risk.
+
+    ``rewrites``: the default is volatile (``ddl_walk.default_rewrites``), so it is
+    computed for every row and the table is rewritten on every version — a lock
+    risk, nullable or not.
 
     ``NOT NULL DEFAULT`` rewrites the table on PostgreSQL below 11; ``NOT NULL``
     without a default aborts outright on a non-empty table. Neither destroys
@@ -221,6 +229,8 @@ def tier_for_add_column(
     server (#199) and drops to additive; the no-default form is a hard failure rather
     than a lock risk on every version, so it does not move.
     """
+    if rewrites:
+        return RiskTier.LOCK_RISKY
     if nullable:
         return RiskTier.ADDITIVE
     if has_default and server_version is not None:

@@ -84,6 +84,7 @@ module moves, not when one grows.
 | Module | Bucket |
 |---|---|
 | `_pglast_enums.py` | DDL transform |
+| `backfill_gate.py` | DDL transform |
 | `change_order.py` | DDL transform |
 | `change_set/` | DDL transform |
 | `cor_extractor.py` | DDL transform |
@@ -112,6 +113,7 @@ module moves, not when one grows.
 | `path_globs.py` | DDL transform |
 | `plpgsql_fragments.py` | DDL transform |
 | `plpgsql_parse.py` | DDL transform |
+| `relation_exclusion.py` | DDL transform |
 | `replica/` | DDL transform |
 | `risk_tier.py` | DDL transform |
 | `schema_change.py` | DDL transform |
@@ -123,6 +125,7 @@ module moves, not when one grows.
 | `tree_prefix.py` | DDL transform |
 | `tview_preflight.py` | DDL transform |
 | `type_lattice.py` | DDL transform |
+| `view_dependents.py` | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
