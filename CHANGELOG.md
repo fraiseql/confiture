@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`migration.locking.extra_keys` serialises `migrate up`/`down` with another tool's advisory
+  lock** (#768). confiture's lock is two `int4` keys and FraiseQL's boot-DDL lock is one `bigint`
+  (`0x4652414953450001`); PostgreSQL keeps the two forms apart, so a FraiseQL server booting
+  during `migrate up` applied its DDL at the same time. Each listed key (a signed 64-bit integer;
+  a bool, a string or a value outside int8 is refused) is now taken with
+  `pg_advisory_lock(bigint)` after confiture's own lock, in order, with the same timeout and mode,
+  held for the whole run and released in reverse on every exit — including a later key that
+  could not be taken. A key held past `--lock-timeout` fails with `LOCK_1300` (exit 6) naming it.
+  Every command that takes the migration lock takes them (`migrate up`, `--online` included,
+  `down`, `down-to`, `apply-as`, `squash-ledger`, `MigratorSession`, `Migrator.migrate_up()` via
+  `LockConfig(extra_keys=…)`); `MigratorSession(extra_lock_keys=…)` gives them without an
+  environment file.
+
 ### Changed
 
 - **`seed generate` says it writes stubs, and only stubs** (#769). Its docstrings promised to
