@@ -2,7 +2,7 @@
 -- Version: <version>
 
 -- confiture:creates users
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE users (
     id BIGSERIAL NOT NULL,
     email TEXT NOT NULL,

@@ -54,6 +54,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "AT_SetUnLogged",
         "AT_SetRelOptions",
         "AT_ResetRelOptions",
+        "AT_AttachPartition",
+        "AT_AddInherit",
     ),
     "ConstrType": (
         "CONSTR_NOTNULL",
@@ -122,6 +124,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "SVFOP_SESSION_USER",
         "SVFOP_CURRENT_SCHEMA",
     ),
+    "DropBehavior": ("DROP_CASCADE",),
     "VariableSetKind": (
         "VAR_SET_VALUE",
         "VAR_SET_CURRENT",

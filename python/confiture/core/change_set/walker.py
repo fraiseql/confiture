@@ -36,7 +36,9 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
-from confiture.core.migration_scope import walk
+from confiture.core.lock_profile import on_created_relation
+from confiture.core.migration_scope import Scope, targets, walk
+from confiture.core.risk_tier import RiskTier
 from confiture.core.sql_lexer import ParsedStatement
 
 # Resolved BY NAME, never by literal ordinal (#192).
@@ -93,8 +95,34 @@ def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
     """Each statement's entries, in order, read in the scope the statements before it leave."""
     entries: list[ChangeEntry] = []
     for step in walk(sql, default_schema=ctx.default_schema):
-        entries.extend(_ast_statement(step.statement, sql, replace(ctx, scope=step.before)))
+        statement = _ast_statement(step.statement, sql, replace(ctx, scope=step.before))
+        entries.extend(_with_provenance(step.statement.stmt, statement, step.before))
     return entries
+
+
+def _with_provenance(node: object, entries: list[ChangeEntry], scope: Scope) -> list[ChangeEntry]:
+    """*entries*, each on a relation the migration created read as such: additive, blocking no one.
+
+    :func:`~confiture.core.migration_scope.targets` names what each entry of the
+    statement acts on, in the order the handlers build them.
+    """
+    found = targets(node)
+    if len(found) != len(entries):
+        return entries
+    return [
+        _on_created_relation(entry) if scope.exempts_target(entry.kind, target) else entry
+        for entry, target in zip(entries, found, strict=True)
+    ]
+
+
+def _on_created_relation(entry: ChangeEntry) -> ChangeEntry:
+    head = (entry.detail or entry.kind).split(" — ")[0]
+    return replace(
+        entry,
+        tier=RiskTier.ADDITIVE,
+        detail=f"{head} — on a relation this migration creates",
+        lock=None if entry.lock is None else on_created_relation(entry.lock),
+    )
 
 
 def _ast_statement(statement: ParsedStatement, sql: str, ctx: _Context) -> list[ChangeEntry]:

@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **⚠️ Preflight judges an operation on a relation the same migration creates as such** (#692).
+  `CREATE TABLE t (…); CREATE INDEX ix ON t (c);` used to read `window_safe: false`
+  (`PFLIGHT_REPLICA_CREATE_INDEX`) with the index `lock_risky`, so every generated new table with
+  an index needed approval. A relation PostgreSQL proves new — a plain `CREATE TABLE`,
+  `CREATE TABLE … AS`, `CREATE MATERIALIZED VIEW` or `tviews.pg_tviews_create()` — is seen by no
+  other session until the migration commits, so an index, `ADD COLUMN`, `ADD CONSTRAINT`,
+  `SET NOT NULL`, a type change, `DROP COLUMN`, `RENAME`, `TRUNCATE`, `REFRESH` or `DROP` on it is
+  now replica-safe, `additive`, with a lock that blocks no one (`detail`: "… — on a relation this
+  migration creates") and no expand/contract plan. The replica verdict, the change set, the lock
+  profile and the planner read it from one fold (`core/migration_scope`, ARCHITECTURE Decision 9),
+  so they cannot disagree. It stays flagged wherever it may reach a relation that existed:
+  `CREATE TABLE IF NOT EXISTS`, `pg_tviews_create_or_replace()`, `PARTITION OF`/`INHERITS`/
+  `ATTACH`, `CASCADE`, a foreign key to a relation the migration did not create (or dropping one
+  that holds such a key), a name not spelled as it was created (`t` is not `public.t`), and
+  anything after a `search_path` change, a `DO`/`CALL`/`EXECUTE` or a function call. Every
+  generated diff golden that creates a table or materialized view with its indexes now reads
+  `-- confiture:tier additive` (32 tier lines, nothing else). **fraisier:** more permissive —
+  those migrations auto-apply under a policy that asks for approval at `lock_risky`; the
+  boundary ruling is fraisier-core's `migration-risk-contract.md` §5.
 - **⚠️ A generated migration that runs in one transaction creates its new tables and
   materialized views plainly, and says so.** `migrate diff --generate` (the `.up.sql`/`.down.sql`
   pair and the `.py` form) writes `CREATE TABLE` / `CREATE MATERIALIZED VIEW` without `IF NOT
@@ -30,8 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   low — now fails with `42P07` and rolls back. The regression is narrow: those paths already
   failed on a generated `ADD COLUMN`, `DROP TABLE` or `CREATE TYPE`. Two migrations creating the
   same relation now fail on the second. The safe paths are `migrate rebuild`, `migrate baseline`
-  and `--auto-detect-baseline` ([Legacy bootstrap](docs/guides/legacy-bootstrap.md)). Tiers,
-  the replica verdict and `window_safe` are unchanged, as are the diff wire and the model wire.
+  and `--auto-detect-baseline` ([Legacy bootstrap](docs/guides/legacy-bootstrap.md)). The diff
+  wire and the model wire are unchanged; what preflight now says about the result is the entry
+  below.
   The FraiseQL desired-state contract (`tests/contract/test_desired_state_fixture.py`) is
   unchanged: its fixture carries a concurrent index, so its expected migration keeps `IF NOT
   EXISTS`.

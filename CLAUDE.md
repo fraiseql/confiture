@@ -208,6 +208,15 @@ preflight read it; `tests/unit/test_one_migration_walk.py` fails on one of them 
 the lexer itself. A fact that **tightens** a verdict (a constraint added → its
 validation is `lock_risky`) matches by identity; one that **loosens** a verdict
 matches only as written, and a statement the fold cannot read is never assumed.
+The loosening fact they share is **a relation the file creates**: a plain `CREATE TABLE`,
+`CREATE TABLE … AS`, `CREATE MATERIALIZED VIEW` or `pg_tviews_create()`, which PostgreSQL
+proves new. `Scope.exempts(kind, …)` says whether an operation reaches only that relation
+(`EXEMPT` lists the kinds; a `CASCADE`, a foreign key to a relation the file did not create,
+or dropping one that holds such a key do not), and `migration_scope.targets(stmt)` names
+what each operation of a statement acts on, for both classifiers: replica `safe`, tier
+`additive`, a lock that blocks no one, no expand/contract plan. A drop, rename onto or
+`SET SCHEMA` under any spelling, a `search_path` change, `ATTACH`/`INHERIT`, and any
+`DO`/`CALL`/`EXECUTE` or function call forget it; `IF NOT EXISTS` never proves it.
 
 **One creates directive** — `core/created_relations.py` writes and reads
 `-- confiture:creates <relation>`. The generator writes one line per relation

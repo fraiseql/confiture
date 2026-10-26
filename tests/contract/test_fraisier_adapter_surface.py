@@ -258,6 +258,30 @@ def test_preflight_exposes_top_level_window_safe_verdict(tmp_path: Path) -> None
     assert unsafe["window_safe"] is False
 
 
+def test_an_index_on_a_table_the_migration_creates_is_window_safe(tmp_path: Path) -> None:
+    """A relation PostgreSQL proves new is seen by no other session (#692): its plain
+    index blocks no one, so the window is safe and every change ``additive``.
+
+    ``CREATE TABLE IF NOT EXISTS`` proves nothing — the table may exist and hold
+    rows — so the same index on it stays ``lock_risky`` and the window unsafe.
+    """
+    created = _preflight_payload(
+        tmp_path / "created",
+        "CREATE TABLE t (c text);\nCREATE INDEX ix_t_c ON t (c);",
+        "DROP TABLE t;",
+    )
+    assert created["window_safe"] is True
+    assert {c["tier"] for c in created["change_set"]["changes"]} == {"additive"}
+
+    assumed = _preflight_payload(
+        tmp_path / "assumed",
+        "CREATE TABLE IF NOT EXISTS t (c text);\nCREATE INDEX ix_t_c ON t (c);",
+        "DROP TABLE t;",
+    )
+    assert assumed["window_safe"] is False
+    assert [c["tier"] for c in assumed["change_set"]["changes"]] == ["additive", "lock_risky"]
+
+
 def test_version_output_shape_matches_adapter_parser() -> None:
     """`confiture --version` ends in the version token (adapter parse_version).
 
