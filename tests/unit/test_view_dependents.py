@@ -191,6 +191,73 @@ class TestTheGeneratedSQL:
         assert _statements(_up(self.OLD, new))[-1] == "create v3"
 
 
+class TestARecreatedViewReadingAnAddedOne:
+    """A view the rebuild creates again may read a view only the new tree defines (#787)."""
+
+    OLD = _TABLE + "CREATE VIEW v1 AS SELECT id, a FROM t;\nCREATE VIEW v2 AS SELECT id FROM v1;\n"
+    NEW = _RETYPED + (
+        "CREATE VIEW v_new AS SELECT id, a FROM t;\n"
+        "CREATE VIEW v1 AS SELECT n.id, n.a FROM v_new n;\n"
+        "CREATE VIEW v2 AS SELECT id FROM v1;\n"
+        "CREATE VIEW v3 AS SELECT id FROM v2;\n"
+    )
+
+    def test_the_added_view_is_created_before_the_one_reading_it(self) -> None:
+        assert _statements(_up(self.OLD, self.NEW)) == [
+            "drop v2",
+            "drop v1",
+            "alter t",
+            "create v_new",
+            "create v1",
+            "create v2",
+            "create v3",
+        ]
+
+    def test_the_down_drops_it_after_the_one_reading_it(self) -> None:
+        renderer = DifferSQLGenerator()
+        down = "".join(
+            renderer.generate_down(c) or ""
+            for c in reversed(apply_order(diff(self.OLD, self.NEW).changes))
+        )
+
+        assert _statements(down)[:4] == ["drop v3", "drop v2", "drop v1", "drop v_new"]
+
+    def test_an_added_view_between_two_recreated_ones_splits_the_recreate(self) -> None:
+        new = _RETYPED + (
+            "CREATE VIEW v1 AS SELECT id, a FROM t;\n"
+            "CREATE VIEW v_mid AS SELECT id FROM v1;\n"
+            "CREATE VIEW v2 AS SELECT id FROM v_mid;\n"
+        )
+        assert _statements(_up(self.OLD, new))[-3:] == ["create v1", "create v_mid", "create v2"]
+
+    def test_without_a_rebuild_added_views_keep_their_place(self) -> None:
+        old = _TABLE + "CREATE VIEW v1 AS SELECT id FROM t;\n"
+        new = old + "CREATE VIEW v0 AS SELECT id FROM v1;\n"
+        assert _statements(_up(old, new)) == ["create v0"]
+
+
+class TestWhatTheDropTakes:
+    """The rebuild writes again what the drop takes, then what the new side writes (#787)."""
+
+    VIEW = "CREATE VIEW v AS SELECT id, a FROM t;\n"
+
+    def test_a_grant_only_the_old_side_writes_is_kept(self) -> None:
+        grant = "GRANT SELECT ON v TO PUBLIC;\n"
+        _, recreated = _rebuilds(_TABLE + self.VIEW + grant, _RETYPED + self.VIEW)
+
+        assert recreated.dependents[0].attached == (grant,)
+
+    def test_a_statement_both_sides_write_is_written_once(self) -> None:
+        grant = "GRANT SELECT ON v TO PUBLIC;\n"
+        comment = "COMMENT ON VIEW v IS 'new';\n"
+        dropped, recreated = _rebuilds(
+            _TABLE + self.VIEW + grant, _RETYPED + self.VIEW + grant + comment
+        )
+
+        assert recreated.dependents[0].attached == (grant, comment)
+        assert dropped.dependents[0].attached == (grant, comment)
+
+
 class TestTheTier:
     VIEW = "CREATE VIEW v AS SELECT id, a FROM t;\n"
     MATVIEW = "CREATE MATERIALIZED VIEW m AS SELECT id, a FROM t;\n"

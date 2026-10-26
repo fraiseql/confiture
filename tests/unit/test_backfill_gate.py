@@ -76,6 +76,7 @@ class TestWhatIsGenerated:
         assert pending(sql) == ["t.email"]
         assert _subcommands(sql) == [
             "AT_AddColumn",
+            "AT_DropConstraint",
             "AT_AddConstraint",
             "AT_ValidateConstraint",
             "AT_SetNotNull",
@@ -104,6 +105,7 @@ class TestWhatIsGenerated:
 
         assert pending(sql) == ["t.name"]
         assert _subcommands(sql) == [
+            "AT_DropConstraint",
             "AT_AddConstraint",
             "AT_ValidateConstraint",
             "AT_SetNotNull",
@@ -125,8 +127,12 @@ class TestWhatIsGenerated:
         )
 
         assert pending(sql) == ["t.c"]
-        assert _subcommands(sql) == ["AT_AddConstraint", "AT_ValidateConstraint"]
-        assert pglast.parse_sql(sql)[0].stmt.cmds[0].def_.skip_validation
+        assert _subcommands(sql) == [
+            "AT_DropConstraint",
+            "AT_AddConstraint",
+            "AT_ValidateConstraint",
+        ]
+        assert pglast.parse_sql(sql)[1].stmt.cmds[0].def_.skip_validation
 
     @pytest.mark.parametrize(
         ("new_type", "waits"), [("varchar(5)", True), ("integer", True), ("varchar", False)]
@@ -152,6 +158,41 @@ class TestWhatIsGenerated:
         assert tier_of(change) == worst_tier(e.tier for e in written) == RiskTier.LOCK_RISKY
 
 
+class TestItRunsAgain:
+    """Outside a transaction each statement commits, so a retry meets what the last run left (#785)."""
+
+    @pytest.mark.parametrize(
+        "new",
+        [
+            "CREATE TABLE t (id bigint PRIMARY KEY, name text, code text, email text NOT NULL);",
+            "CREATE TABLE t (id bigint PRIMARY KEY, name text NOT NULL, code text);",
+            "CREATE TABLE t (id bigint PRIMARY KEY, name text, code text, CONSTRAINT c CHECK (code <> ''));",
+        ],
+    )
+    def test_each_constraint_added_not_valid_is_dropped_if_it_exists_first(self, new: str) -> None:
+        statements = [raw.stmt for raw in pglast.parse_sql(_up(new))]
+        adds = [
+            (at, cmd.def_.conname)
+            for at, stmt in enumerate(statements)
+            for cmd in stmt.cmds
+            if int(cmd.subtype) == _AT["AT_AddConstraint"]
+        ]
+
+        assert adds
+        for at, name in adds:
+            (before,) = statements[at - 1].cmds
+            assert int(before.subtype) == _AT["AT_DropConstraint"]
+            assert (before.name, before.missing_ok) == (name, True)
+
+    def test_the_column_is_added_if_it_does_not_exist(self) -> None:
+        sql = _up(
+            "CREATE TABLE t (id bigint PRIMARY KEY, name text, code text, email text NOT NULL);"
+        )
+
+        (added,) = pglast.parse_sql(sql)[0].stmt.cmds
+        assert added.missing_ok
+
+
 class TestTheConstraintTheFileAdded:
     """Dropping a constraint the same file added drops nothing that existed before."""
 
@@ -169,6 +210,23 @@ class TestTheConstraintTheFileAdded:
     def test_it_matches_only_as_written(self) -> None:
         sql = self.ADD + "ALTER TABLE public.t DROP CONSTRAINT c;"
         assert self._drop_tier(sql) is RiskTier.DESTRUCTIVE
+
+    def test_a_drop_if_exists_before_its_add_is_the_add(self) -> None:
+        sql = "ALTER TABLE t DROP CONSTRAINT IF EXISTS c;\n" + self.ADD
+
+        assert classify_statements(sql)[0].tier is RiskTier.REVERSIBLE
+
+    @pytest.mark.parametrize(
+        "drop",
+        [
+            "ALTER TABLE t DROP CONSTRAINT IF EXISTS c CASCADE;\n",
+            "ALTER TABLE public.t DROP CONSTRAINT IF EXISTS c;\n",
+            "ALTER TABLE t DROP CONSTRAINT IF EXISTS d;\n",
+            "ALTER TABLE u DROP CONSTRAINT IF EXISTS c;\n",
+        ],
+    )
+    def test_a_drop_is_paired_only_as_written(self, drop: str) -> None:
+        assert classify_statements(drop + self.ADD)[0].tier is RiskTier.DESTRUCTIVE
 
     def test_a_statement_between_that_is_not_an_alter_table_forgets_it(self) -> None:
         sql = self.ADD + "DO $$ BEGIN NULL; END $$;\nALTER TABLE t DROP CONSTRAINT c;"

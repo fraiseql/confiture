@@ -14,7 +14,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from tests.conftest import create_supported_pg_tviews
+from tests.conftest import create_supported_pg_tviews, drop_roles
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -64,6 +64,14 @@ CASES = {
         _KEPT + _VIEW + _ON_VIEW, _RETYPED + _VIEW + _ON_VIEW, "SELECT * FROM v_user_age"
     ),
     "retype_under_a_matview": Case(_KEPT + _MATVIEW, _RETYPED + _MATVIEW, "SELECT * FROM mv_user"),
+    "retype_under_a_view_reading_an_added_view": Case(
+        _KEPT + _VIEW,
+        _RETYPED
+        + "CREATE VIEW v_age AS SELECT pk_user, age FROM tb_user;\n"
+        + "CREATE VIEW v_user AS SELECT u.pk_user, u.name, a.age "
+        + "FROM tb_user u JOIN v_age a USING (pk_user);\n",
+        "SELECT * FROM v_user",
+    ),
 }
 
 
@@ -255,3 +263,56 @@ def test_a_column_change_passes_under_a_tview(tview_database: str, tmp_path: Pat
 
     assert code == 0, payload
     assert _rows(tview_database, "SELECT pk_user, data FROM tv_user") == before
+
+
+_READER, _OWNER = "confiture_t787_reader", "confiture_t787_owner"
+
+
+def _attached(url: str) -> tuple:
+    with psycopg.connect(url) as conn:
+        return conn.execute(
+            "SELECT has_table_privilege(%s, 'v_user', 'SELECT'), "
+            "obj_description('v_user'::regclass, 'pg_class'), "
+            "pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'v_user'::regclass",
+            (_READER,),
+        ).fetchone()
+
+
+@pytest.fixture
+def roles(maintenance_connection: psycopg.Connection):
+    drop_roles(maintenance_connection, _READER, _OWNER)
+    for role in (_READER, _OWNER):
+        maintenance_connection.execute(
+            psycopg.sql.SQL("CREATE ROLE {}").format(psycopg.sql.Identifier(role))
+        )
+    maintenance_connection.execute(
+        psycopg.sql.SQL("GRANT {} TO current_user").format(psycopg.sql.Identifier(_OWNER))
+    )
+    yield
+    drop_roles(maintenance_connection, _READER, _OWNER)
+
+
+def test_a_view_diffed_from_a_database_keeps_its_grant_comment_and_owner(
+    fresh_database: str, tmp_path: Path, roles: None
+) -> None:
+    """The database side carries what the drop takes; the tree writes none of it (#787)."""
+    del roles
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(_KEPT + _VIEW + _SEED)
+        conn.execute(f"GRANT CREATE ON SCHEMA public TO {_OWNER}")
+        conn.execute(f"GRANT SELECT ON v_user TO {_READER}")
+        conn.execute("COMMENT ON VIEW v_user IS 'it''s the users'")
+        conn.execute(f"ALTER VIEW v_user OWNER TO {_OWNER}")
+    held = _attached(fresh_database)
+    assert held == (True, "it's the users", _OWNER)
+    config, migrations = _generate(tmp_path, fresh_database, fresh_database, _RETYPED + _VIEW)
+
+    code, payload = _migrate("up", migrations, config)
+
+    assert code == 0, payload
+    assert _attached(fresh_database) == held
+
+    code, payload = _migrate("down", migrations, config)
+
+    assert code == 0, payload
+    assert _attached(fresh_database) == held
