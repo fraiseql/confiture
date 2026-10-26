@@ -25,7 +25,7 @@ from confiture.core.differ import SchemaDiffer, Side, held_by_definition
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
-from confiture.core.live_catalog import catalogued_objects, user_schemas
+from confiture.core.live_catalog import attached, catalogued_objects, user_schemas
 from confiture.core.live_catalog import read as read_catalog
 from confiture.core.live_catalog import (
     require_supported_pg_tviews_on as _require_supported_pg_tviews_on,
@@ -239,7 +239,15 @@ def database_side(
         )
         model = _the_projects(model, against, tracking_table)
         constants = AS_WRITTEN if against is None else server_constants(conn, against)
-        return Side(model, catalogued_objects(conn, model, wanted), constants=constants)
+        relations = [
+            (ref.schema or DEFAULT_SCHEMA, ref.name) for ref in (*model.views, *model.tviews)
+        ]
+        return Side(
+            model,
+            catalogued_objects(conn, model, wanted),
+            constants=constants,
+            attached=attached(conn, relations),
+        )
 
 
 def materialised_side(
@@ -340,6 +348,7 @@ def _with_the_trees(side: Side, tree: Side, default_schema: str) -> Side:
         warnings=tree.warnings,
         quoted=tree.quoted,
         dangling=tree.dangling,
+        attached=tree.attached,
     )
 
 

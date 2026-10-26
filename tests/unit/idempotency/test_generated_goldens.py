@@ -33,11 +33,7 @@ PINNED: dict[str, dict[str, int]] = {
     "03-zero-downtime-migration.new.up.sql": {"CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK": 1},
     "03-zero-downtime-migration.old.down.sql": {"DROP_TABLE": 1},
     "03-zero-downtime-migration.old.up.sql": {"CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK": 1},
-    "03-zero-downtime-migration.up.sql": {
-        "ALTER_TABLE_ADD_COLUMN": 1,
-        "ALTER_TABLE_ADD_CONSTRAINT_CHECK": 1,
-        "ALTER_TABLE_RENAME_COLUMN": 1,
-    },
+    "03-zero-downtime-migration.up.sql": {"ALTER_TABLE_RENAME_COLUMN": 1},
     "04-production-sync-anonymization.down.sql": {"DROP_TABLE": 9},
     "04-production-sync-anonymization.up.sql": {},
     "05-multi-environment-workflow.down.sql": {"DROP_TABLE": 3},
@@ -75,7 +71,6 @@ PINNED: dict[str, dict[str, int]] = {
     "every-change.old.up.sql": {"CREATE_OR_REPLACE_VIEW_SHAPE_RISK": 3, "CREATE_TYPE": 2},
     "every-change.up.sql": {
         "ALTER_TABLE_ADD_COLUMN": 1,
-        "ALTER_TABLE_ADD_CONSTRAINT_CHECK": 1,
         "ALTER_TABLE_ADD_CONSTRAINT_UNIQUE": 1,
         "ALTER_TABLE_RENAME_COLUMN": 1,
         "CREATE_OR_REPLACE_VIEW_SHAPE_RISK": 2,
