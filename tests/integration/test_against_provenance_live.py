@@ -160,3 +160,45 @@ def test_the_live_reads(fresh_database: str) -> None:
     assert {("public", name) for name in expected} <= names
     assert facts.relations == names
     assert facts.current_schema == "public"
+
+
+TVIEW = "SELECT tviews.pg_tviews_create_or_replace('tv_note', 'SELECT id, title FROM tb_note');\n"
+TVIEW_INDEX = "CREATE INDEX ix_tv_note_title ON tv_note (title);\n"
+
+
+def test_a_tview_the_database_lacks_is_created_by_create_or_replace(
+    fresh_database: str, tmp_path: Path
+) -> None:
+    """The spelling ``migrate diff --generate`` writes for a TVIEW (#786)."""
+    _run(fresh_database, "CREATE TABLE tb_note (id int, title text)")
+
+    payload = _preflight(_migrations(tmp_path, TVIEW + TVIEW_INDEX), fresh_database)
+
+    assert not _flagged(payload)
+    assert _index(payload)["tier"] == "additive"
+
+
+def test_a_tview_the_database_holds_is_replaced_by_create_or_replace(
+    fresh_database: str, tmp_path: Path
+) -> None:
+    _run(
+        fresh_database,
+        "CREATE TABLE tb_note (id int, title text)",
+        "CREATE TABLE tv_note (id int, title text)",
+    )
+
+    payload = _preflight(_migrations(tmp_path, TVIEW + TVIEW_INDEX), fresh_database)
+
+    assert _flagged(payload)
+    assert _index(payload)["tier"] == "lock_risky"
+
+
+def test_a_tview_an_earlier_pending_file_creates_is_held(
+    fresh_database: str, tmp_path: Path
+) -> None:
+    _run(fresh_database, "CREATE TABLE tb_note (id int, title text)")
+
+    payload = _preflight(_migrations(tmp_path, TVIEW, TVIEW + TVIEW_INDEX), fresh_database)
+
+    assert _flagged(payload)
+    assert _index(payload)["tier"] == "lock_risky"
