@@ -78,7 +78,8 @@ already committed and records no ledger row, so the retry runs the file from the
 create keeps `IF NOT EXISTS` and declares nothing — as the FraiseQL desired-state fixture does,
 since it carries a concurrent index. Statically, preflight then cannot prove such a table new, so
 an index on it stays `lock_risky`; `migrate preflight --against` a copy of the target reads which
-relations exist, and an `IF NOT EXISTS` create of one the database lacks is judged as created. The down file follows the up file's mode. Every other creation
+relations exist, and an `IF NOT EXISTS` create of one the database lacks is judged as created, as
+is a `pg_tviews_create_or_replace()` of a TVIEW it lacks. The down file follows the up file's mode. Every other creation
 re-applies: `OR REPLACE` or `IF NOT EXISTS` where PostgreSQL has one, and a `DO … EXCEPTION WHEN
 duplicate_object` guard for a domain, a composite type or a policy, which have none. The changes run in an order PostgreSQL
 accepts: schemas and extensions first, then types and sequences, tables in foreign-key order,

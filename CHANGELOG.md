@@ -116,6 +116,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   generated non-transactional file still writes `IF NOT EXISTS`. **fraisier:** more permissive
   under `--against` — `window_safe` false→true and tiers `lock_risky`→`additive` for such a
   table's indexes (and the other exempt kinds); no new code.
+- **⚠️ Under `migrate preflight --against`, `tviews.pg_tviews_create_or_replace()` of a TVIEW the
+  database lacks is judged as created** (#786). The call is the spelling `migrate diff --generate`
+  writes for a TVIEW; it may create, replace in place or rebuild, so statically it stays a
+  replacement and an index on the TVIEW stays flagged. With `--against`, a TVIEW name the database
+  does not hold (an unqualified one resolved in `current_schema()`, as pg_tviews resolves it), once
+  the pending migrations before it are folded, makes the call a creation: the TVIEW's indexes in the
+  same file are replica-safe and `additive`, with the "(the database does not hold it)" detail.
+  **fraisier:** more permissive under `--against` only — `window_safe` false→true and
+  `lock_risky`→`additive` for such a TVIEW's indexes; no new code.
 - **⚠️ Preflight judges an operation on a relation the same migration creates as such** (#692).
   `CREATE TABLE t (…); CREATE INDEX ix ON t (c);` used to read `window_safe: false`
   (`PFLIGHT_REPLICA_CREATE_INDEX`) with the index `lock_risky`, so every generated new table with

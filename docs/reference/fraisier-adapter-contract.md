@@ -409,7 +409,8 @@ Boundary rulings, so they are not re-litigated per pull request:
   `CREATE TABLE IF NOT EXISTS` proves nothing statically, and the relation is matched as
   written (`t` is not `public.t`). Under `migrate preflight --against`, an
   `IF NOT EXISTS` create (`CREATE TABLE`, `CREATE TABLE … AS`, `CREATE MATERIALIZED
-  VIEW`) of a relation the database does not hold is a creation too — the `detail`
+  VIEW`) or a `tviews.pg_tviews_create_or_replace()` of a relation the database does not
+  hold is a creation too — the `detail`
   ends "on a relation this migration creates (the database does not hold it)". The
   database's relations (every `pg_class` name, any kind) are the state before the
   first pending migration, and each later one starts from what the earlier ones

@@ -215,7 +215,8 @@ matches only as written, and a statement the fold cannot read is never assumed. 
 database holds is the one outside fact: `walk(sql, start=Present(...))`, plain data
 (never a connection, never `SchemaFacts` — that is glue), read under `migrate preflight
 --against` and folded across the pending files by `preflight.pending_starts` through
-`leaves`; absence loosens, so a name is held wherever it may be and anything unreadable
+`leaves` (an `IF NOT EXISTS` create, or a `pg_tviews_create_or_replace()`, of a relation it
+lacks is a creation); absence loosens, so a name is held wherever it may be and anything unreadable
 forgets the set.
 The loosening fact they share is **a relation the file creates**: a plain `CREATE TABLE`,
 `CREATE TABLE … AS`, `CREATE MATERIALIZED VIEW` or `pg_tviews_create()`, which PostgreSQL

@@ -303,3 +303,47 @@ def test_without_against_the_payload_is_unchanged(monkeypatch: pytest.MonkeyPatc
     payload.pop("parser")
     recorded = (FIXTURE / "static.json").read_text(encoding="utf-8")
     assert json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n" == recorded
+
+
+# --------------------------------------------------------------------------- TVIEW (#786)
+
+TVIEW = "SELECT tviews.pg_tviews_create_or_replace('tv_t', 'SELECT id, c FROM tb_t');\n"
+TVIEW_INDEX = "CREATE INDEX ix_tv_t_c ON tv_t (c);"
+
+
+def _tview_fresh_before_last(sql: str, start: Present | None) -> bool:
+    *_, last = walk(sql, start=start)
+    return last.before.fresh(None, "tv_t") is not None
+
+
+def test_without_a_database_create_or_replace_proves_nothing() -> None:
+    assert not _tview_fresh_before_last(TVIEW + TVIEW_INDEX, None)
+    assert _tier(TVIEW + TVIEW_INDEX, None) is RiskTier.LOCK_RISKY
+
+
+def test_create_or_replace_of_a_tview_the_database_lacks_is_a_creation() -> None:
+    assert _tview_fresh_before_last(TVIEW + TVIEW_INDEX, EMPTY)
+    assert _tier(TVIEW + TVIEW_INDEX, EMPTY) is RiskTier.ADDITIVE
+    assert _replica_safe(TVIEW + TVIEW_INDEX, EMPTY)
+
+
+def test_create_or_replace_of_a_tview_the_database_holds_is_a_replacement() -> None:
+    holds = Present(relations=EMPTY.relations | {("public", "tv_t")}, current_schema="public")
+    assert not _tview_fresh_before_last(TVIEW + TVIEW_INDEX, holds)
+    assert not _replica_safe(TVIEW + TVIEW_INDEX, holds)
+
+
+def test_create_or_replace_matches_the_live_current_schema() -> None:
+    in_app = Present(relations=frozenset({("public", "tv_t")}), current_schema="app")
+    assert _tview_fresh_before_last(TVIEW + TVIEW_INDEX, in_app)
+    qualified = TVIEW.replace("'tv_t'", "'public.tv_t'")
+    *_, last = walk(qualified + TVIEW_INDEX, start=in_app)
+    assert last.before.fresh("public", "tv_t") is None
+
+
+def test_a_second_create_or_replace_in_the_file_replaces_what_the_first_created() -> None:
+    assert not _tview_fresh_before_last(TVIEW + TVIEW + TVIEW_INDEX, EMPTY)
+
+
+def test_an_earlier_pending_file_that_creates_the_tview_holds_it() -> None:
+    assert not _tview_fresh_before_last(TVIEW + TVIEW_INDEX, leaves(TVIEW, EMPTY))

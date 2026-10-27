@@ -32,7 +32,8 @@ forgets them all.
 **What a database holds** is the one fact that comes from outside the file:
 ``walk(sql, start=Present(...))``, plain data a caller read live (``migrate
 preflight --against``). With it, an ``IF NOT EXISTS`` create of a relation the
-database lacks is a creation too — PostgreSQL creates it new — and the scope
+database lacks is a creation too — PostgreSQL creates it new — as is a
+``tviews.pg_tviews_create_or_replace()`` of a TVIEW it lacks, and the scope
 folds the file into what is held after each statement, so a later file starts
 from what an earlier one leaves (:func:`leaves`). Absence is the loosening
 direction: a name is held under every schema it could have landed in, it is
@@ -49,6 +50,7 @@ from typing import Any
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
+    TViewCall,
     enum_int,
     object_edits,
     read_constraint,
@@ -450,9 +452,21 @@ def _created_after(scope: Scope, stmt: Any) -> dict[Written, Created]:
             continue
         if call.action == "create":
             created[(call.schema, call.name)] = Created()
+        elif call.action == "create_or_replace" and _tview_absent(scope.present, call):
+            created[(call.schema, call.name)] = Created(read_live=True)
         else:
             created.pop((call.schema, call.name), None)
     return _fold_created(created, stmt, scope.present)
+
+
+def _tview_absent(present: Present | None, call: TViewCall) -> bool:
+    """``pg_tviews_create_or_replace()`` of a TVIEW the database (*present*) does not hold (#786).
+
+    The call creates, replaces in place or rebuilds; only the database can say it
+    creates. pg_tviews places an unqualified name in ``current_schema()``, as
+    :meth:`Present.resolve` does.
+    """
+    return present is not None and present.lacks(call.schema, call.name)
 
 
 def _fold_created(
