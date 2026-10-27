@@ -574,12 +574,6 @@ def migrate_preflight(
         - default: migrate-preflight.schema.json
         - with --against: migrate-preflight-against.schema.json
     """
-    # Reason: CLI start-up: importing confiture.core.change_set costs ~9 ms at start (importtime, 2026-09-07); deferred until the command runs
-    from confiture.core.change_set import build_change_set
-
-    # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
-    from confiture.core.linting.libraries.replica import replica_preflight_issues
-
     # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import preflight_exit_code, run_preflight
 
@@ -657,9 +651,8 @@ def migrate_preflight(
     # #151: unified {ok, summary, issues[]} envelope — same shape as the
     # no-`--against` path. Replay failures join the static + replica findings;
     # run-level metadata (db_consumed) rides in `summary`.
-    _has_replicas, _replica_bypass = _preflight_replica_policy(config, env)
-    replica_issues = replica_preflight_issues(
-        migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass, versions=versions
+    replica_issues, change_set = _judged_against(
+        migrations_dir, versions, pending_files, run.facts, _preflight_replica_policy(config, env)
     )
     all_issues = (
         result.issues
@@ -673,9 +666,6 @@ def migrate_preflight(
         db_consumed=run.result.db_consumed,
     )
     exit_code = preflight_exit_code(summary, strict=strict)
-    # #199: the same change set as the no-`--against` path, plus the refinements
-    # the target database made possible (current column types, server version).
-    change_set = build_change_set(migrations_dir, versions=versions, facts=run.facts)
     large = _large_tables(change_set, run.facts)
     if format_type == "json":
         payload = _preflight_payload(all_issues, summary, change_set, exit_code, pending)
@@ -695,6 +685,39 @@ def migrate_preflight(
         raise typer.Exit(exit_code)
     if dependent_report is not None and dependent_report.has_blocking():
         raise typer.Exit(FINDINGS)
+
+
+def _judged_against(
+    migrations_dir: Path,
+    versions: list[str] | None,
+    pending_files: list[Path],
+    facts: SchemaFacts,
+    replica_policy: tuple[bool, bool],
+) -> tuple[list[Any], Any]:
+    """The replica findings and the change set, read with what the ``--against`` database holds.
+
+    #199: the change set the no-``--against`` path builds, refined by the target's
+    column types and server version. #692: an ``IF NOT EXISTS`` create of a
+    relation the database lacks — once the pending files before it are folded —
+    is judged as a creation, by both.
+    """
+    # Reason: CLI start-up: importing confiture.core.change_set costs ~9 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.change_set import build_change_set
+
+    # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.linting.libraries.replica import replica_preflight_issues
+
+    # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.preflight import pending_starts
+
+    starts = pending_starts(pending_files, facts)
+    has_replicas, bypass = replica_policy
+    replica_issues = replica_preflight_issues(
+        migrations_dir, has_replicas=has_replicas, bypass=bypass, versions=versions, starts=starts
+    )
+    return replica_issues, build_change_set(
+        migrations_dir, versions=versions, facts=facts, starts=starts
+    )
 
 
 def _live_findings(pending_files: list[Path], facts: SchemaFacts) -> list[Any]:

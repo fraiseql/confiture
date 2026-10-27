@@ -406,8 +406,17 @@ Boundary rulings, so they are not re-litigated per pull request:
   ending "on a relation this migration creates". It does not when it may reach a
   relation that existed: `CASCADE`, a foreign key to one the migration did not
   create (or dropping a relation holding one), `PARTITION OF`/`INHERITS`/`ATTACH`.
-  `CREATE TABLE IF NOT EXISTS` proves nothing, and the relation is matched as
-  written (`t` is not `public.t`). A drop, rename onto or `SET SCHEMA` under any
+  `CREATE TABLE IF NOT EXISTS` proves nothing statically, and the relation is matched as
+  written (`t` is not `public.t`). Under `migrate preflight --against`, an
+  `IF NOT EXISTS` create (`CREATE TABLE`, `CREATE TABLE … AS`, `CREATE MATERIALIZED
+  VIEW`) of a relation the database does not hold is a creation too — the `detail`
+  ends "on a relation this migration creates (the database does not hold it)". The
+  database's relations (every `pg_class` name, any kind) are the state before the
+  first pending migration, and each later one starts from what the earlier ones
+  leave: a pending `RENAME … TO t` holds `t`, a pending `DROP` frees it. An
+  unqualified name lands in the session's `current_schema()`. A `.py` migration, a
+  file the parser rejects, a `search_path` change, an extension, and any `DO`, `CALL`,
+  `EXECUTE` or function call end it: nothing after them is proven absent. A drop, rename onto or `SET SCHEMA` under any
   spelling forgets that relation, a `search_path` change the unqualified ones, and
   any `DO`, `CALL`, `EXECUTE` or function call every relation created before it.
 - `RENAME COLUMN` is `reversible`, not `destructive`. It breaks readers on the

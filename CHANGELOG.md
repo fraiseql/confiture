@@ -99,6 +99,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lock profile, nullable or not (it was `additive` when nullable, and `additive` under a live
   database's server version when `NOT NULL`). A constant, an SQL value function
   (`CURRENT_TIMESTAMP`) and `now()` keep their tiers.
+- **⚠️ Under `migrate preflight --against`, an `IF NOT EXISTS` create of a relation the database
+  lacks is judged as created** (#692). `CREATE TABLE IF NOT EXISTS t (…); CREATE INDEX ix ON t (c);`
+  proves nothing without a database, and stays flagged there (the payload without `--against` is
+  byte-identical). With `--against`, preflight reads every relation name the database holds
+  (`live_catalog.relation_names`, any `pg_class` kind) and where an unqualified `CREATE` lands
+  (`live_catalog.current_schema`, carried on `SchemaFacts.relations` / `.current_schema`); a `t`
+  it does not hold makes the `IF NOT EXISTS` form (`CREATE TABLE`, `CREATE TABLE … AS`,
+  `CREATE MATERIALIZED VIEW`) a creation, so the operations on it are exempt as on a plain
+  create: replica-safe, `additive`, `detail` "… — on a relation this migration creates (the
+  database does not hold it)". The live set is the state before the first pending migration;
+  each later one starts from what the earlier ones leave (a pending `RENAME big TO t` holds `t`,
+  a pending `DROP t` frees it), folded by `migration_scope` itself (`walk(sql, start=Present)`,
+  `leaves`). A `.py` migration, an unparseable file, a `search_path` change, `CREATE EXTENSION`,
+  and any `DO`/`CALL`/`EXECUTE`/function call end it: nothing after is proven absent. A
+  generated non-transactional file still writes `IF NOT EXISTS`. **fraisier:** more permissive
+  under `--against` — `window_safe` false→true and tiers `lock_risky`→`additive` for such a
+  table's indexes (and the other exempt kinds); no new code.
 - **⚠️ Preflight judges an operation on a relation the same migration creates as such** (#692).
   `CREATE TABLE t (…); CREATE INDEX ix ON t (c);` used to read `window_safe: false`
   (`PFLIGHT_REPLICA_CREATE_INDEX`) with the index `lock_risky`, so every generated new table with

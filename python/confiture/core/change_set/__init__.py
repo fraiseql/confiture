@@ -30,10 +30,11 @@ from typing import TYPE_CHECKING
 
 import pglast.parser
 
+from confiture.core.migration_scope import Present
 from confiture.core.schema_facts import SchemaFacts
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from pathlib import Path
 from confiture.core._migrator.discovery import _version_from_migration_filename
 from confiture.core.change_set.models import (
@@ -60,13 +61,15 @@ def build_change_set(
     versions: list[str] | None = None,
     default_schema: str = _DEFAULT_SCHEMA,
     facts: SchemaFacts | None = None,
+    starts: Mapping[str, Present] | None = None,
 ) -> ChangeSet:
     """Classify every change in ``migrations_dir``.
 
     Mirrors ``run_preflight``'s discovery — ``*.up.sql`` then ``*.py`` (skipping
     ``__init__.py`` and ``_``-prefixed helpers) — so the change set covers exactly
     the migrations preflight reports on. A missing directory classifies to an
-    empty set; preflight already reports that condition on its own.
+    empty set; preflight already reports that condition on its own. *starts* is
+    what the ``--against`` database holds before each pending file, by name.
     """
 
     if not migrations_dir.exists():
@@ -85,6 +88,7 @@ def build_change_set(
                 source=up_file.name,
                 default_schema=default_schema,
                 facts=facts,
+                start=(starts or {}).get(up_file.name),
             )
         )
 
@@ -115,17 +119,19 @@ def classify_statements(
     source: str | None = None,
     default_schema: str = _DEFAULT_SCHEMA,
     facts: SchemaFacts | None = None,
+    start: Present | None = None,
 ) -> list[ChangeEntry]:
     """Classify every statement in ``sql``.
 
     ``source`` names the file and is the ``object`` for statements whose target
     cannot be determined. SQL the parser rejects yields an unclassified entry
     rather than an empty list, so a broken migration denies instead of reading as
-    "nothing changes".
+    "nothing changes". *start* is what the database holds before the file runs,
+    when a caller read it (``migration_scope.walk``).
     """
     ctx = _Context(migration=migration, source=source, default_schema=default_schema, facts=facts)
     try:
-        return _ast_entries(sql, ctx)
+        return _ast_entries(sql, ctx, start)
     except pglast.parser.ParseError as exc:
         return [ctx.unclassified("unparseable", None, f"pglast could not parse {source}: {exc}")]
 

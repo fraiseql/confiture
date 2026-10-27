@@ -28,6 +28,19 @@ it or reach past it forgets it: a drop, rename onto, ``SET SCHEMA`` or
 unqualified ones), ``ATTACH PARTITION`` / ``INHERIT`` into it, and any statement
 this module cannot read — ``DO``, ``CALL``, ``EXECUTE``, a function call — which
 forgets them all.
+
+**What a database holds** is the one fact that comes from outside the file:
+``walk(sql, start=Present(...))``, plain data a caller read live (``migrate
+preflight --against``). With it, an ``IF NOT EXISTS`` create of a relation the
+database lacks is a creation too — PostgreSQL creates it new — and the scope
+folds the file into what is held after each statement, so a later file starts
+from what an earlier one leaves (:func:`leaves`). Absence is the loosening
+direction: a name is held under every schema it could have landed in, it is
+absent only where the statement as written removes it, and a statement this
+module cannot read forgets the whole set — nothing after it is proven absent.
+An unqualified name lands in :attr:`Present.current_schema`, never in a
+default. PostgreSQL's generated names (an unnamed index, a serial's sequence)
+are not read: no migration creates a table under one.
 """
 
 from collections.abc import Iterator
@@ -48,7 +61,18 @@ from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import TVIEW_PREFIX, Constraint
 from confiture.core.sql_lexer import ParsedStatement, parse
 
-__all__ = ["EXEMPT", "AddedConstraint", "Created", "Scope", "Step", "Target", "targets", "walk"]
+__all__ = [
+    "EXEMPT",
+    "AddedConstraint",
+    "Created",
+    "Present",
+    "Scope",
+    "Step",
+    "Target",
+    "leaves",
+    "targets",
+    "walk",
+]
 
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _AT_DROP_CONSTRAINT = _pg_member("AlterTableType", "AT_DropConstraint")
@@ -95,6 +119,15 @@ _RELATION_KINDS = frozenset({"table", "view", "matview", "foreign_table", "seque
 #: Statements whose effect this module cannot read when they call a function.
 _MAY_CALL = frozenset({"SelectStmt", "InsertStmt", "UpdateStmt", "DeleteStmt", "MergeStmt"})
 _OPAQUE = frozenset({"DoStmt", "CallStmt", "ExecuteStmt"})
+#: Statements that create relations under names they do not write.
+_CREATES_UNWRITTEN = frozenset(
+    {"CreateExtensionStmt", "AlterExtensionStmt", "ImportForeignSchemaStmt"}
+)
+#: The object kinds that live in ``pg_class``, whose drop frees a relation's name.
+_PG_CLASS_KINDS = _RELATION_KINDS | {"index"}
+#: The kinds whose rename or move takes a relation's name: a composite type is in
+#: ``pg_class`` too, and holding a name errs safe.
+_TAKES_A_NAME = _PG_CLASS_KINDS | {"type"}
 
 _DROP_CASCADE = _pg_member("DropBehavior", "DROP_CASCADE")
 
@@ -136,6 +169,32 @@ class Created:
     """
 
     references_existing: bool = False
+    read_live: bool = False
+    """Created by an ``IF NOT EXISTS`` form the database (:class:`Present`) proved new."""
+
+
+@dataclass(frozen=True)
+class Present:
+    """The relations a database holds, read live before a migration runs: plain data.
+
+    ``relations`` is ``(schema, name)`` of every ``pg_class`` entry as the catalog
+    holds it — table, index, sequence, view, composite type alike, since an
+    ``IF NOT EXISTS`` create skips on any of them. ``current_schema`` is where an
+    unqualified ``CREATE`` lands (``current_schema()``). ``anywhere`` holds names
+    a statement placed in a schema the fold could not tell.
+    """
+
+    relations: frozenset[tuple[str, str]]
+    current_schema: str
+    anywhere: frozenset[str] = frozenset()
+
+    def lacks(self, schema: str | None, name: str) -> bool:
+        """Whether no relation named ``schema.name`` exists, the schema as PostgreSQL resolves a CREATE's."""
+        return name not in self.anywhere and (self.resolve(schema), name) not in self.relations
+
+    def resolve(self, schema: str | None) -> str:
+        """The schema a ``CREATE`` that wrote *schema* lands in."""
+        return schema or self.current_schema
 
 
 @dataclass(frozen=True)
@@ -161,6 +220,8 @@ class Scope:
     #: Keyed as written: a loosening fact.
     created: dict[Written, Created] = field(default_factory=dict)
     default_schema: str = DEFAULT_SCHEMA
+    #: What the database holds before this statement; ``None`` when unknown.
+    present: Present | None = None
 
     def added_constraint(
         self, schema: str | None, table: str | None, name: str | None
@@ -230,18 +291,38 @@ class Step:
     after: Scope
 
 
-def walk(sql: str, *, default_schema: str = DEFAULT_SCHEMA) -> Iterator[Step]:
+def walk(
+    sql: str, *, default_schema: str = DEFAULT_SCHEMA, start: Present | None = None
+) -> Iterator[Step]:
     """Each statement of the migration *sql*, in order, with what came before it.
+
+    *start* is what the database holds before the file runs, when a caller read it.
 
     Raises:
         pglast.parser.ParseError: PostgreSQL's parser rejects *sql*.
     """
     statements = parse(sql)
-    scope = Scope(transactional=runs_in_one_transaction(sql), default_schema=default_schema)
+    scope = Scope(
+        transactional=runs_in_one_transaction(sql), default_schema=default_schema, present=start
+    )
     for statement in statements:
         after = _after(scope, statement.stmt)
         yield Step(statement, scope, after)
         scope = after
+
+
+def leaves(sql: str, start: Present | None) -> Present | None:
+    """What the database holds once the migration *sql* ran from *start*.
+
+    ``None`` once a statement this module cannot read ran, or when *start* was.
+
+    Raises:
+        pglast.parser.ParseError: PostgreSQL's parser rejects *sql*.
+    """
+    held = start
+    for step in walk(sql, start=start):
+        held = step.after.present
+    return held
 
 
 def _after(scope: Scope, stmt: Any) -> Scope:
@@ -250,11 +331,13 @@ def _after(scope: Scope, stmt: Any) -> Scope:
     added = _added_constraints(stmt)
     written = _written_after(scope, stmt, added)
     created = _created_after(scope, stmt)
+    present = _present_after(scope.present, stmt)
     if (
         not dropped
         and not added
         and written == scope.written_constraints
         and created == scope.created
+        and present == scope.present
     ):
         return scope
     return replace(
@@ -266,13 +349,87 @@ def _after(scope: Scope, stmt: Any) -> Scope:
         written_constraints=written,
         dropped_tviews=scope.dropped_tviews | dropped,
         created=created,
+        present=present,
     )
+
+
+def _unreadable(stmt: Any) -> bool:
+    """A statement whose effect on the relations this module cannot read."""
+    name = type(stmt).__name__
+    return name in _OPAQUE or (name in _MAY_CALL and _calls_a_function(stmt))
+
+
+def _present_after(present: Present | None, stmt: Any) -> Present | None:
+    """What the database holds once *stmt* ran: a name freed only as written, taken everywhere it may be."""
+    name = type(stmt).__name__
+    if present is None or _unreadable(stmt) or name in _CREATES_UNWRITTEN:
+        return None
+    if name == "VariableSetStmt" and stmt.name in (None, "search_path"):
+        return None
+    if name == "CreateSchemaStmt" and stmt.schemaElts:
+        return None
+    relations, anywhere = set(present.relations), set(present.anywhere)
+    for edit in object_edits(stmt):
+        if edit.object_kind == "schema" and edit.kind == "drop":
+            relations = {held for held in relations if held[0] != edit.name}
+            continue
+        key = (present.resolve(edit.schema), edit.name)
+        placed = edit.schema is not None or key in relations
+        if edit.object_kind in _PG_CLASS_KINDS and edit.kind in ("drop", "rename", "set_schema"):
+            relations.discard(key)
+        if edit.object_kind not in _TAKES_A_NAME:
+            continue
+        if edit.kind == "rename" and edit.new_name:
+            if placed:
+                relations.add((key[0], edit.new_name))
+            else:
+                anywhere.add(edit.new_name)
+        elif edit.kind == "set_schema" and edit.new_schema:
+            relations.add((edit.new_schema, edit.name))
+    relations.update(
+        (present.resolve(schema), created) for schema, created in _written_creations(stmt)
+    )
+    anywhere.update(_index_names(stmt))
+    return Present(frozenset(relations), present.current_schema, frozenset(anywhere))
+
+
+def _written_creations(stmt: Any) -> list[Written]:
+    """The relations *stmt* creates under a name it writes, an index's aside."""
+    name = type(stmt).__name__
+    relation: Any = None
+    if name == "CreateStmt":
+        relation = stmt.relation
+    elif name == "CreateForeignTableStmt":
+        relation = stmt.base.relation
+    elif name == "CreateTableAsStmt":
+        relation = getattr(stmt.into, "rel", None)
+    elif name == "SelectStmt" and stmt.intoClause is not None:
+        relation = stmt.intoClause.rel
+    elif name == "ViewStmt":
+        relation = stmt.view
+    elif name == "CreateSeqStmt":
+        relation = stmt.sequence
+    elif name == "CompositeTypeStmt":
+        relation = stmt.typevar
+    found = [] if (written := _written(relation)) is None else [written]
+    return found + [
+        (call.schema, call.name)
+        for call in tview_calls(stmt)
+        if call.action != "drop" and call.name is not None
+    ]
+
+
+def _index_names(stmt: Any) -> list[str]:
+    """A named index: it lands in its table's schema, which the name alone does not say."""
+    if type(stmt).__name__ == "IndexStmt" and stmt.idxname:
+        return [stmt.idxname]
+    return []
 
 
 def _created_after(scope: Scope, stmt: Any) -> dict[Written, Created]:
     """The relations the file has created once *stmt* ran, each as written."""
     name = type(stmt).__name__
-    if name in _OPAQUE or (name in _MAY_CALL and _calls_a_function(stmt)):
+    if _unreadable(stmt):
         return {}
     created = dict(scope.created)
     if name == "VariableSetStmt" and stmt.name in (None, "search_path"):
@@ -295,26 +452,32 @@ def _created_after(scope: Scope, stmt: Any) -> dict[Written, Created]:
             created[(call.schema, call.name)] = Created()
         else:
             created.pop((call.schema, call.name), None)
-    return _fold_created(created, stmt)
+    return _fold_created(created, stmt, scope.present)
 
 
-def _fold_created(created: dict[Written, Created], stmt: Any) -> dict[Written, Created]:
+def _fold_created(
+    created: dict[Written, Created], stmt: Any, present: Present | None
+) -> dict[Written, Created]:
     """*created* once *stmt* creates a relation, joins one to another, or adds a key to one."""
     name = type(stmt).__name__
     if name == "CreateStmt":
         relation = relation_name(stmt.relation)
-        if relation is not None and _proves_new(stmt):
+        live = relation is not None and _lacks(present, stmt, relation.schema, relation.name)
+        if relation is not None and _joins_nothing(stmt) and (live or not stmt.if_not_exists):
             key = (relation.schema, relation.name)
             targets = _key_targets(stmt.tableElts or ())
             created[key] = Created(
                 references_existing=any(
                     target != key and target not in created for target in targets
-                )
+                ),
+                read_live=live,
             )
     elif name == "CreateTableAsStmt":
         relation = relation_name(getattr(stmt.into, "rel", None))
-        if relation is not None and not stmt.if_not_exists:
-            created[(relation.schema, relation.name)] = Created()
+        if relation is not None:
+            live = _lacks(present, stmt, relation.schema, relation.name)
+            if live or not stmt.if_not_exists:
+                created[(relation.schema, relation.name)] = Created(read_live=live)
     elif name == "AlterTableStmt":
         relation = relation_name(stmt.relation)
         key = None if relation is None else (relation.schema, relation.name)
@@ -380,9 +543,14 @@ def _dropped(obj: Any) -> Written | None:
             return None
 
 
-def _proves_new(stmt: Any) -> bool:
-    """A ``CREATE TABLE`` that fails on an existing relation and joins no other one."""
-    return not stmt.if_not_exists and not stmt.inhRelations and stmt.partbound is None
+def _joins_nothing(stmt: Any) -> bool:
+    """A ``CREATE TABLE`` that is neither a partition nor a child of another table."""
+    return not stmt.inhRelations and stmt.partbound is None
+
+
+def _lacks(present: Present | None, stmt: Any, schema: str | None, name: str) -> bool:
+    """An ``IF NOT EXISTS`` create of a relation the database (*present*) does not hold."""
+    return bool(stmt.if_not_exists) and present is not None and present.lacks(schema, name)
 
 
 def _key_targets(nodes: Any) -> list[Written]:

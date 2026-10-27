@@ -10,7 +10,7 @@ One engine (`_iter_findings`) feeds two surfaces: the `confiture lint` rule
 (`replica_preflight_issues`, the #148 PreflightIssue / PFLIGHT_REPLICA_* shape).
 """
 
-from collections.abc import Collection, Iterator
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from confiture.core._migrator.discovery import (
 )
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
+from confiture.core.migration_scope import Present
 from confiture.core.replica.classifier import DdlOperation, OperationClassifier
 from confiture.core.replica.safety import (
     ReplicaVerdict,
@@ -115,15 +116,20 @@ def _iter_findings(
     has_replicas: bool,
     bypass: bool,
     versions: Collection[str] | None = None,
+    starts: Mapping[str, Present] | None = None,
 ) -> Iterator[ReplicaFinding | UnparseableMigration]:
-    """Yield one finding per replica-unsafe / unclassifiable operation."""
+    """Yield one finding per replica-unsafe / unclassifiable operation.
+
+    *starts* is what the database holds before each file, by file name, when
+    preflight read it (``--against``); a file it does not name is read statically.
+    """
     classifier = OperationClassifier()
     for migration in _migrations(migrations_dir, versions):
         if not migration.name.endswith(".up.sql"):
             continue
         text = migration.read_text()
         try:
-            ops = classifier.classify(text)
+            ops = classifier.classify(text, start=(starts or {}).get(migration.name))
         except pglast.parser.ParseError as exc:
             # What the parser rejects cannot be classified: say so.
             yield UnparseableMigration(migration_file=migration, text=text, error=exc)
@@ -186,6 +192,7 @@ def replica_preflight_issues(
     has_replicas: bool,
     bypass: bool,
     versions: Collection[str] | None = None,
+    starts: Mapping[str, Present] | None = None,
 ) -> list[PreflightIssue]:
     """Return replica findings as PreflightIssues (#148 shape) for preflight.
 
@@ -194,12 +201,14 @@ def replica_preflight_issues(
     ``PFLIGHT_REPLICA_UNCLASSIFIED`` warnings so "no replica issue" can never
     silently mean "never inspected". UNCLASSIFIED is always a warning (opacity
     never hard-blocks). *versions* narrows it to those migrations, as
-    ``run_preflight`` and ``build_change_set`` narrow theirs.
+    ``run_preflight`` and ``build_change_set`` narrow theirs; *starts* is what
+    the ``--against`` database holds before each pending file
+    (:func:`~confiture.core.preflight.pending_starts`).
     """
 
     issues: list[PreflightIssue] = []
     for f in _iter_findings(
-        migrations_dir, has_replicas=has_replicas, bypass=bypass, versions=versions
+        migrations_dir, has_replicas=has_replicas, bypass=bypass, versions=versions, starts=starts
     ):
         if isinstance(f, UnparseableMigration):
             issues.append(
