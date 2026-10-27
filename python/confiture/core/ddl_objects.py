@@ -270,9 +270,10 @@ REPLACE_IS_AUTHORS_WORK: dict[str, str] = {
 #: ``OR REPLACE`` is not a redefinition.
 _EXISTENCE_ATTRS = ("replace", "if_not_exists")
 
-#: Which existence clause makes each node re-appliable, for the statement a
-#: generated migration carries. A view has ``OR REPLACE``; a materialized view
-#: has only ``IF NOT EXISTS``, because PostgreSQL offers it no replace at all.
+#: Which existence clause makes each node re-appliable, for ``create_sql``: what
+#: the diff wire carries, and what a generated file that may run again carries. A
+#: view has ``OR REPLACE``; a materialized view has only ``IF NOT EXISTS``,
+#: because PostgreSQL offers it no replace at all.
 #: Rendered by setting the attribute and asking ``RawStream`` again rather than
 #: by editing its output: the words belong to the printer, not to us.
 _IDEMPOTENT_ATTR: dict[str, str] = {
@@ -301,9 +302,12 @@ class DDLObject:
 
     ``definition`` is what decides whether the object *changed* — existence
     clauses neutralised, so a view that gains ``OR REPLACE`` is the same view.
-    ``create_sql`` is what a generated migration carries — the same statement
-    with the existence clause its kind supports, so re-applying the migration
-    is not an error. ``signature`` is the routine's full canonical signature,
+    It doubles as the plain create: a generated file that runs in one
+    transaction creates a materialized view it proves new from it.
+    ``create_sql`` is the re-appliable form — the same statement with the
+    existence clause its kind supports — which the diff wire carries, and which
+    a generated file that may run again over what it created carries.
+    ``signature`` is the routine's full canonical signature,
     schemas included, which is what separates two definitions that share a
     bucket.
     """
@@ -344,7 +348,7 @@ def _canonical_definition(stmt: Any) -> str:
 
 
 def _creating_statement(stmt: Any) -> str:
-    """The rendering a generated migration carries, re-appliable where it can be."""
+    """The re-appliable rendering, with the existence clause the node supports."""
     attr = _IDEMPOTENT_ATTR.get(type(stmt).__name__)
     if attr is None or not _clause_applies(stmt):
         return _canonical_definition(stmt)

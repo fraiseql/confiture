@@ -19,6 +19,7 @@ from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_order import apply_order
 from confiture.core.change_set import classify_statements
 from confiture.core.change_set.diff_tiers import tier_of
+from confiture.core.created_relations import creates_line
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.risk_tier import RiskTier, worst_tier
@@ -177,6 +178,16 @@ class MigrationGenerator:
         no derivable rollback leaves a comment saying so, for the deployer to
         finish before shipping.
 
+        When the up file runs in one transaction — the predicate ``migrate up``
+        reads, ``runs_in_one_transaction`` — a table or materialized view a
+        change proves new is created with no ``IF NOT EXISTS``, under one
+        ``-- confiture:creates <relation>`` line, in the up and in the down
+        alike: PostgreSQL proves the relation new and ``migrate validate
+        --idempotent`` accepts the create so declared. A file with a concurrent
+        index or an enum label runs in autocommit, a failure there leaves what
+        committed and the retry runs the file from the top, so its creates keep
+        ``IF NOT EXISTS`` and nothing is declared.
+
         Args:
             diff: Schema diff containing changes
             name: Migration name (snake_case)
@@ -200,11 +211,31 @@ class MigrationGenerator:
         header = f"-- Migration: {name}\n-- Version: {version}\n\n"
         up_path = self.migrations_dir / f"{version}_{name}.up.sql"
         changes = apply_order(diff.changes)
-        downs = {id(change): self._change_to_down_sql(change) for change in changes}
-        up_path.write_text(header + gate + self._up_statements(changes, downs))
+        plain = self._plain(changes)
+        downs = {id(change): self._change_to_down_sql(change, plain=plain) for change in changes}
+        up_path.write_text(header + gate + self._up_statements(changes, downs, plain=plain))
         down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
-        down_path.write_text(header + self._down_statements(changes[::-1], downs))
+        down_path.write_text(header + self._down_statements(changes[::-1], downs, plain=plain))
         return up_path
+
+    def _plain(self, changes: list[SchemaChange]) -> bool:
+        """Whether the files create the relations they prove new plainly: the up runs in one transaction.
+
+        Asked through :meth:`_one_transaction` of the up as rendered
+        re-appliably; creating plainly changes no statement it reads. A text
+        PostgreSQL's parser rejects is not one transaction. In one transaction
+        PostgreSQL proves each created relation new and a failure rolls the
+        file back. Outside one a
+        failure leaves what already committed and records nothing, so the retry
+        runs the file from the top and every create keeps ``IF NOT EXISTS``.
+        The down runs in the up's mode, so it follows the same answer.
+        """
+        return self._one_transaction(changes) is True
+
+    def _declaring(self, change: SchemaChange, statement: str, *, down: bool, plain: bool) -> str:
+        """*statement* under one ``-- confiture:creates`` line per relation it creates plainly."""
+        created = self._sql_gen.creates(change, down=down, plain_creates=plain)
+        return "".join(f"{creates_line(name)}\n" for name in created) + statement
 
     def _one_transaction(self, changes: list[SchemaChange]) -> bool | None:
         """Whether the up runs in one transaction, by the rule ``migrate up`` applies to it.
@@ -248,17 +279,20 @@ class MigrationGenerator:
             )
         return policy == "gated"
 
-    def _up_statements(self, changes: list[SchemaChange], downs: dict[int, str | None]) -> str:
+    def _up_statements(
+        self, changes: list[SchemaChange], downs: dict[int, str | None], *, plain: bool
+    ) -> str:
         """One tiered, terminated statement per change, each declaring what cannot be undone.
 
         ``-- confiture:irreversible data`` precedes a statement that loses data
         (the down file recreates the object, never its rows);
         ``-- confiture:irreversible no rollback derived …`` precedes a statement
         the down file cannot undo at all, and pins its tier to ``irreversible``.
+        A relation the change creates plainly is declared above both.
         """
         statements = []
         for change in changes:
-            sql = self._change_to_up_sql(change)
+            sql = self._change_to_up_sql(change, plain=plain)
             if sql is None:
                 statements.append(
                     f"-- WARNING: no SQL derived for: {comment_text(str(change))}. "
@@ -273,10 +307,12 @@ class MigrationGenerator:
             )
             if reason:
                 statement = f"{_destructive.irreversible_line(reason)}\n{statement}"
-            statements.append(statement)
+            statements.append(self._declaring(change, statement, down=False, plain=plain))
         return "\n\n".join(statements) + "\n"
 
-    def _down_statements(self, changes: list[SchemaChange], downs: dict[int, str | None]) -> str:
+    def _down_statements(
+        self, changes: list[SchemaChange], downs: dict[int, str | None], *, plain: bool
+    ) -> str:
         """The reverse of each change, or the directive that says there is none."""
         statements = []
         for change in changes:
@@ -284,7 +320,8 @@ class MigrationGenerator:
             if sql is None:
                 statements.append(_destructive.irreversible_line(_destructive.no_rollback(change)))
             else:
-                statements.append(_with_tier(_terminated(sql), change=change))
+                statement = _with_tier(_terminated(sql), change=change)
+                statements.append(self._declaring(change, statement, down=True, plain=plain))
         return "\n\n".join(statements) + "\n"
 
     def _get_next_version(self) -> str:
@@ -407,8 +444,9 @@ class MigrationGenerator:
         class_name = self._to_class_name(name)
 
         changes = apply_order(diff.changes)
-        up_statements = self._generate_up_statements(changes)
-        down_statements = self._generate_down_statements(changes)
+        plain = self._plain(changes)
+        up_statements = self._generate_up_statements(changes, plain=plain)
+        down_statements = self._generate_down_statements(changes, plain=plain)
 
         template = '''"""Migration: {name}
 
@@ -481,11 +519,15 @@ class {class_name}(Migration):
         words = snake_case.split("_")
         return "".join(word.capitalize() for word in words)
 
-    def _generate_up_statements(self, changes: list[SchemaChange]) -> str:
+    def _generate_up_statements(self, changes: list[SchemaChange], *, plain: bool) -> str:
         """Generate SQL statements for up migration.
+
+        A ``-- confiture:creates`` line rides inside the executed literal, where
+        the idempotency check reads the SQL the migration runs.
 
         Args:
             changes: List of schema changes
+            plain: Whether a relation a change proves new is created plainly
 
         Returns:
             Python code with execute() calls
@@ -493,17 +535,20 @@ class {class_name}(Migration):
         statements = []
 
         for change in changes:
-            sql = self._change_to_up_sql(change)
+            sql = self._change_to_up_sql(change, plain=plain)
             if sql:
-                statements.append(_execute_call(sql))
+                statements.append(
+                    _execute_call(self._declaring(change, sql, down=False, plain=plain))
+                )
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
-    def _generate_down_statements(self, changes: list[SchemaChange]) -> str:
+    def _generate_down_statements(self, changes: list[SchemaChange], *, plain: bool) -> str:
         """Generate SQL statements for down migration.
 
         Args:
             changes: List of schema changes
+            plain: Whether a relation a change proves new is created plainly
 
         Returns:
             Python code with execute() calls
@@ -512,22 +557,24 @@ class {class_name}(Migration):
 
         # Process changes in reverse order for rollback
         for change in reversed(changes):
-            sql = self._change_to_down_sql(change)
+            sql = self._change_to_down_sql(change, plain=plain)
             if sql:
-                statements.append(_execute_call(sql))
+                statements.append(
+                    _execute_call(self._declaring(change, sql, down=True, plain=plain))
+                )
             else:
                 reason = comment_text(_destructive.no_rollback(change))
                 statements.append(f"        # irreversible: {reason}")
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
-    def _change_to_up_sql(self, change: SchemaChange) -> str | None:
+    def _change_to_up_sql(self, change: SchemaChange, *, plain: bool = False) -> str | None:
         """The statement *change* is, or ``None`` when none is derived.
 
         A statement that loses data is written like any other; the destructive
         gate (:mod:`confiture.core.destructive`) decides whether it ships.
         """
-        sql = self._sql_gen.generate_up(change)
+        sql = self._sql_gen.generate_up(change, plain_creates=plain)
         return None if sql is None else sql.rstrip("\n")
 
     def run_external_generator(
@@ -612,9 +659,9 @@ class {class_name}(Migration):
 
         return (resolved, output_path)
 
-    def _change_to_down_sql(self, change: SchemaChange) -> str | None:
+    def _change_to_down_sql(self, change: SchemaChange, *, plain: bool = False) -> str | None:
         """The statement that undoes *change*, or ``None`` when no rollback is derived."""
-        sql = self._sql_gen.generate_down(change)
+        sql = self._sql_gen.generate_down(change, plain_creates=plain)
         return sql.rstrip("\n") if sql else None
 
     def check_name_conflict(self, name: str) -> list[Path]:

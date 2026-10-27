@@ -225,6 +225,11 @@ db-status:
 	confiture migrate status
 ```
 
+`db-build` and `db-up` are separate tasks: a database built from DDL already holds what the
+existing migrations create, so mark them applied with `confiture migrate baseline --through
+<version>` before `db-up`, or use `confiture migrate rebuild`. A generated migration that runs in
+one transaction creates its new tables plainly, and applied over them fails with `42P07`.
+
 ---
 
 ## Library API

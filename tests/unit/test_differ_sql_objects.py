@@ -14,6 +14,7 @@ from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
 from confiture.core.schema_change import ObjectAdded, ObjectDropped, ObjectReplaced
 from confiture.core.schema_model import ref_for
 from confiture.exceptions import DifferError
+from tests.unit._schema_changes import ref
 
 BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
 
@@ -151,6 +152,47 @@ class TestMaterializedViewDDL:
         assert "DROP MATERIALIZED VIEW IF EXISTS mv_user" in sql
         assert "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_user AS" in sql
         assert "name" in sql
+
+    def test_add_matview_generates_a_plain_create_when_asked(self):
+        change = change_of(
+            "", "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;", "ADD_MATVIEW"
+        )
+        [stmt] = _statements(DifferSQLGenerator().generate_up(change, plain_creates=True))
+        assert type(stmt).__name__ == "CreateTableAsStmt"
+        assert stmt.into.rel.relname == "mv_user"
+        assert not stmt.if_not_exists
+
+    def test_replace_matview_drops_and_creates_plainly_both_ways(self):
+        change = change_of(
+            "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;",
+            "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user, name FROM tb_user;",
+            "REPLACE_MATVIEW",
+        )
+        gen = DifferSQLGenerator()
+        for sql in (
+            gen.generate_up(change, plain_creates=True),
+            gen.generate_down(change, plain_creates=True),
+        ):
+            drop, create = _statements(sql)
+            assert type(drop).__name__ == "DropStmt"
+            assert drop.missing_ok
+            assert type(create).__name__ == "CreateTableAsStmt"
+            assert not create.if_not_exists
+
+    def test_drop_matview_down_recreates_it_plainly(self):
+        change = change_of(
+            "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;", "", "DROP_MATVIEW"
+        )
+        [stmt] = _statements(DifferSQLGenerator().generate_down(change, plain_creates=True))
+        assert type(stmt).__name__ == "CreateTableAsStmt"
+        assert not stmt.if_not_exists
+
+    @pytest.mark.parametrize("plain", [False, True])
+    def test_a_matview_with_no_statement_is_refused_in_either_mode(self, plain: bool):
+        empty = DDLObject(ref=ref("matview", "mv_user"), definition="", create_sql="")
+        with pytest.raises(DifferError) as refused:
+            DifferSQLGenerator().generate_up(ObjectAdded(empty.ref, empty), plain_creates=plain)
+        assert refused.value.error_code == "DIFFER_409"
 
 
 MV = "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user, name FROM tb_user;\n"

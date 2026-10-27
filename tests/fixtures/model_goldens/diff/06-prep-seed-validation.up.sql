@@ -7,8 +7,9 @@ CREATE SCHEMA IF NOT EXISTS catalog;
 -- confiture:tier additive
 CREATE SCHEMA IF NOT EXISTS prep_seed;
 
+-- confiture:creates catalog.tb_manufacturer
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS catalog.tb_manufacturer (
+CREATE TABLE catalog.tb_manufacturer (
     id UUID NOT NULL,
     pk_manufacturer BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     name TEXT NOT NULL,
@@ -19,8 +20,9 @@ CREATE TABLE IF NOT EXISTS catalog.tb_manufacturer (
 CREATE INDEX IF NOT EXISTS idx_catalog_tb_manufacturer_name ON catalog.tb_manufacturer (name);
 CREATE INDEX IF NOT EXISTS idx_catalog_tb_manufacturer_id ON catalog.tb_manufacturer (id);
 
+-- confiture:creates prep_seed.tb_manufacturer
 -- confiture:tier lock_risky
-CREATE TABLE IF NOT EXISTS prep_seed.tb_manufacturer (
+CREATE TABLE prep_seed.tb_manufacturer (
     id UUID NOT NULL,
     name TEXT NOT NULL,
     country_code VARCHAR(2) NOT NULL,

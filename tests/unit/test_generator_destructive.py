@@ -252,8 +252,8 @@ class TestDown:
     def test_a_dropped_table_comes_back_with_its_columns(self, tmp_path: Path) -> None:
         _, down = self._pair(tmp_path)
         assert (
-            "CREATE TABLE IF NOT EXISTS tb_old (\n    id INTEGER NOT NULL,\n    label TEXT\n);"
-            in down
+            "-- confiture:creates tb_old\n-- confiture:tier additive\n"
+            "CREATE TABLE tb_old (\n    id INTEGER NOT NULL,\n    label TEXT\n);" in down
         )
 
     def test_a_narrowed_type_widens_back(self, tmp_path: Path) -> None:

@@ -116,14 +116,22 @@ DERIVED_KINDS: frozenset[str] = frozenset(
 )
 
 #: The derived kinds PostgreSQL gives no ``IF NOT EXISTS`` or ``OR REPLACE``: the
-#: creating statement is guarded on ``duplicate_object`` so that the migration
-#: re-applies, as every other creation it writes does.
+#: creating statement is guarded on ``duplicate_object``, so a file that may run
+#: again over what it created does not fail on it. A table or a materialized view
+#: is created plainly instead where the file runs in one transaction and the change
+#: proves the relation new (:meth:`DifferSQLGenerator.creates`); everywhere else a
+#: creation carries ``IF NOT EXISTS`` or ``OR REPLACE``.
 _GUARDED_KINDS: frozenset[str] = frozenset({"domain", "type", "policy"})
 
 #: The kinds whose redefinition is a statement confiture writes. Every other
 #: ``REPLACE`` is in ``ddl_objects.REPLACE_IS_AUTHORS_WORK``, with its reason.
 _REPLACED_BY_DEFINITION: frozenset[str] = frozenset({"view", "function", "procedure", "tview"})
 REPLACED_BY_DROP_AND_CREATE: frozenset[str] = frozenset({"matview", "aggregate"})
+
+#: The derived kinds a file that runs in one transaction creates with no
+#: existence clause, when the change proves the relation new: a table is the
+#: other relation, created by ``TableAdded`` and ``TableDropped``'s down.
+PLAIN_CREATE_KINDS: frozenset[str] = frozenset({"matview"})
 
 
 def _comment(text: str) -> str:
@@ -181,15 +189,28 @@ def _statement(sql: str) -> str:
     return f"{sql.rstrip().rstrip(';')};\n"
 
 
-def _creating(obj: DDLObject, change: SchemaChange) -> str:
-    """The statement that creates *obj*, re-appliable: guarded where PostgreSQL has no clause."""
-    statement = _statement(_stated(obj, change))
+def _creating(obj: DDLObject, change: SchemaChange, *, plain: bool) -> str:
+    """The statement that creates *obj*: re-appliable, or plain where it is asked and can be.
+
+    A materialized view asked for *plain* is its ``definition``, which is the
+    statement with no existence clause; every other kind is re-appliable either
+    way, guarded where PostgreSQL has no clause.
+    """
+    stated = _stated(obj, change)
+    if _creates_plainly(obj, plain=plain):
+        return _statement(obj.definition)
+    statement = _statement(stated)
     if obj.ref.kind not in _GUARDED_KINDS:
         return statement
     return (
         f"DO $confiture$\nBEGIN\n    {statement}"
         "EXCEPTION WHEN duplicate_object THEN NULL;\nEND\n$confiture$;\n"
     )
+
+
+def _creates_plainly(obj: DDLObject, *, plain: bool) -> bool:
+    """Whether *obj* is created with no existence clause: a matview, asked, with a definition."""
+    return plain and obj.ref.kind in PLAIN_CREATE_KINDS and bool(obj.definition)
 
 
 def _replacing(before: DDLObject, after: DDLObject, change: SchemaChange) -> str:
@@ -258,11 +279,12 @@ def _table_constraints(table: Table) -> list[Constraint]:
     return [c for c in listed if (c.expression if c.kind == "check" else c.columns)]
 
 
-def _create_table(table: Table) -> str:
+def _create_table(table: Table, *, plain: bool) -> str:
     """The table the schema declared: its columns, its constraints **and** its indexes.
 
     A constraint the schema left unnamed is written unnamed, exactly as the
-    author wrote it; PostgreSQL generates the name either way.
+    author wrote it; PostgreSQL generates the name either way. *plain* writes
+    ``CREATE TABLE`` without ``IF NOT EXISTS``: see :meth:`DifferSQLGenerator.creates`.
     """
     elements = [column_element(column) for column in table.columns]
     bodies = [(c, _clause(c)) for c in _table_constraints(table)]
@@ -274,13 +296,14 @@ def _create_table(table: Table) -> str:
     )
     joined = ",\n    ".join(elements)
     body = f"(\n    {joined}\n)" if elements else "()"
-    return f"{warnings}CREATE TABLE IF NOT EXISTS {relation(table.relation)} {body};\n{_table_indexes(table)}"
+    create = "CREATE TABLE" if plain else "CREATE TABLE IF NOT EXISTS"
+    return f"{warnings}{create} {relation(table.relation)} {body};\n{_table_indexes(table)}"
 
 
-def _table_up(change: TableChange) -> str | None:
+def _table_up(change: TableChange, *, plain: bool) -> str | None:
     match change:
         case TableAdded(table):
-            return _create_table(table)
+            return _create_table(table, plain=plain)
         case TableDropped(table):
             return f"DROP TABLE {relation(table.relation)};\n"
         case TableRenamed(old, new):
@@ -290,12 +313,12 @@ def _table_up(change: TableChange) -> str | None:
             assert_never(change)
 
 
-def _table_down(change: TableChange) -> str | None:
+def _table_down(change: TableChange, *, plain: bool) -> str | None:
     match change:
         case TableAdded(table):
             return f"DROP TABLE {relation(table.relation)};\n"
         case TableDropped(table):
-            return _create_table(table) if table.columns else None
+            return _create_table(table, plain=plain) if table.columns else None
         case TableRenamed(old, new):
             return f"ALTER TABLE {relation(new.relation)} RENAME TO {quote_identifier(old.name)};\n"
         case _:
@@ -785,11 +808,15 @@ def _create_sequence(sequence: Sequence) -> str:
 class DifferSQLGenerator:
     """Generates the DDL for a schema change, up and down."""
 
-    def generate_up(self, change: SchemaChange) -> str | None:
-        """The forward DDL for *change*, or ``None`` when none is derived."""
+    def generate_up(self, change: SchemaChange, *, plain_creates: bool = False) -> str | None:
+        """The forward DDL for *change*, or ``None`` when none is derived.
+
+        *plain_creates* writes a relation the change creates without ``IF NOT
+        EXISTS``: see :meth:`creates`.
+        """
         match change:
             case TableAdded() | TableDropped() | TableRenamed():
-                return _table_up(change)
+                return _table_up(change, plain=plain_creates)
             case (
                 ColumnAdded()
                 | ColumnDropped()
@@ -825,17 +852,20 @@ class DifferSQLGenerator:
             ):
                 return _enum_or_sequence_up(change)
             case ObjectAdded() | ObjectDropped() | ObjectReplaced():
-                return _definition_up(change)
+                return _definition_up(change, plain=plain_creates)
             case DependentsDropped() | DependentsRecreated():
-                return _rebuild_up(change)
+                return _rebuild_up(change, plain=plain_creates)
             case _:
                 assert_never(change)
 
-    def generate_down(self, change: SchemaChange) -> str | None:
-        """The DDL that undoes *change*, or ``None`` when no rollback is derived."""
+    def generate_down(self, change: SchemaChange, *, plain_creates: bool = False) -> str | None:
+        """The DDL that undoes *change*, or ``None`` when no rollback is derived.
+
+        *plain_creates* as for :meth:`generate_up`.
+        """
         match change:
             case TableAdded() | TableDropped() | TableRenamed():
-                return _table_down(change)
+                return _table_down(change, plain=plain_creates)
             case (
                 ColumnAdded()
                 | ColumnDropped()
@@ -871,11 +901,108 @@ class DifferSQLGenerator:
             ):
                 return _enum_or_sequence_down(change)
             case ObjectAdded() | ObjectDropped() | ObjectReplaced():
-                return _definition_down(change)
+                return _definition_down(change, plain=plain_creates)
             case DependentsDropped() | DependentsRecreated():
-                return _rebuild_down(change)
+                return _rebuild_down(change, plain=plain_creates)
             case _:
                 assert_never(change)
+
+    def creates(
+        self, change: SchemaChange, *, down: bool = False, plain_creates: bool = False
+    ) -> tuple[str, ...]:
+        """The relations *change*'s up (or *down*) creates plainly, each as it is spelled.
+
+        A file that runs in one transaction creates a table or a materialized
+        view the change proves new with no ``IF NOT EXISTS``: PostgreSQL then
+        proves it new, and a failure rolls the whole file back. One that does
+        not — a concurrent index, an enum label — keeps the clause, because a
+        failed file is run again from the top. The generator decides which, for
+        the file, and asks for *plain_creates*; without it nothing is created
+        plainly and this is ``()``. Each name is the created object's own
+        spelling, which the generator declares above the change.
+        """
+        if not plain_creates:
+            return ()
+        match change:
+            case TableAdded() | TableDropped() | TableRenamed():
+                return _table_creates(change, down=down)
+            case ObjectAdded() | ObjectDropped() | ObjectReplaced():
+                return _definition_creates(change, down=down)
+            case DependentsDropped() | DependentsRecreated():
+                return _rebuild_creates(change, down=down)
+            case (
+                ColumnAdded()
+                | ColumnDropped()
+                | ColumnRenamed()
+                | ColumnTypeChanged()
+                | ColumnNullabilityChanged()
+                | ColumnNotNullValidityChanged()
+                | ColumnDefaultChanged()
+                | ColumnOrderChanged()
+                | IndexAdded()
+                | IndexDropped()
+                | ForeignKeyAdded()
+                | ForeignKeyDropped()
+                | CheckConstraintAdded()
+                | CheckConstraintDropped()
+                | UniqueConstraintAdded()
+                | PrimaryKeyAdded()
+                | UniqueConstraintDropped()
+                | PrimaryKeyDropped()
+                | ExclusionConstraintAdded()
+                | ExclusionConstraintDropped()
+                | EnumTypeAdded()
+                | EnumTypeDropped()
+                | EnumValuesChanged()
+                | SequenceAdded()
+                | SequenceDropped()
+            ):
+                return ()
+            case _:
+                assert_never(change)
+
+
+def _table_creates(change: TableChange, *, down: bool) -> tuple[str, ...]:
+    match change:
+        case TableAdded(table) if not down:
+            return (relation(table.relation),)
+        case TableDropped(table) if down and table.columns:
+            return (relation(table.relation),)
+        case TableAdded() | TableDropped() | TableRenamed():
+            return ()
+        case _:
+            assert_never(change)
+
+
+def _definition_creates(change: DefinitionChange, *, down: bool) -> tuple[str, ...]:
+    """The object the change's up or down creates, when it creates it plainly."""
+    kind = change.ref.kind
+    match change:
+        case ObjectAdded(_, obj) if not down and kind in DERIVED_KINDS:
+            created = obj
+        case ObjectDropped(_, obj) if down and kind in DERIVED_KINDS:
+            created = obj
+        case ObjectReplaced(_, old, new) if kind in REPLACED_BY_DROP_AND_CREATE:
+            created = old if down else new
+        case ObjectAdded() | ObjectDropped() | ObjectReplaced():
+            return ()
+        case _:
+            assert_never(change)
+    return (created.ref.qualified,) if _creates_plainly(created, plain=True) else ()
+
+
+def _rebuild_creates(change: RebuildChange, *, down: bool) -> tuple[str, ...]:
+    """The dependents the change's up (recreated) or down (dropped) creates plainly."""
+    match change:
+        case DependentsRecreated(dependents) if not down:
+            created = dependents
+        case DependentsDropped(dependents) if down:
+            created = dependents
+        case DependentsDropped() | DependentsRecreated():
+            return ()
+        case _:
+            assert_never(change)
+    return tuple(d.ref.qualified for d in created if _creates_plainly(d.obj, plain=True))
 
 
 def _dropping_dependents(dependents: tuple[Dependent, ...], change: RebuildChange) -> str:
@@ -886,30 +1013,32 @@ def _dropping_dependents(dependents: tuple[Dependent, ...], change: RebuildChang
     )
 
 
-def _creating_dependents(dependents: tuple[Dependent, ...], change: RebuildChange) -> str:
+def _creating_dependents(
+    dependents: tuple[Dependent, ...], change: RebuildChange, *, plain: bool
+) -> str:
     """Each dependent created, after the ones it reads, with its indexes and what it carried."""
     return "".join(
-        _creating(d.obj, change) + _carried_indexes(d.indexes) + "".join(d.attached)
+        _creating(d.obj, change, plain=plain) + _carried_indexes(d.indexes) + "".join(d.attached)
         for d in dependents
     )
 
 
-def _rebuild_up(change: RebuildChange) -> str:
+def _rebuild_up(change: RebuildChange, *, plain: bool) -> str:
     """Dropped from the old tree before the tables are edited; created from the new one after."""
     match change:
         case DependentsDropped(dependents):
             return _dropping_dependents(dependents, change)
         case DependentsRecreated(dependents):
-            return _creating_dependents(dependents, change)
+            return _creating_dependents(dependents, change, plain=plain)
         case _:
             assert_never(change)
 
 
-def _rebuild_down(change: RebuildChange) -> str:
+def _rebuild_down(change: RebuildChange, *, plain: bool) -> str:
     """The up in reverse: the new tree's dropped, the old tree's created again."""
     match change:
         case DependentsDropped(dependents):
-            return _creating_dependents(dependents, change)
+            return _creating_dependents(dependents, change, plain=plain)
         case DependentsRecreated(dependents):
             return _dropping_dependents(dependents, change)
         case _:
@@ -932,19 +1061,19 @@ def _enum_or_sequence_up(change: EnumOrSequenceChange) -> str:
             assert_never(change)
 
 
-def _definition_up(change: DefinitionChange) -> str | None:
+def _definition_up(change: DefinitionChange, *, plain: bool) -> str | None:
     kind = change.ref.kind
     keyword = OBJECT_KEYWORD.get(kind, "")
     name = change.ref.qualified
     match change:
         case ObjectAdded(_, obj, indexes) if kind in DERIVED_KINDS:
-            return _creating(obj, change) + _carried_indexes(indexes)
+            return _creating(obj, change, plain=plain) + _carried_indexes(indexes)
         case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
             return _dropping(obj, change)
         case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
             return _replacing(old, new, change)
         case ObjectReplaced(new=new, new_indexes=indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
-            created = _statement(_stated(new, change)) + _carried_indexes(indexes)
+            created = _creating(new, change, plain=plain) + _carried_indexes(indexes)
             return _drop(keyword, name) + created
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return None
@@ -969,7 +1098,7 @@ def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str | None:
             assert_never(change)
 
 
-def _definition_down(change: DefinitionChange) -> str | None:
+def _definition_down(change: DefinitionChange, *, plain: bool) -> str | None:
     """A create is undone by a drop, a drop by the definition it carried, a replace by the old one."""
     kind = change.ref.kind
     keyword = OBJECT_KEYWORD.get(kind, "")
@@ -978,11 +1107,11 @@ def _definition_down(change: DefinitionChange) -> str | None:
         case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
             return _dropping(obj, change)
         case ObjectDropped(_, obj, indexes) if kind in DERIVED_KINDS:
-            return _creating(obj, change) + _carried_indexes(indexes)
+            return _creating(obj, change, plain=plain) + _carried_indexes(indexes)
         case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
             return _replacing(new, old, change)
         case ObjectReplaced(old=old, old_indexes=indexes) if kind in REPLACED_BY_DROP_AND_CREATE:
-            created = _statement(_stated(old, change)) + _carried_indexes(indexes)
+            created = _creating(old, change, plain=plain) + _carried_indexes(indexes)
             return _drop(keyword, name) + created
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return None

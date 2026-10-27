@@ -524,3 +524,40 @@ class TestCreateOrReplaceProcedureNote:
         )
         matches = detect_non_idempotent_patterns(sql)
         assert [m for m in matches if m.severity == "info"] == []
+
+
+class TestDeclaredPlainCreates:
+    """``-- confiture:creates <relation>`` declares a plain create that is meant."""
+
+    @staticmethod
+    def _create_table_matches(sql: str) -> list[PatternMatch]:
+        return [
+            m
+            for m in detect_non_idempotent_patterns(sql)
+            if m.pattern == IdempotencyPattern.CREATE_TABLE
+        ]
+
+    def test_a_declared_plain_create_table_is_not_a_violation(self):
+        sql = "-- confiture:creates users\nCREATE TABLE users (id INT);\n"
+        assert self._create_table_matches(sql) == []
+
+    def test_a_directive_naming_another_relation_exempts_nothing(self):
+        sql = "-- confiture:creates orders\nCREATE TABLE users (id INT);\n"
+        assert len(self._create_table_matches(sql)) == 1
+
+    def test_a_qualified_directive_does_not_exempt_an_unqualified_create(self):
+        sql = "-- confiture:creates public.users\nCREATE TABLE users (id INT);\n"
+        assert len(self._create_table_matches(sql)) == 1
+
+    def test_an_unqualified_directive_does_not_exempt_a_qualified_create(self):
+        sql = "-- confiture:creates users\nCREATE TABLE public.users (id INT);\n"
+        assert len(self._create_table_matches(sql)) == 1
+
+    def test_an_undeclared_plain_create_table_is_still_a_violation(self):
+        sql = "-- confiture:creates users\nCREATE TABLE users (id INT);\nCREATE TABLE orders (id INT);\n"
+        [match] = self._create_table_matches(sql)
+        assert "orders" in match.sql_snippet
+
+    def test_a_plain_matview_create_is_not_a_violation(self):
+        sql = "CREATE MATERIALIZED VIEW mv AS SELECT 1 AS a WITH NO DATA;\n"
+        assert detect_non_idempotent_patterns(sql) == []

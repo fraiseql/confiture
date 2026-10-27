@@ -7,6 +7,10 @@ it, nor that the down file really undoes the up. Each scenario here builds the
 the up file again — statement by statement, as ``CREATE INDEX CONCURRENTLY``
 requires, with the destructive gate open so every derived statement is written.
 
+A file that runs in one transaction creates plainly and fails when applied over
+what it creates; one that does not keeps ``IF NOT EXISTS``, so a failed
+autocommit file retries from the top.
+
 A generated Python migration runs in the mode its SQL pair would, through
 ``migrate up`` itself: the positional ``migrate diff OLD NEW --generate`` writes it,
 and the CLI applies it, takes it back and applies it again (#698).
@@ -222,6 +226,96 @@ class TestIndexes:
                 "CREATE INDEX ix_part ON public.t USING btree (a DESC NULLS LAST) WHERE (b > 0)"
             ),
         }
+
+
+def _relations(conn: psycopg.Connection) -> set[str]:
+    rows = conn.execute(
+        "SELECT relname FROM pg_class WHERE relnamespace = 'public'::regnamespace"
+        " AND relkind IN ('r', 'm')"
+    ).fetchall()
+    return {name for (name,) in rows}
+
+
+class TestPlainCreates:
+    """A transactional generated migration creates its new relations with no IF NOT EXISTS."""
+
+    OLD = "CREATE TABLE t (id INT PRIMARY KEY);\n"
+    NEW = OLD + (
+        "CREATE TABLE u (id INT, tid INT REFERENCES t (id));\n"
+        "CREATE MATERIALIZED VIEW mv_u AS SELECT id FROM u;\n"
+    )
+
+    def test_a_new_table_and_matview_round_trip(self, fresh_database: str, tmp_path: Path) -> None:
+        up, _ = _generated(tmp_path, self.OLD, self.NEW)
+        assert sorted(d.argument for d in sql_lexer.directives(up) if d.name == "creates") == [
+            "mv_u",
+            "u",
+        ]
+        conn = round_trip(fresh_database, tmp_path, self.OLD, self.NEW)
+        assert _relations(conn) == {"t", "u", "mv_u"}
+
+    def test_the_up_applied_twice_fails_with_duplicate_table(
+        self, fresh_database: str, tmp_path: Path
+    ) -> None:
+        up, _ = _generated(tmp_path, self.OLD, self.NEW)
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, self.OLD)
+        _apply(conn, up)
+        with pytest.raises(psycopg.errors.DuplicateTable):
+            _apply(conn, up)
+
+
+class TestAutocommitCreates:
+    """A file with a concurrent index runs in autocommit; a failed run retries from the top."""
+
+    OLD = "CREATE TABLE t (a INT, b TEXT);\n"
+    NEW = (
+        "CREATE TABLE t (a INT, b INT);\nCREATE INDEX ix_t_a ON t (a);\nCREATE TABLE u (id INT);\n"
+    )
+
+    def _up(self, url: str, tmp_path: Path) -> tuple[int, str]:
+        config = tmp_path / "local.yaml"
+        config.write_text(f"name: test\ndatabase_url: {url}\n")
+        result = CliRunner().invoke(
+            app,
+            ["migrate", "up", "--migrations-dir", str(tmp_path / "migrations"), "--config", str(config), "--format", "json"],
+        )  # fmt: skip
+        return result.exit_code, result.output
+
+    def test_a_failed_file_retries_cleanly(self, fresh_database: str, tmp_path: Path) -> None:
+        migrations = tmp_path / "migrations"
+        migrations.mkdir()
+        up, _ = _generated(migrations, self.OLD, self.NEW)
+        assert "CREATE TABLE IF NOT EXISTS u" in up
+        assert "CONCURRENTLY" in up
+        assert not [d for d in sql_lexer.directives(up) if d.name == "creates"]
+        # The author answers the backfill gate (#766) wrongly: a row that does not cast
+        # is left, so the file fails at the type change, after the table it creates.
+        [up_file] = migrations.glob("*.up.sql")
+        up_file.write_text(
+            "\n".join(
+                "-- confiture:backfill none" if line.startswith("-- confiture:backfill ") else line
+                for line in up.splitlines()
+            )
+            + "\n"
+        )
+
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, self.OLD)
+        conn.execute("INSERT INTO t VALUES (1, 'x')")
+
+        code, output = self._up(fresh_database, tmp_path)
+        assert code != 0, output
+        assert "u" in _relations(conn)
+        assert conn.execute("SELECT count(*) FROM tb_confiture").fetchone() == (0,)
+
+        conn.execute("UPDATE t SET b = '0'")
+        code, output = self._up(fresh_database, tmp_path)
+        assert code == 0, output
+        assert conn.execute("SELECT version FROM tb_confiture").fetchall() == [("20260101000000",)]
+        assert conn.execute(
+            "SELECT indisvalid FROM pg_index WHERE indexrelid = 'ix_t_a'::regclass"
+        ).fetchone() == (True,)
 
 
 class TestPythonMigrationUnderMigrateUp:

@@ -48,7 +48,8 @@ class Step(Migration):
 
     def up(self) -> None:
         """Apply migration."""
-        self.execute("""CREATE TABLE IF NOT EXISTS users (
+        self.execute("""-- confiture:creates users
+CREATE TABLE users (
     id integer NOT NULL,
     email text
 );""")
@@ -145,7 +146,7 @@ class TestTheClassDeclaresItsMode:
         assert _mode_of(tmp_path, TABLE, TABLE + "CREATE INDEX ix_c ON t (c);\n") is True
 
 
-def test_the_template_is_unchanged_for_a_transactional_diff(tmp_path: Path) -> None:
+def test_the_template_of_a_transactional_diff(tmp_path: Path) -> None:
     users = table("users", spelled("id", "integer", nullable=False), spelled("email", "text"))
     diff = SchemaDiff(changes=[TableAdded(users)])
     assert _python(tmp_path, diff).read_text() == _EXPECTED_USERS

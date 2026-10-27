@@ -1893,9 +1893,12 @@ One tracked `CREATE`: what it defines, and two renderings of it.
 
 `definition` is what decides whether the object *changed* — existence
 clauses neutralised, so a view that gains `OR REPLACE` is the same view.
-`create_sql` is what a generated migration carries — the same statement
-with the existence clause its kind supports, so re-applying the migration
-is not an error. `signature` is the routine's full canonical signature,
+It doubles as the plain create: a generated file that runs in one
+transaction creates a materialized view it proves new from it.
+`create_sql` is the re-appliable form — the same statement with the
+existence clause its kind supports — which the diff wire carries, and which
+a generated file that may run again over what it created carries.
+`signature` is the routine's full canonical signature,
 schemas included, which is what separates two definitions that share a
 bucket.
 

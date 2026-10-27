@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import ClassVar
 
+from confiture.core.created_relations import Declared, declared, relation_named
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
 
@@ -72,6 +73,7 @@ class IdempotencyFixer:
             'CREATE TABLE IF NOT EXISTS users (id INT);'
         """
         result = sql
+        meant = declared(sql)
 
         # Apply fixes in order of specificity (more specific patterns first)
         # to avoid conflicts
@@ -82,7 +84,7 @@ class IdempotencyFixer:
         result = self._fix_create_index_concurrently(result)
 
         # CREATE statements
-        result = self._fix_create_table(result)
+        result = self._fix_create_table(result, meant)
         result = self._fix_create_function(result)
         result = self._fix_create_procedure(result)
         result = self._fix_create_view(result)
@@ -174,8 +176,13 @@ class IdempotencyFixer:
             return original
         return getattr(self, method_name)(original)
 
-    def _fix_create_table(self, sql: str) -> str:
-        """Add IF NOT EXISTS to CREATE TABLE statements."""
+    def _fix_create_table(self, sql: str, meant: frozenset[Declared] = frozenset()) -> str:
+        """Add IF NOT EXISTS to CREATE TABLE statements.
+
+        A table in *meant* — declared by the file with ``-- confiture:creates``,
+        under the name it is written with — is created plainly on purpose and is
+        left as written. Only an unquoted name is ever rewritten.
+        """
         if not self._should_fix(IdempotencyPattern.CREATE_TABLE):
             return sql
 
@@ -184,7 +191,13 @@ class IdempotencyFixer:
             r"CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)((?:\w+\.)?\w+)",
             re.IGNORECASE,
         )
-        return pattern.sub(r"CREATE TABLE IF NOT EXISTS \1", sql)
+
+        def rewrite(match: re.Match[str]) -> str:
+            if relation_named(match.group(1)) in meant:
+                return match.group(0)
+            return f"CREATE TABLE IF NOT EXISTS {match.group(1)}"
+
+        return pattern.sub(rewrite, sql)
 
     def _fix_create_index(self, sql: str) -> str:
         """Add IF NOT EXISTS to CREATE INDEX statements."""

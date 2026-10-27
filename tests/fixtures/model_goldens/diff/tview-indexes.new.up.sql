@@ -1,8 +1,9 @@
 -- Migration: golden
 -- Version: <version>
 
+-- confiture:creates tb_author
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS tb_author (
+CREATE TABLE tb_author (
     pk_author BIGINT NOT NULL,
     id UUID NOT NULL,
     name TEXT NOT NULL,
@@ -10,8 +11,9 @@ CREATE TABLE IF NOT EXISTS tb_author (
     UNIQUE (id)
 );
 
+-- confiture:creates tb_post
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS tb_post (
+CREATE TABLE tb_post (
     pk_post BIGINT NOT NULL,
     id UUID NOT NULL,
     fk_author BIGINT NOT NULL,

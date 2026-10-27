@@ -185,3 +185,24 @@ class TestCrossSnippetPairRecognition:
         # the def up() body starts at line 9 in the dedented template,
         # so the calls land at lines 9, 10, 11.
         assert violation.source_line == 10
+
+
+class TestDeclaredCreatesAcrossSnippets:
+    """``-- confiture:creates`` inside an executed literal is read with the SQL it runs."""
+
+    @staticmethod
+    def _create_table_violations(tmp_path: Path, body: str) -> list:
+        (tmp_path / "20260101000000_demo.py").write_text(_migration_with(body), encoding="utf-8")
+        report = IdempotencyValidator().validate_directory(tmp_path)
+        return [v for v in report.violations if v.pattern.value == "CREATE_TABLE"]
+
+    def test_a_directive_inside_an_execute_literal_declares_the_create(self, tmp_path):
+        body = '        self.execute("-- confiture:creates users\\nCREATE TABLE users (id INT);")'
+        assert self._create_table_violations(tmp_path, body) == []
+
+    def test_a_directive_in_one_execute_declares_a_create_in_the_next(self, tmp_path):
+        body = (
+            '        self.execute("-- confiture:creates users\\nSELECT 1;")\n'
+            '        self.execute("CREATE TABLE users (id INT);")'
+        )
+        assert self._create_table_violations(tmp_path, body) == []

@@ -105,6 +105,19 @@ The detector recognizes:
 is recognized as already-idempotent and not flagged (matches the existing
 `DROP VIEW IF EXISTS` + `CREATE VIEW` recognizer).
 
+### A declared plain create
+
+A plain `CREATE TABLE` is not flagged when the file declares the table with
+`-- confiture:creates <relation>`, and `migrate fix --idempotent` leaves it as
+written. `migrate diff --generate` writes that line above each table and
+materialized view it creates in a file that runs in one transaction: there
+PostgreSQL proves the relation new, and a failed file rolls back whole. The
+relation is matched as written — `-- confiture:creates app.t` declares
+`app.t`, not `t` — and a line that does not name one relation of one or two
+parts declares nothing. The directive only answers this check: `migrate
+preflight` never reads it, and its proof that a relation is new is the plain
+`CREATE` itself.
+
 ### AST-backed detector (default in 0.14.0)
 
 Starting in 0.14.0 the detector uses PostgreSQL's own parser (via
