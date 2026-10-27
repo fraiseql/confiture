@@ -74,7 +74,7 @@ CREATE TABLE app.tb_provider (
 );
 
 -- confiture:creates app.tb_order
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE app.tb_order (
     tenant_id UUID NOT NULL,
     id UUID NOT NULL,

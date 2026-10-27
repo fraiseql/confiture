@@ -5,7 +5,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- confiture:creates users
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE users (
     id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     pk_user UUID NOT NULL DEFAULT uuid_generate_v4(),
@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at DESC);
 
 -- confiture:creates posts
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE posts (
     id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     pk_post UUID NOT NULL DEFAULT uuid_generate_v4(),
@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_published_at ON posts (published_at DESC) W
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC);
 
 -- confiture:creates comments
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE comments (
     id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     pk_comment UUID NOT NULL DEFAULT uuid_generate_v4(),

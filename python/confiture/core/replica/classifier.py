@@ -7,7 +7,7 @@ change).
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pglast.stream import RawStream
@@ -37,7 +37,7 @@ from confiture.core.ddl_walk import (
 from confiture.core.ddl_walk import (
     type_name as _type_name,
 )
-from confiture.core.migration_scope import walk
+from confiture.core.migration_scope import Scope, targets, walk
 from confiture.core.schema_model import Constraint
 from confiture.core.type_lattice import canonical_type
 
@@ -165,6 +165,9 @@ class DdlOperation:
     table: str | None = None
     migration_version: str | None = None
     line: int | None = None
+    fresh: bool = False
+    """Whether it reaches only a relation an earlier statement of the migration
+    created (``migration_scope.Scope.exempts``): no other session can see it yet."""
 
 
 @dataclass(frozen=True)
@@ -321,25 +324,23 @@ class OperationClassifier:
         ops: list[DdlOperation] = []
         for step in walk(sql):
             node = step.statement.stmt
-            name = type(node).__name__
-            if name == "AlterTableStmt":
-                ops.extend(self._ast_alter_table(node))
-            elif name == "RenameStmt":
-                op = self._ast_rename(node)
-                if op is not None:
-                    ops.append(op)
-            elif name == "IndexStmt":
-                ops.append(
-                    CreateIndex(
-                        table=_relname(node.relation),
-                        concurrently=bool(node.concurrent),
-                    )
-                )
-            elif name == "CreateStmt":
-                ops.append(CreateTable(table=_relname(node.relation)))
-            elif name not in _AST_SKIP:
-                ops.extend(self._ast_wider(node, name))
+            ops.extend(_with_provenance(node, self._ast_statement(node), step.before))
         return ops
+
+    def _ast_statement(self, node: object) -> list[DdlOperation]:
+        name = type(node).__name__
+        if name == "AlterTableStmt":
+            return self._ast_alter_table(node)
+        if name == "RenameStmt":
+            op = self._ast_rename(node)
+            return [] if op is None else [op]
+        if name == "IndexStmt":
+            return [CreateIndex(table=_relname(node.relation), concurrently=bool(node.concurrent))]
+        if name == "CreateStmt":
+            return [CreateTable(table=_relname(node.relation))]
+        if name not in _AST_SKIP:
+            return self._ast_wider(node, name)
+        return []
 
     def _ast_wider(self, node: object, name: str) -> list[DdlOperation]:
         """Classify a statement outside the core seven-operation matrix (#206).
@@ -437,6 +438,52 @@ class OperationClassifier:
             old=getattr(node, "subname", None),
             new=getattr(node, "newname", None),
         )
+
+
+# ---------------------------------------------------------------------------
+# Provenance: an operation on a relation the migration created
+# ---------------------------------------------------------------------------
+
+# DdlOperation class → the kind naming the same change. The typed classifier and
+# the change-set vocabulary meet here and nowhere else.
+KIND_BY_OP: dict[type[DdlOperation], str] = {
+    AddColumn: "add_column",
+    DropColumn: "drop_column",
+    RenameColumn: "rename_column",
+    RenameObject: "rename_object",
+    ChangeColumnType: "alter_column_type",
+    AddConstraint: "add_constraint",
+    CreateIndex: "create_index",
+    CreateTable: "create_table",
+    DropTable: "drop_table",
+    Truncate: "truncate",
+    Revoke: "revoke",
+    SetNotNull: "set_not_null",
+    AddEnumValue: "alter_type",
+}
+
+
+def _with_provenance(node: Any, ops: list[DdlOperation], scope: Scope) -> list[DdlOperation]:
+    """*ops*, each marked ``fresh`` when it reaches only a relation the migration created.
+
+    :func:`~confiture.core.migration_scope.targets` names what each operation of
+    the statement acts on, in the order this classifier builds them.
+    """
+    found = targets(node)
+    if len(found) != len(ops):
+        return ops
+    return [
+        replace(op, fresh=True)
+        if (kind := _kind_of(op)) is not None and scope.exempts_target(kind, target)
+        else op
+        for op, target in zip(ops, found, strict=True)
+    ]
+
+
+def _kind_of(op: DdlOperation) -> str | None:
+    if isinstance(op, DropObject):
+        return "drop_materialized_view" if op.kind == "materialized view" else None
+    return KIND_BY_OP.get(type(op))
 
 
 # ---------------------------------------------------------------------------

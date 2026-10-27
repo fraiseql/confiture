@@ -54,6 +54,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "AT_SetUnLogged",
         "AT_SetRelOptions",
         "AT_ResetRelOptions",
+        "AT_AttachPartition",
+        "AT_AddInherit",
     ),
     "ConstrType": (
         "CONSTR_NOTNULL",

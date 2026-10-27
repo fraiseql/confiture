@@ -54,7 +54,7 @@ EXPECTED: dict[str, dict[str, list]] = {
         "change_set": [
             ("create_table", "public.tb_events", "additive"),
             ("comment", "public.tb_events", "reversible"),
-            ("create_index", "public.tb_events", "lock_risky"),
+            ("create_index", "public.tb_events", "additive"),
         ],
         "lint": [],
     },
@@ -68,7 +68,7 @@ EXPECTED: dict[str, dict[str, list]] = {
         "change_set": [
             ("create_table", "tenant.tb_thing", "additive"),
             ("comment", "tenant.tb_thing", "reversible"),
-            ("create_index", "tenant.tb_thing.idx_thing_name", "lock_risky"),
+            ("create_index", "tenant.tb_thing.idx_thing_name", "additive"),
         ],
         "lint": [],
     },

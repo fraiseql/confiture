@@ -132,7 +132,8 @@ def plan(sql: str, *, server_version: int | None = None) -> list[StagedPlan]:
 
     An operation the classifier does not mark multi-step — or one the plan
     cannot express (a NOT NULL column without a default has nothing to
-    backfill with) — yields no plan; ``[]`` means "apply it the classic way".
+    backfill with), or one on a relation the migration itself created — yields
+    no plan; ``[]`` means "apply it the classic way".
     """
     plans: list[StagedPlan] = []
     for op in OperationClassifier().classify(sql):
@@ -156,7 +157,8 @@ def plannable(sql: str, *, server_version: int | None = None) -> list[StagedPlan
 
 
 def _plan_operation(op: DdlOperation, server_version: int | None) -> StagedPlan | None:
-    if op.table is None:
+    # A relation the migration created has no reader to stage around.
+    if op.table is None or op.fresh:
         return None
     if isinstance(op, AddColumn) and not op.nullable and op.default_sql and op.column:
         return _add_not_null_column(op, op.table, server_version)

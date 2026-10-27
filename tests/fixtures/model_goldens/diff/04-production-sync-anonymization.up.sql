@@ -53,7 +53,7 @@ CREATE TABLE users (
 );
 
 -- confiture:creates orders
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE orders (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -69,7 +69,7 @@ CREATE TABLE orders (
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders (user_id);
 
 -- confiture:creates order_items
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE order_items (
     id BIGINT NOT NULL,
     order_id BIGINT NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE order_items (
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items (order_id);
 
 -- confiture:creates payments
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE payments (
     id BIGINT NOT NULL,
     order_id BIGINT NOT NULL,
@@ -99,7 +99,7 @@ CREATE TABLE payments (
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments (order_id);
 
 -- confiture:creates support_tickets
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE support_tickets (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE support_tickets (
 CREATE INDEX IF NOT EXISTS idx_tickets_user ON support_tickets (user_id);
 
 -- confiture:creates user_sessions
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE user_sessions (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,

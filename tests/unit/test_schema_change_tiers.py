@@ -24,6 +24,7 @@ from confiture.core.change_set import classify_statements
 from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
+from confiture.core.migration_analyzer import runs_in_one_transaction
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_change import (
     ObjectAdded,
@@ -53,17 +54,10 @@ DISAGREEMENTS: dict[str, str] = {
     ),
     "ObjectAdded[type]": "as a domain: a composite or range type's CREATE is guarded in DO",
     "ObjectAdded[policy]": "as a domain: a policy's CREATE is guarded in DO",
-    "TableAdded[indexed]": (
-        "declared additive; the generator creates the table plainly in a file that runs "
-        "in one transaction, but its own plain CREATE INDEX still reads lock_risky, so "
-        "window_safe is false, until preflight exempts an index on a relation the same "
-        "migration creates"
+    "ObjectAdded[tview, indexed]": (
+        "written pg_tviews_create_or_replace(), which may replace a TVIEW that exists, so "
+        "the TVIEW is not proven new and its plain CREATE INDEX reads lock_risky"
     ),
-    "ObjectAdded[matview, indexed]": (
-        "as a table created with its indexes: created plainly by the generator, its "
-        "plain CREATE INDEX still reads lock_risky"
-    ),
-    "ObjectAdded[tview, indexed]": "as a table created with its indexes",
     "DependentsDropped": (
         "its drops are classified alone here; a migration writes DependentsRecreated after "
         "them, and the change set reads each drop the file creates again as the "
@@ -158,9 +152,17 @@ def _changes() -> list[SchemaChange]:
 CHANGES = _changes()
 
 
+def _written(change: SchemaChange) -> str | None:
+    """The up the generator writes for *change* alone: plain where it runs in one transaction."""
+    sql = DifferSQLGenerator().generate_up(change)
+    if sql is None or not runs_in_one_transaction(sql):
+        return sql
+    return DifferSQLGenerator().generate_up(change, plain_creates=True)
+
+
 def _statement_tier(change: SchemaChange) -> tuple[bool, RiskTier | None]:
     """Whether the renderer writes a statement for *change*, and the change set's tier for it."""
-    sql = DifferSQLGenerator().generate_up(change)
+    sql = _written(change)
     entries = classify_statements(sql) if sql else []
     return bool(entries), worst_tier(entry.tier for entry in entries)
 

@@ -26,28 +26,16 @@ per row (baseline: PostgreSQL 17 documentation, "Explicit Locking" and
 "ALTER TABLE").
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import TYPE_CHECKING
 
 from confiture.core.replica.classifier import (
-    AddColumn,
-    AddConstraint,
-    AddEnumValue,
+    KIND_BY_OP,
     Benign,
-    ChangeColumnType,
-    CreateIndex,
-    CreateTable,
     DdlOperation,
-    DropColumn,
     DropObject,
-    DropTable,
-    RenameColumn,
-    RenameObject,
     ReplaceObject,
-    Revoke,
-    SetNotNull,
-    Truncate,
 )
 
 if TYPE_CHECKING:
@@ -59,6 +47,7 @@ __all__ = [
     "LockProfile",
     "constraint_profile",
     "lock_profile",
+    "on_created_relation",
     "profile_for_kind",
     "validated_under",
     "worst_profile",
@@ -179,6 +168,21 @@ _NO_LOCK = LockProfile(
     blocks_writes=False,
     duration=Duration.METADATA,
 )
+
+
+def on_created_relation(profile: LockProfile) -> LockProfile:
+    """*profile* on a relation the same migration created: it takes its lock, and waits on no one.
+
+    No session outside the migration can see the relation yet, so the lock
+    blocks no reader or writer. What the operation scans or rewrites it still
+    does: a relation created from a query holds rows.
+    """
+    return replace(
+        profile,
+        blocks_reads=False,
+        blocks_writes=False,
+        note="on a relation this migration creates: no other session can see it yet",
+    )
 
 
 def validated_under(held: LockProfile) -> LockProfile:
@@ -399,32 +403,19 @@ _PROFILE_BY_KIND: dict[str, LockProfile] = {
     ),
 }
 
-# DdlOperation class → the kind naming the same change. The typed classifier and
-# the change-set vocabulary meet here and nowhere else.
-_KIND_BY_OP: dict[type[DdlOperation], str] = {
-    AddColumn: "add_column",
-    DropColumn: "drop_column",
-    RenameColumn: "rename_column",
-    RenameObject: "rename_object",
-    ChangeColumnType: "alter_column_type",
-    AddConstraint: "add_constraint",
-    CreateIndex: "create_index",
-    CreateTable: "create_table",
-    DropTable: "drop_table",
-    Truncate: "truncate",
-    Revoke: "revoke",
-    SetNotNull: "set_not_null",
-    AddEnumValue: "alter_type",
-}
-
 
 def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> LockProfile:
     """The lock and rewrite cost of a typed operation. See :func:`profile_for_kind`."""
+    profile = _typed_profile(op, server_version=server_version)
+    return on_created_relation(profile) if op.fresh else profile
+
+
+def _typed_profile(op: DdlOperation, *, server_version: int | None) -> LockProfile:
     if isinstance(op, Benign):
         return profile_for_kind(op.kind, server_version=server_version)
     if isinstance(op, (DropObject, ReplaceObject)):
         return _NO_LOCK
-    kind = _KIND_BY_OP.get(type(op))
+    kind = KIND_BY_OP.get(type(op))
     if kind is None:
         return _UNKNOWN
     return profile_for_kind(

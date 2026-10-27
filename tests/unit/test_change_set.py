@@ -249,7 +249,7 @@ def test_worst_tier_over_the_set(tmp_path) -> None:
     migs = tmp_path / "migrations"
     migs.mkdir()
     (migs / "20260804120000_a.up.sql").write_text(
-        "CREATE TABLE a (id int);\nALTER TABLE a DROP COLUMN b;\n"
+        "ALTER TABLE a ADD COLUMN c int;\nALTER TABLE a DROP COLUMN b;\n"
     )
     assert build_change_set(migs).worst_tier is RiskTier.IRREVERSIBLE
 

@@ -51,7 +51,7 @@ CREATE TABLE rekeyed (
 );
 
 -- confiture:creates things
--- confiture:tier lock_risky
+-- confiture:tier additive
 CREATE TABLE things (
     id INTEGER NOT NULL,
     legacy_flag BOOLEAN,

@@ -475,6 +475,14 @@ and not another let two verdicts on one file read it two ways. Each fact states
 its matching direction: one that tightens a verdict matches by identity, one
 that loosens it only as written.
 
+The two verdicts agree on one loosening fact by construction (2026-10-26, #692):
+an operation on a relation the same migration created — PostgreSQL proved it new,
+so no session outside the migration can see it — is replica-safe *and* `additive`,
+because both read `Scope.exempts` from the same fold, and
+`tests/unit/test_fresh_relations.py` holds them, the lock profile and the
+expand/contract planner in agreement on every case, and on every case that must
+stay flagged.
+
 ---
 
 ### Decision 10: One apply loop — the session owns orchestration

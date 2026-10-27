@@ -396,6 +396,20 @@ Boundary rulings, so they are not re-litigated per pull request:
 - `DROP COLUMN` is `irreversible` **even with a `.down.sql`** — the down path
   restores the schema, not the data.
 - A change qualifying for two tiers takes the more severe one.
+- **An operation on a relation the same migration creates takes the creation's
+  tier**, `additive`, and is replica-safe, so it leaves `window_safe` true: a plain
+  `CREATE TABLE`, `CREATE TABLE … AS`, `CREATE MATERIALIZED VIEW` or
+  `tviews.pg_tviews_create()` fails on an existing relation, so PostgreSQL proves
+  the relation new and no other session can see it yet. `CREATE INDEX`,
+  `ADD COLUMN`, `ADD CONSTRAINT`, `SET NOT NULL`, a type change, `DROP COLUMN`,
+  `TRUNCATE`, `REFRESH` or `DROP TABLE` on it reads `additive`, its `detail`
+  ending "on a relation this migration creates". It does not when it may reach a
+  relation that existed: `CASCADE`, a foreign key to one the migration did not
+  create (or dropping a relation holding one), `PARTITION OF`/`INHERITS`/`ATTACH`.
+  `CREATE TABLE IF NOT EXISTS` proves nothing, and the relation is matched as
+  written (`t` is not `public.t`). A drop, rename onto or `SET SCHEMA` under any
+  spelling forgets that relation, a `search_path` change the unqualified ones, and
+  any `DO`, `CALL`, `EXECUTE` or function call every relation created before it.
 - `RENAME COLUMN` is `reversible`, not `destructive`. It breaks readers on the
   old name, but that is `window_safe`'s question, and this taxonomy classifies on
   data and DDL grounds. Consumers that need the deployment view read both fields.

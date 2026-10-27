@@ -185,7 +185,12 @@ def classify_replica_safety(op: DdlOperation) -> ReplicaVerdict:
     while the primary already has the *new* one. ``ADD COLUMN NOT NULL`` /
     ``DEFAULT`` stays unsafe regardless of PG's fast-default optimization
     — a reader on the old schema still errors on the new column.
+
+    An operation on a relation the same migration created (``op.fresh``) is
+    safe: no reader on either version can see that relation yet.
     """
+    if op.fresh:
+        return ReplicaVerdict("safe")
     for op_type, verdict in _VERDICTS:
         if isinstance(op, op_type):
             return verdict(op)
