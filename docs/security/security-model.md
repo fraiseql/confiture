@@ -193,9 +193,10 @@ keeps that, for `~/.pgpass` and operator defaults. A library caller passes
 `RestoreOptions.env` to make it the **entire** environment of every child — the
 listing, each phase, `ANALYZE` and the refresh — with `PGPASSWORD` laid on top.
 The in-process `--min-tables` connection is given every libpq key explicitly
-from `env`, with `options` empty; only `service` and four transport keys that
-refuse an empty value are left to libpq when `env` does not set them, and none of
-them can change the host, database, role, password or options. `env` with
+from `env`, with `options` empty; only `service`, `require_auth` and four
+transport keys, which read an empty value as a value, are left to libpq when
+`env` does not set them, and none of them can change the host, database, role,
+password or options. `env` with
 `superuser` is refused: `sudo`'s `env_reset` would decide what reaches the
 command. See the [restore guide](../guides/restore.md#library-use-and-the-childrens-environment).
 

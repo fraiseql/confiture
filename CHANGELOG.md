@@ -25,11 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the deferred matview refresh, with `PGPASSWORD` from `password` laid on top; the binaries
   are looked up on its `PATH`, and one that is not there is a `RestoreError` naming it. The
   in-process `--min-tables` connection cannot be handed an environment, so it is given every
-  libpq key that has an environment variable, read from `env` or libpq's compiled default —
-  `options` empty, the role `username`, then `env["PGUSER"]`, then the OS user. libpq reads
-  `service=''` as a service named "", so `service` (with `sslcertmode`, the protocol versions and
-  `connect_timeout`, which refuse an empty value) is passed only when `env` sets it; none of them
-  names the target, the role, the password or the session's options. `env` with `superuser` is
+  libpq key that has an environment variable, read from `env`, libpq's compiled default or an
+  empty value that libpq reads as unset — `options` empty, the role `username`, then
+  `env["PGUSER"]`, then the OS user. libpq reads `service=''` as a service named "" and
+  `require_auth=''` as a requirement no password method meets, so those two (with `sslcertmode`,
+  the protocol versions and `connect_timeout`, which refuse an empty value) are passed only when
+  `env` sets them; none of them names the target, the role, the password or the session's
+  options. `env` with `superuser` is
   refused with a `RestoreError` (`RESTORE_001`) before anything starts: sudo's `env_reset` decides
   what reaches its command — it already drops every `PG*` variable, `PGPASSWORD` included — and
   `sudo --preserve-env` is refused under a command-scoped sudoers rule. `url_redaction.libpq_env`

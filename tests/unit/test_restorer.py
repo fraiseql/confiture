@@ -1351,12 +1351,14 @@ class TestEnvScopesTheTableCount:
     def test_every_key_naming_the_target_or_the_session_is_explicit(self, monkeypatch):
         """A service file fills only keys left unset, so it cannot redirect the check.
 
-        libpq reads ``service=''`` as a service named "", so ``service`` is the one
-        key that names a lookup and is left out unless ``env`` sets it.
+        libpq reads ``service=''`` as a service named "" and ``require_auth=''`` as
+        a requirement no password method meets, so both are left out unless ``env``
+        sets them.
         """
         _poison(monkeypatch)
         kwargs = self._connect_kwargs(monkeypatch, env={})
         assert "service" not in kwargs
+        assert "require_auth" not in kwargs
         for key in ("host", "hostaddr", "port", "dbname", "user", "password", "passfile"):
             assert key in kwargs
         assert (kwargs["options"], kwargs["sslmode"]) == ("", "prefer")

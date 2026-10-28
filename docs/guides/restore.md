@@ -119,11 +119,12 @@ result = DatabaseRestorer().restore(opts)
 - The `--min-tables` check connects in-process, so it cannot be handed an
   environment. It is given every libpq key instead, read from `env` or libpq's
   default: `options` is empty whatever `PGOPTIONS` the process holds, and the
-  role is `username`, then `env["PGUSER"]`, then the OS user. Five keys refuse an
-  empty value (`service`, `sslcertmode`, `min_protocol_version`,
-  `max_protocol_version`, `connect_timeout`) and are passed only when `env` sets
-  them; an ambient `PGSERVICE` can still name a service there, which fills only
-  keys left unset — never the host, port, database, role, password or options.
+  role is `username`, then `env["PGUSER"]`, then the OS user. A few keys read an
+  empty value as a value rather than as unset (`service`, `require_auth`,
+  `sslcertmode`, `min_protocol_version`, `max_protocol_version`,
+  `connect_timeout`) and are passed only when `env` sets them; an ambient
+  `PGSERVICE` can still name a service there, which fills only keys left unset —
+  never the host, port, database, role, password or options.
 - `env` cannot be combined with `superuser`: `sudo`'s `env_reset` decides what
   reaches its command (by default it drops every `PG*` variable), and
   `sudo --preserve-env` is refused under a command-scoped sudoers rule. The

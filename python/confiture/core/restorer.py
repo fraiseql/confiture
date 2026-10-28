@@ -54,13 +54,29 @@ _MULTIWORD_DESCS = (
 
 _MATVIEW_DATA_DESC = "MATERIALIZED VIEW DATA"
 
-#: libpq keys that read ``""`` as a value, not as unset: libpq looks ``service=''``
-#: up as a service named "" and refuses an empty ``sslcertmode`` or protocol
-#: version, psycopg an empty ``connect_timeout``. An env-scoped connection leaves
-#: them out unless ``RestoreOptions.env`` sets them; none names the target, the
-#: role, the password or the session's options, all of which are given explicitly.
-_NO_EMPTY_VALUE = frozenset(
-    {"service", "sslcertmode", "min_protocol_version", "max_protocol_version", "connect_timeout"}
+#: libpq keys with no compiled default that read ``""`` as unset, checked over a
+#: socket and over TCP with SCRAM. The others read it as a value — libpq looks
+#: ``service=''`` up as a service named "", ``require_auth=''`` refuses every
+#: password method, an empty ``sslcertmode`` or protocol version is invalid, and
+#: psycopg refuses an empty ``connect_timeout`` — so an env-scoped connection
+#: passes them only when ``RestoreOptions.env`` sets them. None names the target,
+#: the role, the password or the session's options, all of which are explicit.
+_EMPTY_MEANS_UNSET = frozenset(
+    {
+        "password",
+        "passfile",
+        "hostaddr",
+        "client_encoding",
+        "application_name",
+        "sslcert",
+        "sslkey",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+        "requirepeer",
+        "ssl_max_protocol_version",
+        "gsslib",
+    }
 )
 
 
@@ -906,8 +922,9 @@ def _connection_keys(options: RestoreOptions) -> dict[str, str | int | None]:
 
     Without ``env``, libpq fills any key left unset from the process environment,
     as it always has. With it, every key that has an environment variable is
-    given: the target from the options, the rest from ``env`` or libpq's compiled
-    default — an in-process connection cannot be handed an environment of its own.
+    given that ``env``, libpq's compiled default or :data:`_EMPTY_MEANS_UNSET` can
+    give: the target from the options, the rest from ``env`` — an in-process
+    connection cannot be handed an environment of its own.
     """
     if options.env is None:
         return {
@@ -925,7 +942,7 @@ def _connection_keys(options: RestoreOptions) -> dict[str, str | int | None]:
         value = options.env.get(option.envvar.decode())
         if value is None and option.compiled is not None:
             value = option.compiled.decode()
-        if value is None and keyword not in _NO_EMPTY_VALUE:
+        if value is None and keyword in _EMPTY_MEANS_UNSET:
             value = ""
         if value is not None:
             keys[keyword] = value
