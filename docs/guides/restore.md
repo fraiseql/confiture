@@ -80,6 +80,55 @@ Querying an unpopulated matview raises
 | `--min-tables` | `0` | Post-restore: fail unless at least N tables exist |
 | `--superuser` | *(none)* | Run `pg_restore`/`psql` via `sudo -u <user>` |
 
+## Library use, and the children's environment
+
+`confiture restore` is `DatabaseRestorer` over `RestoreOptions`. Every step runs a
+child process — the `pg_restore -l` listing, the three `pg_restore` phases, the
+`psql` `ANALYZE` and the matview refresh — and by default each inherits the
+caller's environment: `PGSERVICE`, `PGOPTIONS`, `PGUSER`, `PGSSLMODE` or a stray
+`PGPASSWORD` in it reaches every one. The CLI keeps that behaviour, so `~/.pgpass`
+and an operator's `PG*` variables still apply.
+
+A tool that calls confiture as a library and wants the restore to reach exactly
+the target it named passes `env`, the **whole** environment of every child:
+
+```python
+import os
+from pathlib import Path
+
+from confiture.core.restorer import DatabaseRestorer, RestoreOptions
+
+opts = RestoreOptions(
+    backup_path=Path("prod.pgdump"),
+    target_db="staging",
+    host="db.internal",
+    username="restorer",
+    password=secret,                  # laid on top of env as PGPASSWORD
+    env={
+        "PATH": "/usr/lib/postgresql/18/bin:/usr/bin",   # where pg_restore and psql are found
+        "PGSSLMODE": "verify-full",
+        "PGSSLROOTCERT": "/etc/ssl/db-ca.pem",
+    },
+    min_tables=300,
+)
+result = DatabaseRestorer().restore(opts)
+```
+
+- `pg_restore` and `psql` are looked up on `env`'s `PATH`; when they are not
+  there, the restore fails with a `RestoreError` naming the binary.
+- The `--min-tables` check connects in-process, so it cannot be handed an
+  environment. It is given every libpq key instead, read from `env` or libpq's
+  default: `options` is empty whatever `PGOPTIONS` the process holds, and the
+  role is `username`, then `env["PGUSER"]`, then the OS user. Five keys refuse an
+  empty value (`service`, `sslcertmode`, `min_protocol_version`,
+  `max_protocol_version`, `connect_timeout`) and are passed only when `env` sets
+  them; an ambient `PGSERVICE` can still name a service there, which fills only
+  keys left unset — never the host, port, database, role, password or options.
+- `env` cannot be combined with `superuser`: `sudo`'s `env_reset` decides what
+  reaches its command (by default it drops every `PG*` variable), and
+  `sudo --preserve-env` is refused under a command-scoped sudoers rule. The
+  combination is refused before anything starts.
+
 ## Backup-side alternative
 
 If you maintain the backups yourself, you can also keep a stats-sensitive matview

@@ -14,6 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`RestoreOptions.env` sets the whole environment of every restore child** (#792). Every child
+  the restorer started inherited the caller's `os.environ`, ambient libpq variables included
+  (`PGSERVICE`, `PGOPTIONS`, `PGUSER`, `PGSSLMODE`, a stray `PGPASSWORD`), and the `pg_restore -l`
+  listing was given no environment at all, so a library caller that scrubs its own children's
+  environments could not make sure a restore reached only the target it named. With `env` set,
+  it is the entire environment of the listing, the three `pg_restore` phases, the `psql` ANALYZE
+  and the deferred matview refresh, with `PGPASSWORD` from `password` laid on top; the binaries
+  are looked up on its `PATH`, and one that is not there is a `RestoreError` naming it. The
+  in-process `--min-tables` connection cannot be handed an environment, so it is given every
+  libpq key that has an environment variable, read from `env` or libpq's compiled default —
+  `options` empty, the role `username`, then `env["PGUSER"]`, then the OS user. libpq reads
+  `service=''` as a service named "", so `service` (with `sslcertmode`, the protocol versions and
+  `connect_timeout`, which refuse an empty value) is passed only when `env` sets it; none of them
+  names the target, the role, the password or the session's options. `env` with `superuser` is
+  refused with a `RestoreError` (`RESTORE_001`) before anything starts: sudo's `env_reset` decides
+  what reaches its command — it already drops every `PG*` variable, `PGPASSWORD` included — and
+  `sudo --preserve-env` is refused under a command-scoped sudoers rule. `url_redaction.libpq_env`
+  takes a `base=` mapping to start from instead of `os.environ`. `env=None`, the default, keeps
+  today's behaviour, so the CLI, which has no flag for it, keeps the ambient environment and
+  `~/.pgpass`.
+
 ## [1.42.0] - 2026-10-27
 
 ### Added
