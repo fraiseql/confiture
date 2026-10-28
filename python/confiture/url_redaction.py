@@ -18,6 +18,7 @@ Lives in ``core`` so that ``core`` modules — the ``psql`` applier and the
 
 import os
 import re
+from collections.abc import Mapping
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 
 _PASSWORD_KEY = "password"
@@ -141,22 +142,29 @@ def split_password(url: str) -> tuple[str, str | None]:
     return urlunparse(parsed._replace(query=query)), unquote(raw_password or "")
 
 
-def libpq_env(password: str | None, *, extra_options: str | None = None) -> dict[str, str]:
+def libpq_env(
+    password: str | None,
+    *,
+    extra_options: str | None = None,
+    base: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     """Build a subprocess environment for a libpq client (``psql`` / ``pg_dump``).
 
-    Copies the current environment (so ``PATH`` and any other ``PG*`` vars carry
-    through), optionally injecting ``PGPASSWORD`` (so the password never appears
-    on argv) and appending ``extra_options`` to ``PGOPTIONS`` (preserving any
-    value already set).
+    Starts from *base*, or a copy of the current environment when there is none
+    (so ``PATH`` and any other ``PG*`` vars carry through), optionally injecting
+    ``PGPASSWORD`` (so the password never appears on argv) and appending
+    ``extra_options`` to ``PGOPTIONS`` (preserving any value already set).
 
     Args:
         password: Password to expose via ``PGPASSWORD``, or None to omit it.
         extra_options: ``-c key=value`` fragment to append to ``PGOPTIONS``.
+        base: The whole environment to start from instead of ``os.environ``;
+            never mutated.
 
     Returns:
         A new environment dict suitable for ``subprocess.run(..., env=...)``.
     """
-    env = os.environ.copy()
+    env = dict(base) if base is not None else os.environ.copy()
     if password is not None:
         env["PGPASSWORD"] = password
     if extra_options:

@@ -9,19 +9,26 @@ Requires custom format (-Fc) or directory format (-Fd) dumps.
 
 import contextlib
 import dataclasses
+import getpass
 import logging
+import os
 import re
 import subprocess
+import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import psycopg
+from psycopg import pq
 
 from confiture.core import live_catalog
 from confiture.exceptions import RestoreError
 from confiture.url_redaction import libpq_env
+
+if sys.platform != "win32":
+    import pwd
 
 _log = logging.getLogger(__name__)
 
@@ -46,6 +53,31 @@ _MULTIWORD_DESCS = (
 )
 
 _MATVIEW_DATA_DESC = "MATERIALIZED VIEW DATA"
+
+#: libpq keys with no compiled default that read ``""`` as unset, checked over a
+#: socket and over TCP with SCRAM. The others read it as a value — libpq looks
+#: ``service=''`` up as a service named "", ``require_auth=''`` refuses every
+#: password method, an empty ``sslcertmode`` or protocol version is invalid, and
+#: psycopg refuses an empty ``connect_timeout`` — so an env-scoped connection
+#: passes them only when ``RestoreOptions.env`` sets them. None names the target,
+#: the role, the password or the session's options, all of which are explicit.
+_EMPTY_MEANS_UNSET = frozenset(
+    {
+        "password",
+        "passfile",
+        "hostaddr",
+        "client_encoding",
+        "application_name",
+        "sslcert",
+        "sslkey",
+        "sslrootcert",
+        "sslcrl",
+        "sslcrldir",
+        "requirepeer",
+        "ssl_max_protocol_version",
+        "gsslib",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -100,6 +132,14 @@ class RestoreOptions:
             to ``False`` so that transient FK violations during the parallel
             data phase do not abort the restore.  Use for all restores with
             ``jobs > 1``.
+        env: The whole environment of every child the restore starts — the
+            ``pg_restore -l`` listing, each ``pg_restore`` phase and ``psql`` —
+            with ``PGPASSWORD`` from ``password`` laid on top; ``pg_restore`` and
+            ``psql`` are looked up on its ``PATH``. The ``--min-tables`` connection
+            reads its libpq keys from it too (``PGUSER``, then the OS user, when
+            ``username`` is None). None inherits the caller's environment, ambient
+            ``PG*`` variables and ``~/.pgpass`` included. Refused with
+            ``superuser``: sudo's ``env_reset`` decides what reaches its command.
     """
 
     backup_path: Path
@@ -139,6 +179,7 @@ class RestoreOptions:
     replans on real statistics instead of the empty ``pg_statistic`` of a freshly
     loaded database.
     """
+    env: Mapping[str, str] | None = None
 
 
 @dataclass
@@ -236,10 +277,11 @@ class DatabaseRestorer:
             :class:`RestoreResult` with aggregated phase outcomes.
 
         Raises:
-            RestoreError: If the dump format is unsupported, pg_restore is not
-                found, or the restore is interrupted.
+            RestoreError: If the dump format is unsupported, ``env`` is given
+                with ``superuser``, pg_restore is not found, or the restore is
+                interrupted.
         """
-        self._validate_dump_format(options.backup_path)
+        self._check_options(options)
 
         # parallel_restore=True implies exit_on_error=False; FK violations during
         # the data phase are transient and non-fatal when running parallel workers.
@@ -369,6 +411,24 @@ class DatabaseRestorer:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _check_options(self, options: RestoreOptions) -> None:
+        """Refuse what cannot run as asked, before any child starts.
+
+        ``sudo``'s ``env_reset`` replaces the environment of the command it runs,
+        and ``--preserve-env`` is refused under a command-scoped sudoers rule, so
+        ``env`` would reach only the ``sudo`` process.
+
+        Raises:
+            RestoreError: If ``env`` is given with ``superuser``, or the dump
+                format is unsupported.
+        """
+        if options.env is not None and options.superuser:
+            raise RestoreError(
+                "RestoreOptions.env cannot be combined with superuser: sudo's env_reset "
+                "decides what reaches pg_restore and psql, so env would reach only sudo."
+            )
+        self._validate_dump_format(options.backup_path)
+
     def _validate_dump_format(self, backup_path: Path) -> None:
         """Raise RestoreError if the dump is not custom or directory format.
 
@@ -441,11 +501,11 @@ class DatabaseRestorer:
         cmd += ["pg_restore", "-l", str(options.backup_path)]
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, check=False, env=_child_env(options)
+            )
         except FileNotFoundError as e:
-            raise RestoreError(
-                "pg_restore not found. Ensure PostgreSQL client tools are installed and on PATH."
-            ) from e
+            raise _not_found("pg_restore", options) from e
 
         if proc.returncode != 0:
             raise RestoreError(
@@ -622,7 +682,7 @@ class DatabaseRestorer:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=libpq_env(options.password),
+                env=_child_env(options),
             ) as proc:
                 try:
                     assert proc.stderr is not None
@@ -637,9 +697,7 @@ class DatabaseRestorer:
                     proc.kill()
                     raise RestoreError("ANALYZE phase interrupted by user") from None
         except FileNotFoundError as e:
-            raise RestoreError(
-                "psql not found. Ensure PostgreSQL client tools are installed and on PATH."
-            ) from e
+            raise _not_found("psql", options) from e
 
         if returncode != 0:
             return RestoreResult(
@@ -766,7 +824,7 @@ class DatabaseRestorer:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=libpq_env(options.password),
+                env=_child_env(options),
             ) as proc:
                 try:
                     assert proc.stderr is not None
@@ -785,9 +843,7 @@ class DatabaseRestorer:
                     phase = section or "matview-refresh"
                     raise RestoreError(f"pg_restore {phase} phase interrupted by user") from None
         except FileNotFoundError as e:
-            raise RestoreError(
-                "pg_restore not found. Ensure PostgreSQL client tools are installed and on PATH."
-            ) from e
+            raise _not_found("pg_restore", options) from e
 
         if returncode != 0 and (options.exit_on_error or errors):
             return RestoreResult(
@@ -824,13 +880,7 @@ class DatabaseRestorer:
             RestoreError: If the database connection fails.
         """
         try:
-            with psycopg.connect(
-                host=options.host,
-                port=options.port,
-                dbname=options.target_db,
-                user=options.username or None,
-                password=options.password,
-            ) as conn:
+            with psycopg.connect(**_connection_keys(options)) as conn:
                 count = len(live_catalog.relations(conn, [options.min_tables_schema], kinds=("r",)))
         except psycopg.OperationalError as e:
             raise RestoreError(
@@ -852,3 +902,63 @@ class DatabaseRestorer:
             phases_completed=["pre-data", "data", "post-data"],
             table_count=count,
         )
+
+
+def _child_env(options: RestoreOptions) -> dict[str, str]:
+    """The environment of every child the restore starts: ``env``, or the caller's."""
+    return libpq_env(options.password, base=options.env)
+
+
+def _not_found(binary: str, options: RestoreOptions) -> RestoreError:
+    """The error for a client binary the child's ``PATH`` does not hold."""
+    where = "on the PATH of RestoreOptions.env" if options.env is not None else "on PATH"
+    return RestoreError(
+        f"{binary} not found {where}. Ensure PostgreSQL client tools are installed there."
+    )
+
+
+def _connection_keys(options: RestoreOptions) -> dict[str, str | int | None]:
+    """The libpq keys of the in-process ``--min-tables`` connection.
+
+    Without ``env``, libpq fills any key left unset from the process environment,
+    as it always has. With it, every key that has an environment variable is
+    given that ``env``, libpq's compiled default or :data:`_EMPTY_MEANS_UNSET` can
+    give: the target from the options, the rest from ``env`` — an in-process
+    connection cannot be handed an environment of its own.
+    """
+    if options.env is None:
+        return {
+            "host": options.host,
+            "port": options.port,
+            "dbname": options.target_db,
+            "user": options.username or None,
+            "password": options.password,
+        }
+    keys: dict[str, str | int | None] = {}
+    for option in pq.Conninfo.get_defaults():
+        if option.envvar is None:
+            continue
+        keyword = option.keyword.decode()
+        value = options.env.get(option.envvar.decode())
+        if value is None and option.compiled is not None:
+            value = option.compiled.decode()
+        if value is None and keyword in _EMPTY_MEANS_UNSET:
+            value = ""
+        if value is not None:
+            keys[keyword] = value
+    keys |= {
+        "host": options.host,
+        "port": options.port,
+        "dbname": options.target_db,
+        "user": options.username or options.env.get("PGUSER") or _os_user(),
+    }
+    if options.password is not None:
+        keys["password"] = options.password
+    return keys
+
+
+def _os_user() -> str:
+    """The role libpq falls back to: the effective user's name, never ``$PGUSER``."""
+    if sys.platform == "win32":
+        return getpass.getuser()
+    return pwd.getpwuid(os.geteuid()).pw_name

@@ -4,6 +4,7 @@ All tests mock subprocess.Popen and psycopg.connect via monkeypatch /
 unittest.mock — no real database or pg_restore binary is required.
 """
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1173,3 +1174,234 @@ class TestPasswordReachesTheSubprocess:
         with patch("psycopg.connect", return_value=mock_conn) as connect:
             DatabaseRestorer()._validate_table_count(self._opts(min_tables=1))
         assert connect.call_args.kwargs["password"] == "s3cret"
+
+
+# ---------------------------------------------------------------------------
+# RestoreOptions.env — the whole environment of every child (#792)
+# ---------------------------------------------------------------------------
+
+_TOC_WITH_MATVIEW = (
+    "; Archive created at 2026-10-28\n"
+    "201; 1259 16390 TABLE public t postgres\n"
+    "3301; 0 16390 TABLE DATA public t postgres\n"
+    "3302; 0 16399 MATERIALIZED VIEW DATA public mv postgres\n"
+)
+
+
+_SCOPED_ENV = {"PATH": "/usr/bin:/bin", "PGSSLMODE": "require"}
+
+
+def _poison(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ambient libpq variables that must never reach an env-scoped child."""
+    monkeypatch.setenv("PGOPTIONS", "-c search_path=evil")
+    monkeypatch.setenv("PGSERVICE", "x")
+    monkeypatch.setenv("PGPASSWORD", "ambient")
+    monkeypatch.setenv("PGUSER", "ambient_user")
+    monkeypatch.setenv("PGSSLMODE", "disable")
+
+
+class TestEnvReachesEveryChild:
+    """With ``env=``, the listing, every pg_restore phase and psql get exactly it."""
+
+    def _opts(self, **kwargs) -> RestoreOptions:
+        defaults = {"backup_path": Path("d.pgdump"), "target_db": "db", "env": _SCOPED_ENV}
+        defaults.update(kwargs)
+        return RestoreOptions(**defaults)
+
+    def _restore(self, opts: RestoreOptions) -> tuple[list[dict], list[list[str]]]:
+        """Run a full matview restore; return every child's env and argv, in order."""
+        envs: list[dict] = []
+        argvs: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            envs.append(kwargs["env"])
+            argvs.append(cmd)
+            return MagicMock(returncode=0, stdout=_TOC_WITH_MATVIEW, stderr="")
+
+        def fake_popen(cmd, **kwargs):
+            envs.append(kwargs["env"])
+            argvs.append(cmd)
+            return _make_proc([], 0)
+
+        restorer = DatabaseRestorer()
+        restorer._validate_dump_format = lambda _p: None  # type: ignore[method-assign]
+        with (
+            patch("subprocess.run", side_effect=fake_run),
+            patch("subprocess.Popen", side_effect=fake_popen),
+        ):
+            assert restorer.restore(opts).success is True
+        return envs, argvs
+
+    def test_every_child_gets_exactly_env(self, monkeypatch):
+        _poison(monkeypatch)
+        envs, argvs = self._restore(self._opts())
+        # listing, pre-data, data, post-data, analyze, refresh
+        assert [a[0] for a in argvs] == ["pg_restore"] * 4 + ["psql", "pg_restore"]
+        assert envs == [_SCOPED_ENV] * 6
+
+    def test_password_is_laid_on_top_of_env(self, monkeypatch):
+        _poison(monkeypatch)
+        envs, _ = self._restore(self._opts(password="s3cret"))
+        assert envs == [{**_SCOPED_ENV, "PGPASSWORD": "s3cret"}] * 6
+
+    def test_env_is_not_mutated(self):
+        env = dict(_SCOPED_ENV)
+        self._restore(self._opts(env=env, password="s3cret"))
+        assert env == _SCOPED_ENV
+
+    def test_without_env_the_ambient_environment_holds(self, monkeypatch):
+        """``env=None`` is today's behaviour: an ambient PGPASSWORD still works."""
+        _poison(monkeypatch)
+        envs, _ = self._restore(self._opts(env=None))
+        assert len(envs) == 6
+        for env in envs:
+            assert env["PGPASSWORD"] == "ambient"
+            assert env["PGOPTIONS"] == "-c search_path=evil"
+
+
+class TestEnvRefusesSuperuser:
+    """``sudo``'s env_reset decides what reaches its command, so ``env=`` cannot."""
+
+    def test_superuser_with_env_is_refused_before_anything_starts(self, tmp_path):
+        backup = tmp_path / "d.pgdump"
+        backup.write_bytes(b"PGDMP")
+        opts = RestoreOptions(
+            backup_path=backup, target_db="db", superuser="postgres", env={"PATH": "/usr/bin"}
+        )
+        with (
+            patch("subprocess.run") as run,
+            patch("subprocess.Popen") as popen,
+            pytest.raises(RestoreError, match="superuser"),
+        ):
+            DatabaseRestorer().restore(opts)
+        run.assert_not_called()
+        popen.assert_not_called()
+
+    def test_superuser_without_env_still_runs_through_sudo(self):
+        opts = RestoreOptions(backup_path=Path("d.pgdump"), target_db="db", superuser="postgres")
+        assert DatabaseRestorer()._build_command("pre-data", opts, False)[:3] == [
+            "sudo",
+            "-u",
+            "postgres",
+        ]
+
+
+class TestEnvPathWithoutTheBinary:
+    """``subprocess`` looks a binary up on ``env``'s PATH; a miss names the binary."""
+
+    def _opts(self, tmp_path: Path) -> RestoreOptions:
+        backup = tmp_path / "d.pgdump"
+        backup.write_bytes(b"PGDMP")
+        empty = tmp_path / "bin"
+        empty.mkdir()
+        return RestoreOptions(backup_path=backup, target_db="db", env={"PATH": str(empty)})
+
+    def test_listing_names_pg_restore_and_the_env_path(self, tmp_path):
+        with pytest.raises(RestoreError, match=r"pg_restore not found.*RestoreOptions\.env"):
+            DatabaseRestorer().restore(self._opts(tmp_path))
+
+    def test_section_names_pg_restore(self, tmp_path):
+        with pytest.raises(RestoreError, match=r"pg_restore not found.*RestoreOptions\.env"):
+            DatabaseRestorer()._run_section("pre-data", self._opts(tmp_path), parallel=False)
+
+    def test_analyze_names_psql(self, tmp_path):
+        with pytest.raises(RestoreError, match=r"psql not found.*RestoreOptions\.env"):
+            DatabaseRestorer()._run_analyze(self._opts(tmp_path))
+
+
+class TestEnvScopesTheTableCount:
+    """The in-process ``--min-tables`` connection reads every libpq key from ``env``."""
+
+    def _connect_kwargs(self, monkeypatch, **kwargs) -> dict:
+        monkeypatch.setattr(live_catalog, "relations", lambda *_a, **_k: [])
+        mock_conn, _ = _make_db_mock((0,))
+        opts = RestoreOptions(
+            backup_path=Path("d.pgdump"),
+            target_db="db",
+            host="db.internal",
+            min_tables=1,
+            **kwargs,
+        )
+        with patch("psycopg.connect", return_value=mock_conn) as connect:
+            DatabaseRestorer()._validate_table_count(opts)
+        return connect.call_args.kwargs
+
+    def test_ambient_pgoptions_is_overridden_with_empty_options(self, monkeypatch):
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(monkeypatch, env={})
+        assert kwargs["options"] == ""
+
+    def test_libpq_keys_are_read_from_env(self, monkeypatch):
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(
+            monkeypatch,
+            env={"PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/etc/ca.pem"},
+        )
+        assert kwargs["sslmode"] == "verify-full"
+        assert kwargs["sslrootcert"] == "/etc/ca.pem"
+        assert kwargs["target_session_attrs"] == "any"
+
+    def test_target_keys_come_from_options(self, monkeypatch):
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(
+            monkeypatch, env={"PGHOST": "elsewhere", "PGDATABASE": "other", "PGPORT": "6543"}
+        )
+        assert (kwargs["host"], kwargs["port"], kwargs["dbname"]) == ("db.internal", 5432, "db")
+
+    def test_every_key_naming_the_target_or_the_session_is_explicit(self, monkeypatch):
+        """A service file fills only keys left unset, so it cannot redirect the check.
+
+        libpq reads ``service=''`` as a service named "" and ``require_auth=''`` as
+        a requirement no password method meets, so both are left out unless ``env``
+        sets them.
+        """
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(monkeypatch, env={})
+        assert "service" not in kwargs
+        assert "require_auth" not in kwargs
+        for key in ("host", "hostaddr", "port", "dbname", "user", "password", "passfile"):
+            assert key in kwargs
+        assert (kwargs["options"], kwargs["sslmode"]) == ("", "prefer")
+
+    def test_env_service_is_passed(self, monkeypatch):
+        kwargs = self._connect_kwargs(monkeypatch, env={"PGSERVICE": "restore"})
+        assert kwargs["service"] == "restore"
+
+    def test_ambient_password_never_reaches_the_connection(self, monkeypatch):
+        _poison(monkeypatch)
+        assert self._connect_kwargs(monkeypatch, env={})["password"] == ""
+
+    def test_password_option_wins_over_env(self, monkeypatch):
+        kwargs = self._connect_kwargs(monkeypatch, env={"PGPASSWORD": "e"}, password="o")
+        assert kwargs["password"] == "o"
+
+    def test_env_password_is_used_without_the_option(self, monkeypatch):
+        assert self._connect_kwargs(monkeypatch, env={"PGPASSWORD": "e"})["password"] == "e"
+
+    def test_username_option_wins(self, monkeypatch):
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(monkeypatch, env={"PGUSER": "env_user"}, username="opt")
+        assert kwargs["user"] == "opt"
+
+    def test_pguser_comes_from_env(self, monkeypatch):
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(monkeypatch, env={"PGUSER": "env_user"})
+        assert kwargs["user"] == "env_user"
+
+    def test_without_pguser_in_env_the_os_user_is_used(self, monkeypatch):
+        import pwd
+
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(monkeypatch, env={})
+        assert kwargs["user"] == pwd.getpwuid(os.geteuid()).pw_name
+
+    def test_without_env_the_call_is_unchanged(self, monkeypatch):
+        _poison(monkeypatch)
+        kwargs = self._connect_kwargs(monkeypatch, username="u", password="p")
+        assert kwargs == {
+            "host": "db.internal",
+            "port": 5432,
+            "dbname": "db",
+            "user": "u",
+            "password": "p",
+        }

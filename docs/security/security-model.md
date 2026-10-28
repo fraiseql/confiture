@@ -67,6 +67,10 @@ every layer of the system.
 - Confiture does not print connection credentials in its own output
 - KMS integration for sensitive data
 - Pre-commit secret scanning
+- A restore run as a library can be scoped: `RestoreOptions.env` is the whole
+  environment of every `pg_restore`/`psql` child, so ambient `PGSERVICE`,
+  `PGOPTIONS`, `PGUSER` or `PGPASSWORD` cannot steer it (see
+  [Restore](#restore-and-the-callers-environment))
 
 #### T3: Unauthorized Access
 
@@ -178,6 +182,23 @@ store credentials in your platform's secret manager (environment variables, a
 mounted secret, Vault, AWS/GCP secret manager) and inject them at runtime. The
 [anonymization framework](../api/anonymization.md) masks *data* (seed-based,
 one-way) during a sync; it is not a credential store.
+
+#### Restore and the caller's environment
+
+`confiture restore` drives `pg_restore` and `psql` as child processes, and the
+password goes to them in `PGPASSWORD`, never on argv. By default each child
+inherits the caller's environment, so an ambient `PGSERVICE` or `PGOPTIONS`
+(`search_path`, `session_replication_role`, …) applies to the restore too; the CLI
+keeps that, for `~/.pgpass` and operator defaults. A library caller passes
+`RestoreOptions.env` to make it the **entire** environment of every child — the
+listing, each phase, `ANALYZE` and the refresh — with `PGPASSWORD` laid on top.
+The in-process `--min-tables` connection is given every libpq key explicitly
+from `env`, with `options` empty; only `service`, `require_auth` and four
+transport keys, which read an empty value as a value, are left to libpq when
+`env` does not set them, and none of them can change the host, database, role,
+password or options. `env` with
+`superuser` is refused: `sudo`'s `env_reset` would decide what reaches the
+command. See the [restore guide](../guides/restore.md#library-use-and-the-childrens-environment).
 
 #### Never Commit Secrets
 

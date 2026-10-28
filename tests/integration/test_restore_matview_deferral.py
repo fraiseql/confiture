@@ -11,6 +11,7 @@ artifact, then restores it into a fresh database and asserts:
 Requires a reachable local PostgreSQL (CONFITURE_TEST_DB_URL or localhost).
 """
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -153,3 +154,41 @@ def test_no_refresh_matviews_leaves_matview_unpopulated(
     assert "refresh-matviews" not in result.phases_completed
     # The matview exists but was restored WITH NO DATA.
     assert _matview_is_populated(server_url, fresh_target, "mv_bucket_totals") is False
+
+
+def test_env_scoped_restore_is_untouched_by_ambient_libpq_variables(
+    server_url: str,
+    fresh_target: str,
+    tmp_path: Path,
+    restore_connection_kwargs: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``env=`` is the whole environment of every child (#792).
+
+    The ambient ``PGOPTIONS`` is poisoned so that any child it reaches fails: the
+    control restore, which inherits it, does; the ``env=`` restore — listing,
+    three phases, ANALYZE, refresh and the ``--min-tables`` connection — does not.
+    """
+    artifact = _build_matview_artifact(server_url, tmp_path)
+    monkeypatch.setenv("PGOPTIONS", "-c search_path=evil -c default_transaction_read_only=on")
+
+    control = DatabaseRestorer().restore(
+        _restore_options(artifact, fresh_target, restore_connection_kwargs)
+    )
+    assert control.success is False
+    assert any("read-only transaction" in line for line in control.errors), control.errors
+
+    result = DatabaseRestorer().restore(
+        _restore_options(
+            artifact,
+            fresh_target,
+            restore_connection_kwargs,
+            env={"PATH": os.environ["PATH"]},
+            min_tables=1,
+        )
+    )
+
+    assert result.success, result.errors
+    assert result.table_count == 1
+    assert result.phases_completed[-1] == "refresh-matviews"
+    assert _matview_is_populated(server_url, fresh_target, "mv_bucket_totals") is True

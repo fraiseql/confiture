@@ -73,6 +73,21 @@ class TestLibpqEnv:
         assert env["PGPASSWORD"] == "secret"
         assert "synchronous_commit=off" in env["PGOPTIONS"]
 
+    def test_base_replaces_the_ambient_environment(self, monkeypatch) -> None:
+        monkeypatch.setenv("PGSERVICE", "ambient")
+        env = libpq_env("secret", base={"PATH": "/opt/pg/bin"})
+        assert env == {"PATH": "/opt/pg/bin", "PGPASSWORD": "secret"}
+
+    def test_extra_options_append_to_the_base_pgoptions(self, monkeypatch) -> None:
+        monkeypatch.setenv("PGOPTIONS", "-c search_path=evil")
+        env = libpq_env(None, extra_options="-c synchronous_commit=off", base={})
+        assert env == {"PGOPTIONS": "-c synchronous_commit=off"}
+
+    def test_base_is_not_mutated(self) -> None:
+        base = {"PATH": "/usr/bin"}
+        libpq_env("secret", base=base)
+        assert base == {"PATH": "/usr/bin"}
+
 
 class TestRedactBearerUrl:
     """A webhook's URL is the credential: its path and query are the secret."""
