@@ -55,6 +55,8 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
+from psycopg import ProgrammingError
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -68,7 +70,7 @@ from pydantic import (
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.schema_identity import identifier_identity
 from confiture.exceptions import ConfigurationError
-from confiture.url_redaction import redact_url
+from confiture.url_redaction import redact_credentials_in, redact_url
 
 _TablePrivilege = Literal[
     "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"
@@ -444,52 +446,90 @@ class DirectoryConfig(BaseModel):
     order: int = 0
 
 
+#: The prefixes libpq reads as a URI; anything else is keyword text or a database name.
+_URL_SCHEMES = ("postgresql://", "postgres://")
+
+
+def _libpq_reading(url: str) -> dict[str, Any] | None:
+    """The keywords libpq reads from a PostgreSQL *url*, or ``None`` when it cannot.
+
+    psycopg's error is never passed on: it can quote the input, password and all.
+    """
+    if not url.startswith(_URL_SCHEMES):
+        return None
+    try:
+        return conninfo_to_dict(url)
+    except ProgrammingError:
+        return None
+
+
 class DatabaseConfig(BaseModel):
     """Database connection configuration.
 
-    Can be initialized from a connection URL or individual parameters.
+    Can be initialized from a connection URL or individual parameters. A field
+    that is ``None`` is libpq's to fill when the connection opens (``PGHOST``,
+    the default socket, ``PGUSER``, …), exactly as it would be for the URL.
     """
 
     # Carries a password: pydantic must not echo rejected input back in error text.
     model_config = ConfigDict(hide_input_in_errors=True)
 
-    host: str = "localhost"
-    port: int = 5432
-    database: str = "postgres"
-    user: str = "postgres"
-    password: str = ""
+    host: str | None = "localhost"
+    #: An ``int``, or libpq's comma-separated list for a multi-host URL.
+    port: int | str | None = 5432
+    database: str | None = "postgres"
+    user: str | None = "postgres"
+    password: str | None = ""
+    #: Every other libpq keyword the URL sets (``sslmode``, ``options``, …).
+    parameters: dict[str, str] = Field(default_factory=dict)
 
     @classmethod
     def from_url(cls, url: str) -> DatabaseConfig:
-        """Parse database configuration from PostgreSQL URL.
+        """Read a PostgreSQL URL with libpq's own parser.
+
+        A socket directory in ``?host=``, a user without a password, a
+        percent-encoded part, a multi-host list and every query parameter read
+        as libpq reads them; a part the URL leaves out is ``None``, not a
+        default.
 
         Args:
-            url: PostgreSQL connection URL (postgresql://user:pass@host:port/dbname)
+            url: A ``postgresql://`` or ``postgres://`` URL.
 
         Returns:
             DatabaseConfig instance
+
+        Raises:
+            ValueError: *url* is not a PostgreSQL URL libpq can read; the
+                message carries it with its password masked.
 
         Example:
             >>> config = DatabaseConfig.from_url("postgresql://user:pass@localhost:5432/mydb")
             >>> config.host
             'localhost'
         """
-
-        # Parse URL: postgresql://user:pass@host:port/dbname
-        pattern = r"(?:postgresql|postgres)://(?:([^:]+):([^@]+)@)?([^:/]+)(?::(\d+))?/(.+)"
-        match = re.match(pattern, url)
-
-        if not match:
-            raise ValueError(f"Invalid PostgreSQL URL: {redact_url(url)}")
-
-        user, password, host, port, database = match.groups()
-
+        params = _libpq_reading(url)
+        if params is None:
+            raise ValueError(f"Invalid PostgreSQL URL: {redact_credentials_in(url)}")
+        port = params.pop("port", None)
         return cls(
-            host=host or "localhost",
-            port=int(port) if port else 5432,
-            database=database,
-            user=user or "postgres",
-            password=password or "",
+            host=params.pop("host", None),
+            port=int(port) if port is not None and port.isdigit() else port,
+            database=params.pop("dbname", None),
+            user=params.pop("user", None),
+            password=params.pop("password", None),
+            parameters={key: str(value) for key, value in params.items()},
+        )
+
+    def conninfo(self) -> str:
+        """The libpq connection string this configuration names, password included."""
+        return make_conninfo(
+            "",
+            host=self.host,
+            port=self.port,
+            dbname=self.database,
+            user=self.user,
+            password=self.password,
+            **self.parameters,
         )
 
     def to_dict(self) -> dict[str, Any]:

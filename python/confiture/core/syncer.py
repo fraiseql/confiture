@@ -121,7 +121,9 @@ def _target(database: Target | Environment | DatabaseConfig | str, role: str) ->
         return Target(
             database, database.name or redact_url(str(database.database_url)), database.name or None
         )
-    return Target(database, f"{database.host}:{database.port}/{database.database}")
+    parts = (database.host, database.port, database.database)
+    host, port, name = ("default" if part is None else part for part in parts)
+    return Target(database, f"{host}:{port}/{name}")
 
 
 class ProductionSyncer:
