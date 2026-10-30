@@ -39,6 +39,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ps` shows it; it is now
   parsed by libpq's own parser and its password moved to `PGPASSWORD`. `redact_url` masks a
   conninfo's `password=` too.
+- **`DatabaseConfig.from_url` reads a URL the way libpq does** (#793). A regex refused a socket or
+  host-less URL (`postgresql:///app?host=/var/run/postgresql`), read `user@host` as the host,
+  kept a percent-encoded password encoded and folded every query parameter into the database
+  name; whatever it missed it filled with `localhost`/`5432`/`postgres`. It now parses with
+  libpq's own parser: a part the URL leaves out is `None` (libpq fills it at connect time, as it
+  would for the URL), `port` is libpq's comma list for a multi-host URL, and every other keyword
+  (`sslmode`, `options`, …) is kept in `parameters`. `DatabaseConfig.conninfo()` writes it back,
+  and a connection opened from the config (`create_connection`, `ProductionSyncer`) is the one
+  `psycopg.connect(url)` opens — before, the parts were rebuilt and the query parameters lost. A
+  sync label names a part libpq fills as `default`. A directly built `DatabaseConfig()` keeps its
+  defaults.
 
 ## [1.43.0] - 2026-10-28
 

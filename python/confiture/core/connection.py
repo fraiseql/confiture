@@ -174,16 +174,15 @@ def dsn_from_config(config: dict[str, Any] | str | Any) -> str:
     if isinstance(config, str):
         return config
     if isinstance(config, DatabaseConfig):
-        block = config.to_dict().get("database", {})
-    elif config is not None and not isinstance(config, dict):
+        return config.conninfo()
+    if config is not None and not isinstance(config, dict):
         # An ``Environment`` (or anything else carrying a resolved URL).
         return str(config.database_url)
-    else:
-        data: dict[str, Any] = config or {}
-        database_url = data.get("database_url")
-        if database_url:
-            return str(database_url)
-        block = data.get("database") or {}
+    data: dict[str, Any] = config or {}
+    database_url = data.get("database_url")
+    if database_url:
+        return str(database_url)
+    block = data.get("database") or {}
     return make_conninfo(
         host=block.get("host", "localhost"),
         port=block.get("port", 5432),
