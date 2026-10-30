@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.0] - 2026-10-30
+
 ### Added
 
 - **The built-in hooks take the caller's connection, not the process environment** (#799).
@@ -50,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `psycopg.connect(url)` opens — before, the parts were rebuilt and the query parameters lost. A
   sync label names a part libpq fills as `default`. A directly built `DatabaseConfig()` keeps its
   defaults.
+
+### Changed
+
+- **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.33** (#783); `MINIMUM_PG_TVIEWS` stays
+  0.1.0-beta.30, since beta.31–33 keep read contract 2 and a registry confiture reads unchanged
+  (the registry fixtures, recaptured at beta.33, are byte-identical). The leg's suites are one
+  list, `ci/pg-tviews/suites.txt`, which pg_tviews' release runner can read too, and a skipped
+  TVIEW test now fails the leg (#782).
 
 ## [1.43.0] - 2026-10-28
 
