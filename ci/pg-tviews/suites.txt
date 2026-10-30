@@ -1,0 +1,19 @@
+# The TVIEW suites: what the quality gate's pg-tviews leg runs against the pinned
+# pg_tviews (ci/pg-tviews/Dockerfile), and what pg_tviews runs against a release
+# candidate at a pinned confiture commit. One path per line; '#' starts a comment.
+# Every file must run without a skip on a server carrying pg_tviews.
+tests/integration/test_tview_live.py
+tests/integration/test_tview_indexes_live.py
+tests/integration/test_tview_diff.py
+tests/integration/test_diff_from_a_database.py
+tests/integration/test_drift_agrees_with_diff.py
+tests/integration/test_tview_migrate.py
+tests/integration/test_tview_restore.py
+tests/integration/test_generated_examples_apply.py
+tests/integration/test_generated_migration_meets_views.py
+tests/unit/test_tview_model.py
+tests/unit/test_tview_ddl.py
+tests/unit/test_tview_indexes.py
+tests/unit/test_drift_tviews.py
+tests/unit/test_pg_tviews_contract.py
+tests/unit/test_pg_tviews_registry.py
