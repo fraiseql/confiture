@@ -21,6 +21,7 @@ empty password, which only a superuser may use: without one the tests skip.
 """
 
 import json
+import socket
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -373,6 +374,13 @@ def test_setup_run_twice_leaves_one_fdw(source: str, target: str) -> None:
 
 
 def test_setup_points_the_foreign_server_where_source_points(source: str, target: str) -> None:
+    """The foreign server takes ``--source``'s host as written, here its address.
+
+    The address is the source host's own, so the server it names is the one under
+    test wherever that runs (``localhost`` → ``127.0.0.1`` in CI, a container's
+    address in the publish gate).
+    """
+    address = socket.gethostbyname(urlparse(source).hostname or "localhost")
     result = runner.invoke(
         app,
         [
@@ -380,7 +388,7 @@ def test_setup_points_the_foreign_server_where_source_points(source: str, target
             "schema-to-schema",
             "setup",
             "--source",
-            _with_host(source, "127.0.0.1"),
+            _with_host(source, address),
             "--target",
             target,
         ],
@@ -388,7 +396,7 @@ def test_setup_points_the_foreign_server_where_source_points(source: str, target
 
     assert result.exit_code == 0, result.output
     options = _foreign_servers(target)[_SERVER]
-    assert (options["host"], options["dbname"]) == ("127.0.0.1", _db_name(source))
+    assert (options["host"], options["dbname"]) == (address, _db_name(source))
 
 
 def test_a_source_that_resolves_to_nothing_is_a_configuration_error(
