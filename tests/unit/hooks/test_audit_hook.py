@@ -167,3 +167,54 @@ class TestAuditHook:
             assert params[0] == "unknown"  # migration default
             assert params[1] == "unknown"  # direction default
             assert params[3] == "system"  # executed_by default
+
+
+class TestTheConnectionFactory:
+    """``AuditConfig.connection_factory`` opens the audit connection (#799)."""
+
+    URL = "host=db dbname=app user=auditor"
+
+    @staticmethod
+    def _context() -> HookContext[ExecutionContext]:
+        return HookContext(
+            phase=HookPhase.AFTER_EXECUTE,
+            data=ExecutionContext(metadata={"migration_name": "004_add_label"}),
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_factory_opens_it_with_database_url(self):
+        conn = MagicMock()
+        opened: list[str] = []
+
+        def factory(url: str) -> MagicMock:
+            opened.append(url)
+            return conn
+
+        config = AuditConfig(database_url=self.URL, signing_key="k", connection_factory=factory)
+        with patch("psycopg.connect") as connect:
+            result = await AuditHook(config).execute(self._context())
+
+        assert result.success is True, result.error
+        connect.assert_not_called()
+        assert opened == [self.URL]
+        conn.__enter__.return_value.execute.assert_called()
+        conn.__exit__.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_without_one_psycopg_opens_database_url_as_given(self):
+        config = AuditConfig(database_url=self.URL, signing_key="k")
+        with patch("psycopg.connect") as connect:
+            await AuditHook(config).execute(self._context())
+
+        connect.assert_called_once_with(self.URL)
+
+    @pytest.mark.asyncio
+    async def test_a_factory_that_cannot_connect_fails_the_hook(self):
+        def factory(_url: str) -> MagicMock:
+            raise psycopg.OperationalError("refused")
+
+        config = AuditConfig(database_url=self.URL, signing_key="k", connection_factory=factory)
+        result = await AuditHook(config).execute(self._context())
+
+        assert result.success is False
+        assert result.error == "refused"

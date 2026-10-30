@@ -11,6 +11,7 @@ import contextlib
 import logging
 import re
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,6 +103,16 @@ class BackupConfig:
     optionally with a level (``zstd:9``). ``compress`` is the older switch:
     ``True`` means ``gzip``, ``False`` means ``none``.
 
+    ``database_url`` is a URI or a libpq keyword conninfo; either way its
+    password reaches ``pg_dump`` in ``PGPASSWORD``, never on argv.
+
+    ``env``, when given, is the whole environment of ``pg_dump`` and of
+    ``pg_dump --version``: nothing of the process environment reaches them, so
+    an ambient ``PGHOSTADDR``, ``PGOPTIONS`` or ``PGSERVICE`` cannot change
+    which server is dumped or what. It must carry a ``PATH`` that finds
+    ``pg_dump`` (without one, the system default path is searched). ``None``
+    (the default) inherits the process environment.
+
     The constructor never refuses a value: a caller that registers hooks
     best-effort would drop the backup silently. A value it cannot use is refused
     when the hook runs, as a failed :class:`HookResult` (see :meth:`method`).
@@ -112,6 +123,7 @@ class BackupConfig:
     compress: bool | None = None
     max_backups: int = 10  # retention: keep N most recent
     compression: str | None = None
+    env: Mapping[str, str] | None = None
 
     def __post_init__(self) -> None:
         if self.compress is not None:
@@ -184,12 +196,17 @@ class BackupHook(Hook[ExecutionContext]):
         if isinstance(compression, str):
             return _refused(compression)
 
+        try:
+            target, password = split_password(self._config.database_url)
+        except ValueError as exc:
+            return _refused(str(exc))
+
         ctx = context.get_data()
         migration_name = ctx.metadata.get("migration_name", "unknown_migration")
         backup_dir = Path(self._config.backup_dir)
 
         try:
-            version = await _pg_dump_version()
+            version = await _pg_dump_version(self._config.env)
             major = client_major(version)
             if compression.method in {"zstd", "lz4"} and (
                 major is not None and major < _METHOD_SYNTAX_MAJOR
@@ -200,12 +217,9 @@ class BackupHook(Hook[ExecutionContext]):
                 )
             backup_dir.mkdir(parents=True, exist_ok=True)
             backup_path = backup_dir / f"{migration_name}{compression.suffix}"
-            failure = await self._dump(compression, backup_path, major)
+            failure = await self._dump(compression, backup_path, major, target, password)
         except FileNotFoundError:
-            return HookResult(
-                success=False,
-                error="pg_dump not found. Install PostgreSQL client tools.",
-            )
+            return HookResult(success=False, error=self._not_found())
         if failure is not None:
             return HookResult(success=False, error=failure)
 
@@ -218,22 +232,26 @@ class BackupHook(Hook[ExecutionContext]):
         )
 
     async def _dump(
-        self, compression: Compression, backup_path: Path, major: int | None
+        self,
+        compression: Compression,
+        backup_path: Path,
+        major: int | None,
+        target: str,
+        password: str | None,
     ) -> str | None:
-        """Run ``pg_dump`` into a partial file; ``None`` once it is the backup.
+        """Run ``pg_dump`` on *target* into a partial file; ``None`` once it is the backup.
 
-        The password rides in PGPASSWORD, never on argv, where ``ps aux`` would
+        *password* rides in PGPASSWORD, never on argv, where ``ps aux`` would
         show it to every user on the host. Whatever happens, no partial file
         is left behind.
         """
         partial = backup_path.with_name(f"{backup_path.name}.partial")
-        safe_url, password = split_password(self._config.database_url)
         try:
             proc = await asyncio.create_subprocess_exec(
-                *pg_dump_argv(compression, partial, safe_url, major),
+                *pg_dump_argv(compression, partial, target, major),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
-                env=libpq_env(password),
+                env=libpq_env(password, base=self._config.env),
             )
             try:
                 _, stderr = await proc.communicate()
@@ -253,6 +271,15 @@ class BackupHook(Hook[ExecutionContext]):
         finally:
             partial.unlink(missing_ok=True)
 
+    def _not_found(self) -> str:
+        """The error for a ``pg_dump`` the child's ``PATH`` does not hold."""
+        if self._config.env is None:
+            return "pg_dump not found. Install PostgreSQL client tools."
+        return (
+            "pg_dump not found on the PATH of BackupConfig.env. "
+            "Install PostgreSQL client tools there."
+        )
+
     def _enforce_retention(self, backup_dir: Path) -> None:
         """Keep only the N most recent backups, whatever method wrote them."""
         backups = {path for suffix in SUFFIXES.values() for path in backup_dir.glob(f"*{suffix}")}
@@ -262,13 +289,17 @@ class BackupHook(Hook[ExecutionContext]):
             logger.debug("Removed old backup: %s", old)
 
 
-async def _pg_dump_version() -> str:
-    """What ``pg_dump --version`` prints (empty when it prints nothing usable)."""
+async def _pg_dump_version(env: Mapping[str, str] | None) -> str:
+    """What ``pg_dump --version`` prints (empty when it prints nothing usable).
+
+    It runs in *env*, or inherits the process environment when there is none.
+    """
     proc = await asyncio.create_subprocess_exec(
         "pg_dump",
         "--version",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
+        env=None if env is None else dict(env),
     )
     stdout, _ = await proc.communicate()
     return stdout.decode(errors="replace") if stdout else ""

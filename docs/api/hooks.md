@@ -65,9 +65,41 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
     m.up()
 ```
 
-> `BackupConfig` accepts `compression` (default `"zstd"`) and `max_backups`
-> (default `10`). `AuditConfig` accepts an `environment` label (default
-> `"unknown"`).
+> `BackupConfig` accepts `compression` (default `"zstd"`), `max_backups`
+> (default `10`) and `env` (default `None`). `AuditConfig` accepts an
+> `environment` label (default `"unknown"`) and a `connection_factory`
+> (default `None`).
+
+### The connection the hooks use
+
+Both hooks take `database_url` as a URI (`postgresql://…`) or a libpq keyword
+conninfo (`host=db dbname=app user=deploy`). libpq fills every keyword the URL
+leaves out from the process environment, so an ambient `PGHOSTADDR`,
+`PGOPTIONS`, `PGSERVICE`, `PGSSLMODE` or `PGUSER` in the shell that runs the
+migration would decide part of which server, role or session a hook gets. A
+caller that pins its session pins the hooks the same way:
+
+```python
+BackupConfig(
+    backup_dir=Path("backups"),
+    database_url=dsn,
+    env={"PATH": "/usr/lib/postgresql/18/bin:/usr/bin", "PGSSLMODE": "verify-full"},
+)
+AuditConfig(database_url=dsn, signing_key="…", connection_factory=open_pinned)
+```
+
+- `BackupConfig.env` is the whole environment of `pg_dump` and of
+  `pg_dump --version`: nothing of the process environment reaches them. `pg_dump`
+  is looked up on its `PATH`; when it is not there the hook fails naming
+  `BackupConfig.env`. `None` inherits the process environment, as before.
+- The password, in a URI's userinfo, its `?password=` or a conninfo's
+  `password=`, reaches `pg_dump` in `PGPASSWORD`, never on argv, where `ps`
+  would show it to every user on the host. A conninfo libpq cannot read fails
+  the hook before anything runs.
+- `AuditConfig.connection_factory` has the `Callable[[str], Connection]` shape
+  `Migrator.from_config(connection_factory=…)` takes: the hook calls it with
+  `database_url` on every run and closes the connection it returns. Without
+  one, `psycopg.connect(database_url)` opens it.
 
 ### The backup file
 

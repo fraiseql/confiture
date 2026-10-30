@@ -30,6 +30,7 @@ SAFE_URL = "postgresql://test@localhost/test"
 
 FAKE_PG_DUMP = """#!/bin/sh
 echo "$@" >> "$FAKE_PG_DUMP_LOG"
+{ echo "== $1"; env | grep '^PG' | sort; } >> "$FAKE_PG_DUMP_LOG.env"
 if [ "$1" = "--version" ]; then
     echo "pg_dump (PostgreSQL) $FAKE_PG_DUMP_VERSION"
     exit 0
@@ -316,3 +317,123 @@ class TestTheClientVersion:
         assert result.success is True, result.error
         assert (tmp_path / "backups" / "003_add_users.sql.gz").exists()
         assert "--compress=6" in _dump_argv(fake_pg_dump)
+
+
+#: What an ambient shell sets that would send the dump elsewhere or change it (#799).
+POISON = {
+    "PGHOSTADDR": "203.0.113.9",
+    "PGOPTIONS": "-c search_path=evil",
+    "PGSERVICE": "evil",
+}
+
+
+def _child_envs(log: Path) -> dict[str, dict[str, str]]:
+    """Each child's ``PG*`` environment, keyed ``--version`` or ``dump``."""
+    envs: dict[str, dict[str, str]] = {}
+    current: dict[str, str] = {}
+    for line in Path(f"{log}.env").read_text().splitlines():
+        if line.startswith("== "):
+            current = envs.setdefault("--version" if line == "== --version" else "dump", {})
+        else:
+            key, _, value = line.partition("=")
+            current[key] = value
+    return envs
+
+
+def _scoped_env(log: Path, **extra: str) -> dict[str, str]:
+    """A whole environment for the children: the fake's own variables, nothing ambient."""
+    keep = ("PATH", "FAKE_PG_DUMP_LOG", "FAKE_PG_DUMP_VERSION", "FAKE_PG_DUMP_EXIT")
+    return {key: os.environ[key] for key in keep} | extra
+
+
+class TestTheChildEnvironment:
+    """``BackupConfig.env`` is the whole environment of every ``pg_dump`` (#799)."""
+
+    @pytest.mark.asyncio
+    async def test_without_env_the_ambient_environment_reaches_both_children(
+        self, tmp_path, fake_pg_dump, monkeypatch
+    ):
+        for key, value in POISON.items():
+            monkeypatch.setenv(key, value)
+
+        result = await BackupHook(_config(tmp_path)).execute(_context())
+
+        assert result.success is True, result.error
+        envs = _child_envs(fake_pg_dump)
+        assert envs["--version"].items() >= POISON.items()
+        assert envs["dump"].items() >= {**POISON, "PGPASSWORD": "secret"}.items()
+        assert "PGPASSWORD" not in envs["--version"]
+
+    @pytest.mark.asyncio
+    async def test_env_keeps_the_ambient_environment_from_both_children(
+        self, tmp_path, fake_pg_dump, monkeypatch
+    ):
+        for key, value in POISON.items():
+            monkeypatch.setenv(key, value)
+        env = _scoped_env(fake_pg_dump, PGSSLMODE="verify-full")
+
+        result = await BackupHook(_config(tmp_path, env=env)).execute(_context())
+
+        assert result.success is True, result.error
+        assert _child_envs(fake_pg_dump) == {
+            "--version": {"PGSSLMODE": "verify-full"},
+            "dump": {"PGSSLMODE": "verify-full", "PGPASSWORD": "secret"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_env_is_never_mutated(self, tmp_path, fake_pg_dump):
+        env = _scoped_env(fake_pg_dump)
+        before = dict(env)
+
+        await BackupHook(_config(tmp_path, env=env)).execute(_context())
+
+        assert env == before
+
+    @pytest.mark.asyncio
+    async def test_a_path_in_env_without_pg_dump_names_env(self, tmp_path):
+        empty = tmp_path / "empty"
+        empty.mkdir()
+
+        result = await BackupHook(_config(tmp_path, env={"PATH": str(empty)})).execute(_context())
+
+        assert result.success is False
+        assert result.error == (
+            "pg_dump not found on the PATH of BackupConfig.env. "
+            "Install PostgreSQL client tools there."
+        )
+
+
+class TestAConninfoDatabaseUrl:
+    """A libpq keyword conninfo works, and its password still never reaches argv."""
+
+    @pytest.mark.asyncio
+    async def test_its_password_travels_in_pgpassword(self, tmp_path, fake_pg_dump):
+        conninfo = "host=localhost dbname=test user=test password='s3 cret'"
+        config = BackupConfig(backup_dir=tmp_path / "backups", database_url=conninfo)
+
+        result = await BackupHook(config).execute(_context())
+
+        assert result.success is True, result.error
+        argv_line = fake_pg_dump.read_text()
+        assert "s3" not in argv_line
+        assert "cret" not in argv_line
+        assert sorted(_dump_argv(fake_pg_dump)[-3:]) == [
+            "dbname=test",
+            "host=localhost",
+            "user=test",
+        ]
+        assert _child_envs(fake_pg_dump)["dump"]["PGPASSWORD"] == "s3 cret"
+
+    @pytest.mark.asyncio
+    async def test_one_libpq_cannot_read_is_refused_before_anything_runs(self, tmp_path):
+        config = BackupConfig(
+            backup_dir=tmp_path / "backups", database_url="host=db password='secret"
+        )
+        with patch("asyncio.create_subprocess_exec") as spawn:
+            result = await BackupHook(config).execute(_context())
+
+        spawn.assert_not_called()
+        assert result.success is False
+        assert result.error == (
+            "backup refused: the connection string is not a conninfo libpq can read"
+        )
