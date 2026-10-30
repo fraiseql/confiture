@@ -119,9 +119,11 @@ result = DatabaseRestorer().restore(opts)
 - The `--min-tables` check connects in-process, so it cannot be handed an
   environment. It is given every libpq key instead, read from `env` or libpq's
   default: `options` is empty whatever `PGOPTIONS` the process holds, and the
-  role is `username`, then `env["PGUSER"]`, then the OS user. A few keys read an
+  role is `username`, then `env["PGUSER"]`, then the OS user. `sslcertmode`,
+  `min_protocol_version` and `max_protocol_version` refuse an empty value, so when
+  `env` leaves them out they get what libpq gives a clean environment: `allow`,
+  `3.0`, and `3.0` — or `latest` when the minimum is above 3.0. Three keys read an
   empty value as a value rather than as unset (`service`, `require_auth`,
-  `sslcertmode`, `min_protocol_version`, `max_protocol_version`,
   `connect_timeout`) and are passed only when `env` sets them; an ambient
   `PGSERVICE` can still name a service there, which fills only keys left unset —
   never the host, port, database, role, password or options.

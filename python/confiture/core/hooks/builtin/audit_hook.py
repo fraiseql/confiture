@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import psycopg
@@ -31,11 +32,20 @@ CREATE TABLE IF NOT EXISTS {AUDIT_TABLE:i} (
 
 @dataclass(frozen=True)
 class AuditConfig:
-    """Configuration for audit logging hook."""
+    """Configuration for audit logging hook.
+
+    ``database_url`` is a URI or a libpq keyword conninfo. libpq fills every
+    keyword it leaves out from the process environment (``PGHOSTADDR``,
+    ``PGOPTIONS``, ``PGSERVICE``, …) unless ``connection_factory`` decides how
+    the connection is opened: the same ``Callable[[str], Connection]`` shape
+    ``Migrator.from_config`` takes. The hook calls it with ``database_url`` on
+    every run and closes the connection it returns.
+    """
 
     database_url: str
     signing_key: str  # HMAC-SHA256 key
     environment: str = "unknown"
+    connection_factory: Callable[[str], psycopg.Connection] | None = None
 
 
 class AuditHook(Hook[ExecutionContext]):
@@ -73,7 +83,7 @@ class AuditHook(Hook[ExecutionContext]):
         signature = self._sign(record)
 
         try:
-            with psycopg.connect(self._config.database_url) as conn:
+            with self._connect() as conn:
                 conn.execute(AUDIT_DDL)
                 conn.execute(
                     t"""
@@ -94,6 +104,13 @@ class AuditHook(Hook[ExecutionContext]):
         except psycopg.Error as exc:
             logger.warning("Audit logging failed: %s", exc)
             return HookResult(success=False, error=str(exc))
+
+    def _connect(self) -> psycopg.Connection:
+        """The audit connection: opened by ``connection_factory``, else by psycopg."""
+        factory = self._config.connection_factory
+        if factory is None:
+            return psycopg.connect(self._config.database_url)
+        return factory(self._config.database_url)
 
     def _sign(self, record: dict) -> str:
         """Create HMAC-SHA256 signature for tamper detection."""

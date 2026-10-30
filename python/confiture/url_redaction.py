@@ -21,6 +21,9 @@ import re
 from collections.abc import Mapping
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 
+from psycopg import ProgrammingError
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
 _PASSWORD_KEY = "password"
 
 #: A URI's ``scheme://user:password@``, read the way libpq reads it: the
@@ -28,6 +31,14 @@ _PASSWORD_KEY = "password"
 #: ``?``, a quote or a ``:`` — which ``urlparse`` would take for a fragment, a
 #: query or a port, and hand back only part of (#464).
 _USERINFO = re.compile(r"^(?P<head>[A-Za-z][A-Za-z0-9+.-]*://[^:/@]*):(?P<password>[^/@]*)@")
+
+#: The start of a URL: a DSN without one that holds an ``=`` is libpq's keyword form.
+_SCHEME_START = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+
+
+def _is_keyword_conninfo(dsn: str) -> bool:
+    """Whether libpq reads *dsn* as ``key=value`` pairs rather than a URI or a dbname."""
+    return "=" in dsn and _SCHEME_START.match(dsn) is None
 
 
 def _without_userinfo_password(url: str) -> tuple[str, str | None]:
@@ -70,8 +81,9 @@ def redact_url(url: str, *, bearer: bool = False) -> str:
     """Return *url* with any password replaced by ``***`` (username preserved).
 
     Both places libpq reads a password from are masked: the userinfo
-    (``user:pw@host``) and the ``?password=`` query key. Every other part of the
-    URL is preserved verbatim. This is the only spelling of a DSN that may leave
+    (``user:pw@host``) and the ``?password=`` query key, or a keyword conninfo's
+    ``password=`` (``host=db password=pw``). Every other part of the URL is
+    preserved verbatim. This is the only spelling of a DSN that may leave
     the process — use it before a URL goes into JSON output, a log line or an
     error message.
 
@@ -85,6 +97,8 @@ def redact_url(url: str, *, bearer: bool = False) -> str:
     Returns:
         The URL with its password(s) redacted (unchanged if there is none).
     """
+    if _is_keyword_conninfo(url):
+        return _CONNINFO_PASSWORD.sub(lambda match: f"{match.group(1)}***", url)
     match = _USERINFO.match(url)
     if match is not None and match.group("password"):
         url = f"{match.group('head')}:***@{url[match.end() :]}"
@@ -122,13 +136,20 @@ def split_password(url: str) -> tuple[str, str | None]:
 
     A ``?password=`` query key is removed too; when both spellings are present
     the query key wins, as libpq applies query parameters after the userinfo.
+    A keyword conninfo (``host=db password=pw``) is read by libpq's own parser
+    and written back without its ``password``.
 
     Args:
-        url: A connection URL that may embed a password.
+        url: A connection URL or keyword conninfo that may embed a password.
 
     Returns:
         ``(url_without_password, password)``; ``(url, None)`` when there is none.
+
+    Raises:
+        ValueError: *url* is a keyword conninfo libpq cannot read.
     """
+    if _is_keyword_conninfo(url):
+        return _split_conninfo_password(url)
     stripped, userinfo_password = _without_userinfo_password(url)
     parsed = urlparse(stripped)
     parts = _query_parts(parsed.query)
@@ -140,6 +161,18 @@ def split_password(url: str) -> tuple[str, str | None]:
         return stripped, unquote(raw_password or "")
     query = "&".join(raw for raw, _, is_pw in parts if not is_pw)
     return urlunparse(parsed._replace(query=query)), unquote(raw_password or "")
+
+
+def _split_conninfo_password(conninfo: str) -> tuple[str, str | None]:
+    """:func:`split_password` for libpq's keyword form."""
+    try:
+        params = conninfo_to_dict(conninfo)
+    except ProgrammingError:
+        raise ValueError("the connection string is not a conninfo libpq can read") from None
+    password = params.pop(_PASSWORD_KEY, None)
+    if password is None:
+        return conninfo, None
+    return make_conninfo("", **params), str(password)
 
 
 def libpq_env(

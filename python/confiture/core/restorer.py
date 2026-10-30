@@ -57,10 +57,12 @@ _MATVIEW_DATA_DESC = "MATERIALIZED VIEW DATA"
 #: libpq keys with no compiled default that read ``""`` as unset, checked over a
 #: socket and over TCP with SCRAM. The others read it as a value — libpq looks
 #: ``service=''`` up as a service named "", ``require_auth=''`` refuses every
-#: password method, an empty ``sslcertmode`` or protocol version is invalid, and
-#: psycopg refuses an empty ``connect_timeout`` — so an env-scoped connection
-#: passes them only when ``RestoreOptions.env`` sets them. None names the target,
-#: the role, the password or the session's options, all of which are explicit.
+#: password method, an empty ``sslcertmode`` or protocol version is invalid (those
+#: three get :func:`_clean_default`'s value), and psycopg refuses an empty
+#: ``connect_timeout`` — so an env-scoped connection passes ``service``,
+#: ``require_auth`` and ``connect_timeout`` only when ``RestoreOptions.env`` sets
+#: them. None names the target, the role, the password or the session's options,
+#: all of which are explicit.
 _EMPTY_MEANS_UNSET = frozenset(
     {
         "password",
@@ -922,9 +924,12 @@ def _connection_keys(options: RestoreOptions) -> dict[str, str | int | None]:
 
     Without ``env``, libpq fills any key left unset from the process environment,
     as it always has. With it, every key that has an environment variable is
-    given that ``env``, libpq's compiled default or :data:`_EMPTY_MEANS_UNSET` can
-    give: the target from the options, the rest from ``env`` — an in-process
-    connection cannot be handed an environment of its own.
+    given that ``env``, libpq's compiled default, :func:`_clean_default` or
+    :data:`_EMPTY_MEANS_UNSET` can give: the target from the options, the rest
+    from ``env`` — an in-process connection cannot be handed an environment of
+    its own. Three keys are still read from the process environment when ``env``
+    leaves them out: ``service`` (``''`` is a lookup of a service named ""),
+    ``require_auth`` (it can only refuse a connection) and ``connect_timeout``.
     """
     if options.env is None:
         return {
@@ -942,6 +947,8 @@ def _connection_keys(options: RestoreOptions) -> dict[str, str | int | None]:
         value = options.env.get(option.envvar.decode())
         if value is None and option.compiled is not None:
             value = option.compiled.decode()
+        if value is None:
+            value = _clean_default(keyword, options.env)
         if value is None and keyword in _EMPTY_MEANS_UNSET:
             value = ""
         if value is not None:
@@ -955,6 +962,23 @@ def _connection_keys(options: RestoreOptions) -> dict[str, str | int | None]:
     if options.password is not None:
         keys["password"] = options.password
     return keys
+
+
+def _clean_default(keyword: str, env: Mapping[str, str]) -> str | None:
+    """The value libpq gives *keyword* with no environment, where it refuses ``""``.
+
+    libpq 18 derives an unset ``max_protocol_version`` from the minimum: ``3.0``
+    unless the minimum is above it, then ``latest``.
+    """
+    match keyword:
+        case "sslcertmode":
+            return "allow"
+        case "min_protocol_version":
+            return "3.0"
+        case "max_protocol_version":
+            return "3.0" if env.get("PGMINPROTOCOLVERSION", "3.0") == "3.0" else "latest"
+        case _:
+            return None
 
 
 def _os_user() -> str:

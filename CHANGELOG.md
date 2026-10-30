@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The built-in hooks take the caller's connection, not the process environment** (#799).
+  `BackupHook` ran `pg_dump` (and `pg_dump --version`) with a copy of `os.environ`, and
+  `AuditHook` opened `psycopg.connect(database_url)`, so an ambient `PGHOSTADDR`, `PGOPTIONS`,
+  `PGSERVICE`, `PGSSLMODE` or `PGUSER` in the shell running a migration decided part of which
+  server, role or session they reached, even for a caller whose session was pinned through
+  `Migrator.from_config(connection_factory=…)`. `BackupConfig.env` is now the whole environment of
+  both `pg_dump` children (`PGPASSWORD` laid on top), and `AuditConfig.connection_factory`, the
+  same `Callable[[str], Connection]` shape, opens the audit connection, which the hook closes.
+  Without them, both hooks behave exactly as before.
+- **`RestoreOptions.env` pins the keys libpq refuses empty.** The `--min-tables` connection left
+  `sslcertmode`, `min_protocol_version` and `max_protocol_version` to the process environment
+  when `env` did not set them; it now gives them what libpq gives a clean environment: `allow`,
+  `3.0`, and `3.0`, or `latest` when the minimum is above 3.0. `service`, `require_auth` and
+  `connect_timeout` are still passed only when `env` sets them.
+
+### Fixed
+
+- **A keyword conninfo's password no longer reaches argv.** `split_password` read only a URI, so
+  a `database_url` such as `host=db password=secret` was handed to the backup's `pg_dump` (and to
+  every other `psql` or `pg_dump` child confiture starts from a connection string) whole, where
+  `ps` shows it; it is now
+  parsed by libpq's own parser and its password moved to `PGPASSWORD`. `redact_url` masks a
+  conninfo's `password=` too.
+
 ## [1.43.0] - 2026-10-28
 
 ### Added

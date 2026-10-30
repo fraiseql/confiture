@@ -1405,3 +1405,50 @@ class TestEnvScopesTheTableCount:
             "user": "u",
             "password": "p",
         }
+
+
+class TestEnvPinsTheCleanEnvironmentValues:
+    """The keys libpq refuses empty get the value a clean environment gives (#799)."""
+
+    def _keys(self, monkeypatch, env: dict[str, str]) -> dict:
+        return TestEnvScopesTheTableCount()._connect_kwargs(monkeypatch, env=env)
+
+    @staticmethod
+    def _poison_protocol(monkeypatch) -> None:
+        monkeypatch.setenv("PGSSLCERTMODE", "require")
+        monkeypatch.setenv("PGMINPROTOCOLVERSION", "3.2")
+        monkeypatch.setenv("PGMAXPROTOCOLVERSION", "3.0")
+
+    def test_an_env_without_them_pins_libpqs_defaults(self, monkeypatch):
+        self._poison_protocol(monkeypatch)
+        kwargs = self._keys(monkeypatch, env={})
+        assert (
+            kwargs["sslcertmode"],
+            kwargs["min_protocol_version"],
+            kwargs["max_protocol_version"],
+        ) == ("allow", "3.0", "3.0")
+
+    @pytest.mark.parametrize("minimum", ["3.2", "latest"])
+    def test_a_minimum_above_3_0_lifts_the_maximum_to_latest(self, monkeypatch, minimum):
+        self._poison_protocol(monkeypatch)
+        kwargs = self._keys(monkeypatch, env={"PGMINPROTOCOLVERSION": minimum})
+        assert (kwargs["min_protocol_version"], kwargs["max_protocol_version"]) == (
+            minimum,
+            "latest",
+        )
+
+    def test_env_values_are_kept(self, monkeypatch):
+        self._poison_protocol(monkeypatch)
+        kwargs = self._keys(
+            monkeypatch,
+            env={
+                "PGSSLCERTMODE": "disable",
+                "PGMINPROTOCOLVERSION": "3.2",
+                "PGMAXPROTOCOLVERSION": "3.2",
+            },
+        )
+        assert (
+            kwargs["sslcertmode"],
+            kwargs["min_protocol_version"],
+            kwargs["max_protocol_version"],
+        ) == ("disable", "3.2", "3.2")

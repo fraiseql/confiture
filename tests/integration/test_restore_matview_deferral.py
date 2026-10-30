@@ -18,6 +18,7 @@ from pathlib import Path
 import psycopg
 import psycopg.sql
 import pytest
+from psycopg import pq
 from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
 
 from confiture.core.restorer import DatabaseRestorer, RestoreOptions
@@ -192,3 +193,37 @@ def test_env_scoped_restore_is_untouched_by_ambient_libpq_variables(
     assert result.table_count == 1
     assert result.phases_completed[-1] == "refresh-matviews"
     assert _matview_is_populated(server_url, fresh_target, "mv_bucket_totals") is True
+
+
+@pytest.mark.skipif(
+    "max_protocol_version" not in {o.keyword.decode() for o in pq.Conninfo.get_defaults()},
+    reason="this libpq has no protocol-version keys",
+)
+def test_env_scoped_table_count_pins_the_protocol_range(
+    server_url: str,
+    fresh_target: str,
+    tmp_path: Path,
+    restore_connection_kwargs: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An ambient protocol range libpq cannot satisfy never reaches ``--min-tables`` (#799).
+
+    libpq refuses an empty ``min_protocol_version``/``max_protocol_version``, so an
+    ``env`` that leaves them out gets the values a clean environment gives.
+    """
+    artifact = _build_matview_artifact(server_url, tmp_path)
+    monkeypatch.setenv("PGMINPROTOCOLVERSION", "3.2")
+    monkeypatch.setenv("PGMAXPROTOCOLVERSION", "3.0")
+
+    result = DatabaseRestorer().restore(
+        _restore_options(
+            artifact,
+            fresh_target,
+            restore_connection_kwargs,
+            env={"PATH": os.environ["PATH"]},
+            min_tables=1,
+        )
+    )
+
+    assert result.success, result.errors
+    assert result.table_count == 1

@@ -8,6 +8,7 @@ moving it into the `PGPASSWORD` environment variable.
 import time
 
 import pytest
+from psycopg.conninfo import conninfo_to_dict
 
 from confiture.url_redaction import (
     libpq_env,
@@ -152,3 +153,54 @@ def test_a_long_run_of_scheme_characters_is_scanned_in_linear_time() -> None:
         return time.perf_counter() - start
 
     assert cost(large) < max(cost(small) * 8, 0.05)
+
+
+class TestKeywordConninfo:
+    """A libpq keyword conninfo carries its password in ``password=`` (#799)."""
+
+    @pytest.mark.parametrize(
+        ("conninfo", "password"),
+        [
+            ("host=db dbname=app user=app password=secret", "secret"),
+            ("host=db password='with space' dbname=app", "with space"),
+            (r"host=db password='it\'s' dbname=app", "it's"),
+            ("host=db  password = Pa#ss  dbname=app", "Pa#ss"),
+        ],
+    )
+    def test_split_password_takes_it_out(self, conninfo: str, password: str) -> None:
+        safe, found = split_password(conninfo)
+
+        assert found == password
+        assert conninfo_to_dict(safe) == {"host": "db", "dbname": "app"} | (
+            {"user": "app"} if "user=" in conninfo else {}
+        )
+
+    def test_a_conninfo_without_one_is_unchanged(self) -> None:
+        conninfo = "host=db dbname=app sslmode=require"
+
+        assert split_password(conninfo) == (conninfo, None)
+
+    def test_a_bare_dbname_is_unchanged(self) -> None:
+        assert split_password("app") == ("app", None)
+
+    @pytest.mark.parametrize(
+        "conninfo",
+        [
+            "host=db password=secret dbname=app",
+            "host=db password='with space' dbname=app",
+            "host=db PASSWORD = secret dbname=app",
+        ],
+    )
+    def test_redact_url_masks_it(self, conninfo: str) -> None:
+        masked = redact_url(conninfo)
+
+        assert "secret" not in masked
+        assert "with space" not in masked
+        assert "***" in masked
+        assert "host=db" in masked
+
+    def test_one_libpq_cannot_read_is_refused_without_its_password(self) -> None:
+        with pytest.raises(ValueError, match="not a conninfo libpq can read") as raised:
+            split_password("host=db password='unterminated secret")
+
+        assert "secret" not in str(raised.value)
