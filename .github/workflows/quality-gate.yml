@@ -419,24 +419,18 @@ jobs:
     - name: Run the TVIEW suites
       env:
         CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+      # ci/pg-tviews/suites.txt is the one list: pg_tviews runs the same file
+      # against a release candidate. A skip fails the leg: past the preflight, a
+      # skipped TVIEW test is one that ran against nothing.
       run: |
-        uv run pytest \
-          tests/integration/test_tview_live.py \
-          tests/integration/test_tview_indexes_live.py \
-          tests/integration/test_tview_diff.py \
-          tests/integration/test_diff_from_a_database.py \
-          tests/integration/test_drift_agrees_with_diff.py \
-          tests/integration/test_tview_migrate.py \
-          tests/integration/test_tview_restore.py \
-          tests/integration/test_generated_examples_apply.py \
-          tests/integration/test_generated_migration_meets_views.py \
-          tests/unit/test_tview_model.py \
-          tests/unit/test_tview_ddl.py \
-          tests/unit/test_tview_indexes.py \
-          tests/unit/test_drift_tviews.py \
-          tests/unit/test_pg_tviews_contract.py \
-          tests/unit/test_pg_tviews_registry.py \
-          -q -rs -p no:randomly
+        mapfile -t suites < <(grep -v -e '^#' -e '^[[:space:]]*$' ci/pg-tviews/suites.txt)
+        uv run pytest "${suites[@]}" -q -rs -p no:randomly --junitxml=tview-suites.xml
+        uv run python -c "
+        import sys, xml.etree.ElementTree as ET
+        suite = ET.parse('tview-suites.xml').getroot().find('testsuite')
+        skipped = int(suite.get('skipped'))
+        sys.exit(f'{skipped} TVIEW test(s) skipped' if skipped else 0)
+        "
 
   wheel-python-314:
     name: Wheel on Python 3.14
