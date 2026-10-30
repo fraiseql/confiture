@@ -205,13 +205,15 @@ def test_a_generated_migration_carries_the_policy_the_tree_declares(
 
 
 #: A TVIEW reading the time and a table inside a STABLE function, declaring both
-#: (fraiseql/pg_tviews#193): the function unqualified, its table on the path. A
-#: declared table is a read no cascade reaches, so its policy rebuilds the TVIEW.
+#: (fraiseql/pg_tviews#193): the function and the declared table unqualified, on
+#: the path. The function's body names its table: pg_tviews fills and refreshes a
+#: TVIEW under search_path = pg_catalog, pg_temp (0.1.0-beta.34). A declared table
+#: is a read no cascade reaches, so its policy rebuilds the TVIEW.
 READS = """
 CREATE TABLE tb_setting (code text PRIMARY KEY, value text);
 CREATE TABLE tb_locale (code text PRIMARY KEY);
 CREATE FUNCTION label_suffix() RETURNS text STABLE LANGUAGE sql
-    AS $f$ SELECT value FROM tb_setting WHERE code = 'label_suffix' $f$;
+    AS $f$ SELECT value FROM public.tb_setting WHERE code = 'label_suffix' $f$;
 CREATE TABLE tb_contract (pk_contract bigint PRIMARY KEY, id uuid NOT NULL UNIQUE,
                           name text, end_date date);
 SELECT tviews.pg_tviews_create_or_replace('tv_contract', $q$
