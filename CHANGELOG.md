@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`tview_001` no longer warns on an index over an `updated_at` the TVIEW's definition
+  projects** (#795). pg_tviews 0.1.0-beta.33 and earlier add `updated_at` to a TVIEW's table
+  and rewrite it on every refresh; from 0.1.0-beta.34 the table holds only the definition's
+  columns, and a projected `updated_at` is the base row's, which a refresh changes only when
+  that row's does, so an index over it leaves the refresh HOT (measured on a beta.34 server).
+  The rule now counts `updated_at` only where the definition does not project it, which is
+  right under both releases; `data` is counted always, and a definition whose outputs cannot be
+  named (a `*`) keeps the warning.
+
+### Changed
+
+- **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.34.** `MINIMUM_PG_TVIEWS` stays
+  0.1.0-beta.30: beta.34 keeps read contract 2 and the registry confiture reads (the fixtures,
+  recaptured at beta.34, are byte-identical), and the lint is right under both sides of its
+  change, so there is no reading reason to refuse beta.30–33.
+
 ## [1.44.0] - 2026-10-30
 
 ### Added

@@ -23,9 +23,10 @@ TRACER = PACKAGE / "core" / "linting" / "tenant" / "trace.py"
 _TARGET_LIST = "targetList"
 
 ALLOWED: dict[str, str] = {
-    "core.ddl_objects:output_columns": (
-        "the *names* a view outputs, so a generated migration knows whether "
-        "CREATE OR REPLACE VIEW can keep them — never where a column comes from"
+    "core.ddl_walk:query_outputs": (
+        "the *names* a view or a TVIEW's query outputs, so a generated migration knows "
+        "whether CREATE OR REPLACE VIEW can keep them and tview_001 whether a TVIEW "
+        "projects its own updated_at — never where a column comes from"
     ),
     "core.ddl_walk:_comparable": (
         "an expression read as `SELECT <expr>` to compare its value: the one expression, "

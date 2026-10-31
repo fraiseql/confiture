@@ -16,15 +16,22 @@ from typing import TYPE_CHECKING
 import pglast
 import pglast.parser
 
-from confiture.core.ddl_walk import walk_nodes
+from confiture.core.ddl_walk import query_outputs, tview_query_tree, walk_nodes
 from confiture.core.linting.inventory import distinct
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
     from confiture.core.schema_model import Index
 
-#: The columns every refresh rewrites: an index over one is never HOT.
-_REWRITTEN = frozenset({"data", "updated_at"})
+#: The column every refresh rewrites: an index over it is never HOT.
+_REWRITTEN = "data"
+
+#: The row write time pg_tviews 0.1.0-beta.33 and earlier add to a TVIEW's table
+#: and rewrite on every refresh. From 0.1.0-beta.34 the table holds only what the
+#: definition outputs (#795), and a definition that projects its own ``updated_at``
+#: (which failed before) holds the base row's: so it is pg_tviews' own, and
+#: rewritten, exactly when the definition does not project it.
+_STAMP = "updated_at"
 
 #: ``(code, rule name, severity, object, message, fix, line)``.
 Finding = tuple[str, str, str, str, str, str | None, str | None, int]
@@ -41,16 +48,23 @@ def tview_findings(inventory: Inventory, *, has_replicas: bool = False) -> Itera
 
 
 def _hot_blockers(tview: SchemaObject) -> Iterator[Finding]:
+    rewritten = {_REWRITTEN} if _projects_stamp(tview) else {_REWRITTEN, _STAMP}
     for index in tview.indexes:
-        covered = sorted(_REWRITTEN.intersection(_referenced(index)))
+        covered = sorted(rewritten.intersection(_referenced(index)))
         if covered:
+            stamp = (
+                f". Its {_STAMP} is the one pg_tviews 0.1.0-beta.33 and earlier add; from "
+                "0.1.0-beta.34 the table has none unless the definition projects it"
+                if _STAMP in covered
+                else ""
+            )
             yield (
                 "tview_001",
                 "TVIEW Index Blocks HOT",
                 "warning",
                 tview.qualified,
                 f"TVIEW {tview.qualified}: index {index.name or '(unnamed)'} covers "
-                f"{', '.join(covered)}, which every refresh rewrites: no update is HOT",
+                f"{', '.join(covered)}, which every refresh rewrites: no update is HOT{stamp}",
                 None,
                 *tview.index_sites.get(index, (tview.file, tview.line)),
             )
@@ -69,6 +83,22 @@ def _unlogged(tview: SchemaObject) -> Iterator[Finding]:
             tview.file,
             tview.line,
         )
+
+
+def _projects_stamp(tview: SchemaObject) -> bool:
+    """Whether *tview*'s definition outputs an ``updated_at`` of its own.
+
+    A definition whose outputs cannot all be named (a ``*``), or that does not
+    parse, is read as not: the reading of pg_tviews 0.1.0-beta.33 and earlier, so
+    the warning stands.
+    """
+    if tview.tview is None:
+        return False
+    try:
+        outputs = query_outputs(tview_query_tree(tview.tview.definition))
+    except pglast.parser.ParseError, IndexError:
+        return False
+    return _STAMP in (outputs or ())
 
 
 def _referenced(index: Index) -> set[str]:

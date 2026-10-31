@@ -558,6 +558,41 @@ def tview_query_tree(text: str) -> Any:
     return pglast.parse_sql(text)[0].stmt
 
 
+def query_outputs(query: Any, aliases: list[str] | None = None) -> tuple[str, ...] | None:
+    """The names of the columns *query* (a parsed ``SELECT``) outputs, in order.
+
+    The names PostgreSQL gives them: *aliases* (a view's column list) first, then
+    each target's alias, the column a reference or a cast of one reads, or the
+    function a call names. ``None`` where one cannot be read: a ``*``, an
+    expression PostgreSQL would call ``?column?``, a ``VALUES`` list.
+    """
+    while query.larg is not None:
+        query = query.larg
+    if not query.targetList:
+        return None
+    names = [_output_name(target) for target in query.targetList]
+    names[: len(aliases or ())] = aliases or []
+    named = tuple(name for name in names if name is not None)
+    return named if len(named) == len(names) else None
+
+
+def _output_name(target: Any) -> str | None:
+    """A target's output column name, as PostgreSQL's ``FigureColname`` gives it."""
+    if target.name:
+        return target.name
+    node = target.val
+    while type(node).__name__ == "TypeCast":
+        node = node.arg
+    match type(node).__name__:
+        case "ColumnRef":
+            last = node.fields[-1]
+            return last.sval if type(last).__name__ == "String" else None
+        case "FuncCall":
+            return node.funcname[-1].sval
+        case _:
+            return None
+
+
 def rendered_query(text: str) -> str:
     """A TVIEW's query as confiture holds it: *text* parsed and rendered.
 

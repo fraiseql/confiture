@@ -3,8 +3,8 @@
 # pg_tviews is in no distribution, so it is built here from a pinned ref with the
 # pgrx version it pins (Cargo.toml: pgrx = "=0.17.0") against PGDG's PostgreSQL 18,
 # and the tree `cargo pgrx package` writes is copied onto the official image of the
-# same Debian release. The ref is the commit of the signed v0.1.0-beta.33 tag
-# (`git rev-parse v0.1.0-beta.33^{commit}`), the newest release. It offers read
+# same Debian release. The ref is the commit of the signed v0.1.0-beta.34 tag
+# (`git rev-parse v0.1.0-beta.34^{commit}`), the newest release. It offers read
 # contract 2, which confiture reads (`registry.options` holding every option, LOGGED
 # by default, the `tview` parameter; ADR 0211/0220), as 0.1.0-beta.30 — the release
 # confiture requires (`MINIMUM_PG_TVIEWS`), the first with the registry's
@@ -21,7 +21,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked cargo-pgrx --version 0.17.0
 RUN cargo pgrx init --pg18 /usr/lib/postgresql/18/bin/pg_config
-ARG PG_TVIEWS_REF=2a76abdbf8a9ff6cbd365a307d22669574ef0a65
+ARG PG_TVIEWS_REF=c36b32686860ecfe057ca55e9218051997156377
 WORKDIR /src
 RUN git init -q \
  && git fetch -q --depth 1 https://github.com/fraiseql/pg_tviews "$PG_TVIEWS_REF" \

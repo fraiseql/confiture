@@ -381,7 +381,7 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="tview_001",
         family="tview",
-        title="No index over data or updated_at on a TVIEW: it blocks HOT",
+        title="No index over data, or pg_tviews' own updated_at, on a TVIEW: it blocks HOT",
         severity="warning",
         default_on=False,
     ),

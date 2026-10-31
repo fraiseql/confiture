@@ -95,3 +95,71 @@ def test_a_plain_table_named_tv_with_a_column_list_is_not_a_tview() -> None:
     )
 
     assert _findings(sql, "tview_001") == []
+
+
+STAMPED = (
+    "CREATE TABLE tb_note (pk_note bigint PRIMARY KEY, id uuid, body text, "
+    "modified_at timestamptz, updated_at timestamptz);\n"
+)
+
+
+@pytest.mark.parametrize(
+    "projection",
+    ["n.updated_at", "n.modified_at AS updated_at", "n.updated_at::timestamptz"],
+)
+def test_an_updated_at_the_definition_projects_is_its_own(projection: str) -> None:
+    """From pg_tviews 0.1.0-beta.34 a refresh writes it only when the base row's changes (#795)."""
+    sql = (
+        STAMPED + f"CREATE TABLE tv_note AS SELECT n.pk_note, n.id, {projection}, "
+        "jsonb_build_object('body', n.body) AS data FROM tb_note n;\n"
+        "CREATE INDEX ix ON tv_note (updated_at);\n"
+    )
+
+    assert _findings(sql, "tview_001") == []
+
+
+def test_a_call_that_projects_updated_at_declares_its_own() -> None:
+    sql = (
+        STAMPED + "SELECT tviews.pg_tviews_create_or_replace('tv_note', $q$SELECT n.pk_note, "
+        "n.id, n.updated_at, jsonb_build_object('body', n.body) AS data FROM tb_note n$q$);\n"
+        "CREATE INDEX ix ON tv_note (updated_at);\n"
+    )
+
+    assert _findings(sql, "tview_001") == []
+
+
+def test_an_updated_at_the_definition_does_not_project_is_pg_tviews_own() -> None:
+    """pg_tviews 0.1.0-beta.33 and earlier add it to the table and rewrite it every refresh."""
+    (finding,) = _findings(TVIEW + "CREATE INDEX ix ON tv_post (updated_at);\n", "tview_001")
+
+    assert "0.1.0-beta.34" in finding.message
+
+
+def test_data_is_rewritten_whatever_the_definition_projects() -> None:
+    sql = (
+        STAMPED + "CREATE TABLE tv_note AS SELECT n.pk_note, n.id, n.updated_at, "
+        "jsonb_build_object('body', n.body) AS data FROM tb_note n;\n"
+        "CREATE INDEX ix ON tv_note (updated_at, (data->>'body'));\n"
+    )
+
+    (finding,) = _findings(sql, "tview_001")
+
+    assert "covers data," in finding.message
+    assert "updated_at" not in finding.message
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["SELECT n.*, jsonb_build_object('body', n.body) AS data FROM tb_note n", "SELECT FROM WHERE"],
+    ids=["star", "unparseable"],
+)
+def test_a_definition_whose_outputs_cannot_be_named_keeps_the_warning(query: str) -> None:
+    """Read as pg_tviews 0.1.0-beta.33 and earlier read it: the stamp is theirs."""
+    sql = (
+        STAMPED + f"SELECT tviews.pg_tviews_create_or_replace('tv_note', $q${query}$q$);\n"
+        "CREATE INDEX ix ON tv_note (updated_at);\n"
+    )
+
+    (finding,) = _findings(sql, "tview_001")
+
+    assert "covers updated_at," in finding.message

@@ -41,7 +41,7 @@ Adopt a rule on a schema that already trips it with a
 | `softdel_002` | softdel | info | with `soft_delete:` | A nullable column in such a key is NULLS NOT DISTINCT |
 | `softdel_003` | softdel | warning | with `soft_delete:` | A view tests the tombstone of every soft-deleting table it reads |
 | `i18n_001` | i18n | warning | with `translations:` | A translation table references its locale and one entity, one row per locale |
-| `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
+| `tview_001` | tview | warning | off | No index over data, or pg_tviews' own updated_at, on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `tview_003` | tview | error | on | A TVIEW's definition reads session state: a setting or the session's identity |
 | `tview_004` | tview | warning | on | A TVIEW calls a non-immutable function its function_reads does not declare |
@@ -1350,11 +1350,18 @@ compares and a generated migration passes.
 
 | Rule | Says | Fix |
 |---|---|---|
-| `tview_001` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
+| `tview_001` | an index covers `data`, or the `updated_at` pg_tviews 0.1.0-beta.33 and earlier add, which every refresh rewrites, so no update is HOT | drop it |
 | `tview_002` | replicas are declared and the TVIEW is pinned UNLOGGED (`CREATE UNLOGGED TABLE`, `SET UNLOGGED`, `"logged": false`): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED`, or drop the `UNLOGGED` pin |
 
 `tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
 removed when it is fixed. `tview_001` sees only the indexes the tree declares.
+
+pg_tviews 0.1.0-beta.33 and earlier add `created_at` and `updated_at` to a TVIEW's table
+and rewrite `updated_at` on every refresh; a definition that projects its own fails. From
+0.1.0-beta.34 the table holds only the definition's columns, and a projected
+`updated_at` is the base row's, which a refresh changes only when that row's does. So
+`tview_001` counts `updated_at` only when the definition does not project it, which is
+right under both: a definition whose outputs it cannot name (a `*`) keeps the warning.
 
 ## Session reads — what a stored projection reads of the session
 
