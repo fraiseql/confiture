@@ -38,6 +38,7 @@ from confiture.core.ddl_walk import (
     TViewOptions,
     object_edits,
     object_kinds,
+    query_outputs,
     storage_pinned,
     tview_calls,
     tview_of,
@@ -522,33 +523,7 @@ def output_columns(obj: DDLObject) -> tuple[str, ...] | None:
     stmt: Any = pglast.parse_sql(obj.create_sql)[0].stmt
     if type(stmt).__name__ != "ViewStmt":
         return None
-    query = stmt.query
-    while query.larg is not None:
-        query = query.larg
-    if not query.targetList:
-        return None
-    names = [_output_name(target) for target in query.targetList]
-    aliases = [alias.sval for alias in stmt.aliases or ()]
-    names[: len(aliases)] = aliases
-    named = tuple(name for name in names if name is not None)
-    return named if len(named) == len(names) else None
-
-
-def _output_name(target: Any) -> str | None:
-    """A target's output column name, as PostgreSQL's ``FigureColname`` gives it."""
-    if target.name:
-        return target.name
-    node = target.val
-    while type(node).__name__ == "TypeCast":
-        node = node.arg
-    match type(node).__name__:
-        case "ColumnRef":
-            last = node.fields[-1]
-            return last.sval if type(last).__name__ == "String" else None
-        case "FuncCall":
-            return node.funcname[-1].sval
-        case _:
-            return None
+    return query_outputs(stmt.query, [alias.sval for alias in stmt.aliases or ()])
 
 
 def _literal(text: str) -> str:

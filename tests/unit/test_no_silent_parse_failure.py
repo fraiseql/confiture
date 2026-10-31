@@ -48,6 +48,10 @@ ALLOWED: dict[str, str] = {
     "python/confiture/core/linting/references.py:temp_relations": (
         "a body the compiler will not return is named unread by read_references (build_003)"
     ),
+    "python/confiture/core/linting/tview_rules.py:_projects_stamp": (
+        "a TVIEW query the parser rejects reads as projecting no updated_at, so tview_001 "
+        "keeps warning; tview_reads names the query unread (tview_003–005 degraded)"
+    ),
     "python/confiture/core/linting/seed_secrets.py:_statement_findings": (
         "a seed file the parser rejects is the lint's UNPARSEABLE notice for that file"
     ),

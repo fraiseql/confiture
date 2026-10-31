@@ -315,8 +315,8 @@ class LintConfig:
                 its tombstone column (``softdel_003``).
             check_translations: ``i18n_001``: each translation table ``translations:``
                 names references its locale and one entity, one row per locale (#657).
-            check_tview_hot: No index over ``data`` or ``updated_at`` on a pg_tviews
-                TVIEW (``tview_001``).
+            check_tview_hot: No index over ``data``, or pg_tviews' own ``updated_at``,
+                on a pg_tviews TVIEW (``tview_001``).
             check_tview_replicas: A TVIEW is made LOGGED where replicas are
                 declared (``tview_002``); needs *has_replicas*.
             has_replicas: Whether the environment declares replicas.

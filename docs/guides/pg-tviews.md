@@ -245,7 +245,7 @@ confiture calls none of them.
 
 `confiture lint --select tview` (off by default) reads the tree:
 
-- `tview_001`: an index over `data` or `updated_at`, which every refresh rewrites, so no update is HOT
+- `tview_001`: an index over `data`, which every refresh rewrites, so no update is HOT; or over `updated_at` where the definition does not project its own, the column pg_tviews 0.1.0-beta.33 and earlier add and rewrite (0.1.0-beta.34 adds none)
 - `tview_002`: replicas declared and the TVIEW pinned UNLOGGED (`CREATE UNLOGGED TABLE`, `SET UNLOGGED` or `options => '{"logged": false}'`): a standby cannot read it. A TVIEW is LOGGED by default
 
 pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts

@@ -4,6 +4,7 @@
 # Every file must run without a skip on a server carrying pg_tviews.
 tests/integration/test_tview_live.py
 tests/integration/test_tview_indexes_live.py
+tests/integration/test_tview_hot_live.py
 tests/integration/test_tview_diff.py
 tests/integration/test_diff_from_a_database.py
 tests/integration/test_drift_agrees_with_diff.py
