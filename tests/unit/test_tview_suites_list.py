@@ -1,7 +1,9 @@
 """``ci/pg-tviews/suites.txt`` is the one list of TVIEW suites (#782).
 
 The quality gate's ``pg-tviews`` leg reads it, and pg_tviews runs the same file
-against a release candidate, so a suite added here reaches both.
+against a release candidate, so a suite added here reaches both. The upgrade suites
+(``upgrade-suites.txt``, #809) need the previous release's install script, which only
+confiture's image carries: the leg runs them too, pg_tviews does not.
 """
 
 import re
@@ -11,13 +13,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SUITES = ROOT / "ci" / "pg-tviews" / "suites.txt"
+UPGRADE_SUITES = ROOT / "ci" / "pg-tviews" / "upgrade-suites.txt"
 WORKFLOW = ROOT / ".github" / "workflows" / "quality-gate.yml"
 #: How a suite asks for the extension (built, so this file does not match itself).
 NEEDS_PG_TVIEWS = "create_supported_pg_tviews" + "("
 
 
-def _listed() -> list[str]:
-    lines = (line.strip() for line in SUITES.read_text().splitlines())
+def _listed(path: Path = SUITES) -> list[str]:
+    lines = (line.strip() for line in path.read_text().splitlines())
     return [line for line in lines if line and not line.startswith("#")]
 
 
@@ -27,7 +30,7 @@ def _leg_script() -> str:
 
 
 def test_every_listed_suite_exists_once() -> None:
-    listed = _listed()
+    listed = _listed() + _listed(UPGRADE_SUITES)
 
     assert listed
     assert len(listed) == len(set(listed))
@@ -38,6 +41,7 @@ def test_the_leg_runs_the_list_and_names_no_suite_itself() -> None:
     script = _leg_script()
 
     assert "ci/pg-tviews/suites.txt" in script
+    assert "ci/pg-tviews/upgrade-suites.txt" in script
     assert re.findall(r"tests/\S+\.py", script) == []
 
 

@@ -172,6 +172,7 @@ module moves, not when one grows.
 | `migration_verifier.py` | database orchestration |
 | `migrator.py` | database orchestration |
 | `ownership_fixer.py` | database orchestration |
+| `pg_tviews_update.py` | database orchestration |
 | `pgtap_generator.py` | neutral |
 | `preconditions.py` | database orchestration |
 | `preflight.py` | database orchestration |

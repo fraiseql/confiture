@@ -14,6 +14,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`migrate up` updates pg_tviews' catalog to the library the server loaded** (#809). From
+  pg_tviews 0.1.0-beta.35 an upgrade is a package install, a restart and `ALTER EXTENSION
+  pg_tviews UPDATE` in each database, and between the restart and the update pg_tviews refuses
+  every write to a TVIEW's base tables, every pg_tviews function and every DDL statement
+  (55000). `migrate up`, `migrate down`, `migrate down-to`, `migrate apply-as` and `seed apply`
+  now close that window themselves: under the migration lock and before anything else, when the
+  loaded library (`tviews.pg_tviews_version()`) is the installed package's release, differs from
+  the catalog (`extversion`) and the package's scripts lead to it, they run `ALTER EXTENSION
+  pg_tviews UPDATE` and commit it (`🔧 pg_tviews 0.1.0-beta.34 updated to 0.1.0-beta.35`; the
+  `pg_tviews_updated` event of `MigratorSession.up()`). A catalog with no update to the library,
+  a library that is not the installed package (PostgreSQL not restarted), and a dry run in the
+  window are refused with the new `CONFIG_016` (exit 5), nothing changed.
+- **`migrate up --recreate-pg-tviews`** (`MigratorSession.up(recreate_pg_tviews_from=…)`): for
+  a catalog older than the release before the library, which no update reaches, it drops the
+  extension and creates every TVIEW the schema files declare again, in one transaction: `DROP
+  EXTENSION pg_tviews CASCADE`, pg_tviews' schema and each TVIEW's table dropped, `CREATE
+  EXTENSION pg_tviews CASCADE`, then each TVIEW in the order the build creates it, with its
+  indexes, through the `pg_tviews_create_or_replace()` call a generated migration writes. It
+  refuses, before dropping anything, a database that registers a TVIEW the schema files do not
+  declare, or holds a view outside pg_tviews that reads a TVIEW or pg_tviews' schema. Nothing is
+  ever dropped without the flag.
+
+### Changed
+
+- **confiture reads pg_tviews' read contracts 2 and 3** (#808). pg_tviews 0.1.0-beta.35 bumps
+  `tviews.contract_version()` to 3 for renames elsewhere in its surface; `tviews.registry`, its
+  `options` keys and `pg_tviews_create_or_replace()` are as contract 2 has them (the registry
+  fixtures, recaptured at beta.35, are byte-identical but for the release that wrote them).
+  `live_catalog.CONTRACT_VERSION` is now `CONTRACT_VERSIONS = {2, 3}`; `MINIMUM_PG_TVIEWS` stays
+  0.1.0-beta.30, so beta.30–34 servers are still read. `CONFIG_014`'s hint no longer names
+  pg_tviews' `scripts/migrate-from-0.1.0.sql` (gone) or a `pg_tviews_reregister_all()` after
+  the update (the update re-derives every TVIEW): it points to `ALTER EXTENSION pg_tviews
+  UPDATE` from the previous release and to `--recreate-pg-tviews` from an older one.
+- **pg_tviews' renamed surface in the docs**: `pg_tviews_ensure_propagation_indexes(tview)` /
+  `pg_tviews_ensure_propagation_indexes_all()`, the `_all` operator functions; the pg_tviews
+  guide says pg_tviews requires jsonb_delta (a tree declares `CREATE EXTENSION jsonb_delta;`
+  before pg_tviews), must be preloaded, and refuses writers above READ COMMITTED.
+- **The scratch build creates pg_tviews with `CASCADE`** (`ExpectedSchemaDB`, under
+  `--scratch-url`), so jsonb_delta comes with it on a beta.35 server.
+- **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.35** (fraiseql/pg_tviews#285, the head of
+  its `refactor/architecture-2026-11` branch until the tag is cut; it built 0.1.0-beta.34 for
+  #795) with jsonb_delta 0.3.0, and carries 0.1.0-beta.34's install script, so
+  `ci/pg-tviews/upgrade-suites.txt` runs the update and the recreate against a real
+  previous-release catalog. The lint is right under both sides of beta.34's change, and
+  beta.30–34 keep contract 2, so there is no reading reason to refuse them.
+
 ### Fixed
 
 - **`tview_001` no longer warns on an index over an `updated_at` the TVIEW's definition
@@ -24,13 +72,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The rule now counts `updated_at` only where the definition does not project it, which is
   right under both releases; `data` is counted always, and a definition whose outputs cannot be
   named (a `*`) keeps the warning.
-
-### Changed
-
-- **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.34.** `MINIMUM_PG_TVIEWS` stays
-  0.1.0-beta.30: beta.34 keeps read contract 2 and the registry confiture reads (the fixtures,
-  recaptured at beta.34, are byte-identical), and the lint is right under both sides of its
-  change, so there is no reading reason to refuse beta.30–33.
 
 ## [1.44.0] - 2026-10-30
 

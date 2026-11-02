@@ -14,6 +14,7 @@ from confiture.cli.main import app
 from confiture.config.environment import SeedProfile
 from confiture.core.seed.applier import ApplyResult
 from confiture.core.test_db import TemplateState, TemplateStatus
+from tests.unit._doubles import connection_double
 
 runner = CliRunner()
 
@@ -45,7 +46,7 @@ def _project(tmp_path: Path, *, profiles: bool = True) -> None:
 
 class TestSeedApplyProfile:
     @patch("confiture.cli.seed.SeedApplier")
-    @patch("confiture.cli.helpers.create_connection")
+    @patch("confiture.cli.helpers.create_connection", return_value=connection_double())
     def test_profile_threaded_to_applier(self, _mock_conn, mock_applier_cls, tmp_path, monkeypatch):
         _project(tmp_path)
         monkeypatch.chdir(tmp_path)

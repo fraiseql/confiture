@@ -1238,16 +1238,18 @@ _TRIGGER_DEFINITIONS = "SELECT pg_get_triggerdef(t.oid)" + _TRIGGERS_WHERE
 #: 0.1.0-beta.20 on (every earlier beta said ``0.1.0``).
 _PG_TVIEWS = "SELECT extversion FROM pg_extension WHERE extname = 'pg_tviews'"
 
-#: The read contract confiture reads: ``tviews.registry``, its ``options`` keys, and
+#: The read contracts confiture reads: ``tviews.registry``, its ``options`` keys, and
 #: what ``pg_tviews_create_or_replace()`` takes and returns. pg_tviews bumps
 #: ``tviews.contract_version()`` on any change a reader could misread; contract 2
 #: (pg_tviews ADR 0211) moved every policy column into ``options`` and made the
-#: options a call passes the whole declaration.
-CONTRACT_VERSION = 2
+#: options a call passes the whole declaration. Contract 3 (pg_tviews 0.1.0-beta.35)
+#: renamed the rest of pg_tviews' surface and left all three as contract 2 has them,
+#: so confiture reads both.
+CONTRACT_VERSIONS = frozenset({2, 3})
 
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-#: The first pg_tviews release that offers :data:`CONTRACT_VERSION`.
+#: The first pg_tviews release that offers a contract in :data:`CONTRACT_VERSIONS`.
 MINIMUM_PG_TVIEWS = "0.1.0-beta.30"
 
 #: The registry columns confiture reads: ``options`` holds every option, defaults
@@ -1420,7 +1422,7 @@ def tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TView]:
 def require_supported_pg_tviews(
     installed: str | None, contract: int | None, missing: Sequence[str] = ()
 ) -> None:
-    """Refuse a pg_tviews whose read contract is not the one confiture reads.
+    """Refuse a pg_tviews whose read contract is not one confiture reads.
 
     *contract* is what ``tviews.contract_version()`` answers, ``None`` where the
     function does not exist: pg_tviews 0.1.0-beta.19 and earlier, which kept
@@ -1432,47 +1434,54 @@ def require_supported_pg_tviews(
         ConfigurationError: ``CONFIG_014``, naming the installed release and what it lacks.
     """
     release = installed or "of an unknown release"
-    if contract == CONTRACT_VERSION and not missing:
+    read = _contracts_read()
+    if contract in CONTRACT_VERSIONS and not missing:
         return
-    if contract == CONTRACT_VERSION:
+    if contract in CONTRACT_VERSIONS:
         raise ConfigurationError(
             f"pg_tviews {release}'s tviews.registry has no {', '.join(missing)}; "
             f"confiture reads the registry of pg_tviews {MINIMUM_PG_TVIEWS} and later.",
             error_code="CONFIG_014",
-            resolution_hint=(
-                f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later, then "
-                "ALTER EXTENSION pg_tviews UPDATE"
-            ),
+            resolution_hint=f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later",
         )
-    if contract is None:
+    if contract is None or contract < min(CONTRACT_VERSIONS):
+        offers = (
+            "has no read contract (tviews.contract_version())"
+            if contract is None
+            else f"offers read contract {contract}"
+        )
         raise ConfigurationError(
-            f"pg_tviews {release} has no read contract (tviews.contract_version()); "
-            f"confiture reads contract {CONTRACT_VERSION}, which pg_tviews "
+            f"pg_tviews {release} {offers}; confiture reads {read}, which pg_tviews "
             f"{MINIMUM_PG_TVIEWS} and later offer.",
             error_code="CONFIG_014",
-            resolution_hint=(
-                "Upgrade the server's pg_tviews. An extension created by 0.1.0-beta.19 or "
-                "earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql, "
-                "not ALTER EXTENSION UPDATE"
-            ),
-        )
-    if contract < CONTRACT_VERSION:
-        hint = (
-            f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later: "
-            "ALTER EXTENSION pg_tviews UPDATE, then "
-            "SELECT * FROM tviews.pg_tviews_reregister_all()"
-        )
-    else:
-        hint = (
-            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
-            f"contract {CONTRACT_VERSION}"
+            resolution_hint=UPGRADE_HINT,
         )
     raise ConfigurationError(
-        f"pg_tviews {release} offers read contract {contract}; "
-        f"confiture reads contract {CONTRACT_VERSION}.",
+        f"pg_tviews {release} offers read contract {contract}; confiture reads {read}.",
         error_code="CONFIG_014",
-        resolution_hint=hint,
+        resolution_hint=(
+            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
+            f"contract {max(CONTRACT_VERSIONS)}"
+        ),
     )
+
+
+#: How a database reaches a pg_tviews confiture reads. A release updates only from
+#: the one before it; anything older is dropped and its TVIEWs created again, which
+#: the schema files can do since they hold every TVIEW's definition.
+UPGRADE_HINT = (
+    f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later. From the release "
+    "before the one installed, ALTER EXTENSION pg_tviews UPDATE (confiture migrate up "
+    "runs it); from an older one, drop the extension and create the TVIEWs again "
+    "(confiture migrate up --recreate-pg-tviews)"
+)
+
+
+def _contracts_read() -> str:
+    numbers = sorted(CONTRACT_VERSIONS)
+    if len(numbers) == 1:
+        return f"contract {numbers[0]}"
+    return f"contracts {', '.join(map(str, numbers[:-1]))} and {numbers[-1]}"
 
 
 def _contract(conn: psycopg.Connection) -> int | None:
@@ -1495,6 +1504,104 @@ def require_supported_pg_tviews_on(conn: psycopg.Connection) -> None:
     installed = conn.execute(_PG_TVIEWS).fetchone()
     if installed is not None:
         _require_readable(conn, installed[0])
+
+
+#: What a database runs of pg_tviews: the catalog (``extversion``), the package
+#: installed on the server (``default_version``), and whether the package's scripts
+#: chain from the catalog to the loaded library.
+_PG_TVIEWS_RELEASES = """
+SELECT e.extversion, a.default_version
+FROM pg_extension e
+LEFT JOIN pg_available_extensions a ON a.name = e.extname
+WHERE e.extname = 'pg_tviews'
+"""
+
+_PG_TVIEWS_UPDATE_PATH = """
+SELECT path IS NOT NULL FROM pg_extension_update_paths('pg_tviews')
+WHERE source = %s AND target = %s
+"""
+
+
+@dataclass(frozen=True)
+class PgTviewsReleases:
+    """The pg_tviews releases one database runs.
+
+    Attributes:
+        catalog: ``extversion``, the release whose SQL the database holds.
+        library: what ``tviews.pg_tviews_version()`` answers: the library the
+            server loaded, which may be newer than the catalog between a package
+            install and ``ALTER EXTENSION pg_tviews UPDATE``. ``None`` where the
+            catalog has no such function in ``tviews`` (0.1.0-beta.19 and earlier).
+        package: ``default_version``, the release installed on the server's disk.
+        update_path: whether the package's scripts lead from *catalog* to *library*.
+    """
+
+    catalog: str
+    library: str | None
+    package: str | None
+    update_path: bool
+
+
+def pg_tviews_releases(conn: psycopg.Connection) -> PgTviewsReleases | None:
+    """The pg_tviews releases *conn*'s database runs; ``None`` without the extension.
+
+    ``pg_tviews_version()`` and ``pg_extension_update_paths()`` call nothing the
+    library refuses while its catalog revision differs, so this reads a database
+    caught between a package install and its ``ALTER EXTENSION … UPDATE``.
+    """
+    row = conn.execute(_PG_TVIEWS_RELEASES).fetchone()
+    if row is None:
+        return None
+    catalog, package = row
+    library = None
+    if _scalar(conn, _HAS_CONTRACT, (f"{TVIEWS_SCHEMA}.pg_tviews_version()",)):
+        with conn.cursor() as cursor:
+            cursor.execute(t"SELECT {TVIEWS_SCHEMA:i}.pg_tviews_version()")
+            found = cursor.fetchone()
+        library = None if found is None else found[0]
+    target = library or package
+    update_path = bool(
+        target is not None
+        and target != catalog
+        and _scalar(conn, _PG_TVIEWS_UPDATE_PATH, (catalog, target))
+    )
+    return PgTviewsReleases(catalog, library, package, update_path)
+
+
+#: The views and materialized views outside pg_tviews that read one of *its*
+#: relations: a TVIEW's table, or anything in pg_tviews' own schema. ``DROP
+#: EXTENSION … CASCADE`` and dropping those tables would take them along.
+_READERS_OF_PG_TVIEWS = """
+SELECT DISTINCT n.nspname, c.relname
+FROM pg_depend d
+JOIN pg_rewrite w ON d.classid = 'pg_rewrite'::regclass AND w.oid = d.objid
+JOIN pg_class c ON c.oid = w.ev_class
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE d.refclassid = 'pg_class'::regclass
+  AND d.refobjid <> c.oid
+  AND d.refobjid IN (
+      SELECT r.oid FROM pg_class r JOIN pg_namespace rn ON rn.oid = r.relnamespace
+      WHERE rn.nspname = %s
+         OR (rn.nspname, r.relname) IN (SELECT * FROM unnest(%s::text[], %s::text[])))
+  AND n.nspname <> %s
+  AND NOT EXISTS (
+      SELECT 1 FROM pg_depend x
+      WHERE x.classid = 'pg_class'::regclass AND x.objid = c.oid AND x.deptype = 'e'
+  )
+ORDER BY 1, 2
+"""
+
+
+def readers_of_pg_tviews(
+    conn: psycopg.Connection, tables: Sequence[RelationName]
+) -> list[RelationName]:
+    """The views outside pg_tviews that read one of *tables* or pg_tviews' own schema."""
+    schemas = [t.schema or DEFAULT_SCHEMA for t in tables]
+    names = [t.name for t in tables]
+    rows = conn.execute(
+        _READERS_OF_PG_TVIEWS, (TVIEWS_SCHEMA, schemas, names, TVIEWS_SCHEMA)
+    ).fetchall()
+    return [RelationName(schema, name) for schema, name in rows]
 
 
 def _require_readable(conn: psycopg.Connection, installed: str | None) -> None:

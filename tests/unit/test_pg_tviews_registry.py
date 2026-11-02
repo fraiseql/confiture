@@ -26,7 +26,7 @@ def _row(case: str, name: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize("case", ["defaults", "unlogged", "declared", "aggregate"])
 def test_every_fixture_was_captured_from_the_contract_confiture_reads(case: str) -> None:
-    assert _captured(case)["captured_from"]["contract"] == live_catalog.CONTRACT_VERSION
+    assert _captured(case)["captured_from"]["contract"] in live_catalog.CONTRACT_VERSIONS
 
 
 def test_a_tview_that_declares_nothing_reads_every_default() -> None:

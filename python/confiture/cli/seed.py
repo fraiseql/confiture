@@ -17,6 +17,7 @@ from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, convert
 from confiture.cli.seed_drift import drift as seed_drift
 from confiture.config.environment import Environment
+from confiture.core import pg_tviews_update
 from confiture.core.connection import DatabaseError
 from confiture.core.progress import ProgressManager
 from confiture.core.seed.applier import SeedApplier
@@ -515,6 +516,14 @@ def apply(
                 json_mode=is_json(format_type),
                 output_file=report_output,
             )
+
+    # pg_tviews refuses writes to a TVIEW's base tables until its catalog is the
+    # library's: close that window first, as migrate up does.
+    try:
+        pg_tviews_update.bring_up_to_date(connection)
+    except ConfigurationError as e:
+        connection.close()
+        fail(e, json_mode=is_json(format_type), output_file=report_output)
 
     # Apply seeds sequentially
     try:

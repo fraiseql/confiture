@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 import time as _time
 
+from confiture.core import pg_tviews_update
 from confiture.core._migrator.rollback_planner import (
     REASON_IRREVERSIBLE,
     REASON_TARGET_NEWER,
@@ -146,6 +147,7 @@ def down(
     else:
         lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout, command=command)
         with lock.acquire():
+            pg_tviews_update.bring_up_to_date(session._conn)
             rolled_back, total_ms = _plan_and_roll_back(False)
     return MigrateDownResult(
         success=True,
@@ -174,6 +176,7 @@ def down_to(
         return _down_to_under_lock(session, target, dry_run=True)
     lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout, command=command)
     with lock.acquire():
+        pg_tviews_update.bring_up_to_date(session._conn)
         return _down_to_under_lock(session, target, dry_run=False)
 
 

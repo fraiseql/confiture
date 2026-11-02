@@ -24,7 +24,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from tests.unit._doubles import injected_engine
+from tests.unit._doubles import connection_double, injected_engine
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -77,7 +77,9 @@ def doubles(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
     migrator.get_applied_versions.return_value = []
     state["migrator"] = migrator
 
-    monkeypatch.setattr("confiture.cli.helpers.create_connection", lambda *a, **k: MagicMock())
+    monkeypatch.setattr(
+        "confiture.cli.helpers.create_connection", lambda *a, **k: connection_double()
+    )
 
     def fake_sweep(_conn: Any, table: str) -> list[str]:
         state["swept"].append(table)

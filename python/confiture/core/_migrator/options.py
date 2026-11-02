@@ -14,6 +14,7 @@ from typing import Any
 
 from confiture.core._migrator.events import UpObserver
 from confiture.core.backfill import BackfillSettings
+from confiture.core.schema_model import SchemaModel
 
 
 @dataclass(frozen=True)
@@ -37,3 +38,4 @@ class UpOptions:
     install_view_helpers: bool | None = None
     on_event: UpObserver | None = None
     batch: Any | None = None
+    recreate_pg_tviews_from: SchemaModel | None = None

@@ -119,6 +119,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "migration_verifier.py": (GLUE, ORCHESTRATION),
     "migrator.py": (GLUE, ORCHESTRATION),
     "ownership_fixer.py": (GLUE, ORCHESTRATION),
+    "pg_tviews_update.py": (GLUE, ORCHESTRATION),
     "preconditions.py": (GLUE, ORCHESTRATION),
     "preflight.py": (GLUE, ORCHESTRATION),
     "psql_applier.py": (GLUE, ORCHESTRATION),

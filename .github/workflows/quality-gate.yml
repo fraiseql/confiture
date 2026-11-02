@@ -410,9 +410,9 @@ jobs:
             assert 'pg_tviews' in c.execute('SHOW shared_preload_libraries').fetchone()[0], 'pg_tviews not preloaded'
         from confiture.core import live_catalog
         with psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test', autocommit=True) as c:
-            c.execute('CREATE EXTENSION pg_tviews')
+            c.execute('CREATE EXTENSION pg_tviews CASCADE')
             live_catalog.require_supported_pg_tviews_on(c)
-            c.execute('DROP EXTENSION pg_tviews')
+            c.execute('DROP EXTENSION pg_tviews, jsonb_delta')
         "
         pg_dump --version
 
@@ -430,6 +430,23 @@ jobs:
         suite = ET.parse('tview-suites.xml').getroot().find('testsuite')
         skipped = int(suite.get('skipped'))
         sys.exit(f'{skipped} TVIEW test(s) skipped' if skipped else 0)
+        "
+
+    - name: Run the pg_tviews upgrade suites
+      env:
+        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
+      # ci/pg-tviews/upgrade-suites.txt: `migrate up` closing the window between a
+      # package install and ALTER EXTENSION pg_tviews UPDATE (#809). They need the
+      # previous release's install script, which this image carries and pg_tviews'
+      # own run of suites.txt does not. A skip fails the leg, as above.
+      run: |
+        mapfile -t suites < <(grep -v -e '^#' -e '^[[:space:]]*$' ci/pg-tviews/upgrade-suites.txt)
+        uv run pytest "${suites[@]}" -q -rs -p no:randomly --junitxml=upgrade-suites.xml
+        uv run python -c "
+        import sys, xml.etree.ElementTree as ET
+        suite = ET.parse('upgrade-suites.xml').getroot().find('testsuite')
+        skipped = int(suite.get('skipped'))
+        sys.exit(f'{skipped} upgrade test(s) skipped' if skipped else 0)
         "
 
   wheel-python-314:

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from confiture.core import backfill_gate, live_catalog
+from confiture.core import backfill_gate, live_catalog, pg_tviews_update
 from confiture.core._migrator import online as _online
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator import squashed as _squashed
@@ -100,6 +100,23 @@ def record_squashed_baselines(
         return record()
     with session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout).acquire():
         return record()
+
+
+def _bring_pg_tviews_up_to_date(session: SessionHost, options: UpOptions) -> None:
+    """Run ``ALTER EXTENSION pg_tviews UPDATE`` when the loaded library is newer (#809).
+
+    Before anything writes: pg_tviews refuses every write to a TVIEW's base tables
+    until it runs. A dry run applies nothing, so it updates nothing either, and is
+    refused where the update is due.
+    """
+    if options.dry_run or options.dry_run_execute:
+        pg_tviews_update.require_current(session._conn)
+        return
+    done = pg_tviews_update.bring_up_to_date(
+        session._conn, recreate_from=options.recreate_pg_tviews_from
+    )
+    if done is not None:
+        emit(options.on_event, "pg_tviews_updated", message=done.message)
 
 
 def _require_tview_support(session: SessionHost, pending_files: list[Path]) -> None:
@@ -212,6 +229,7 @@ def _plan(session: SessionHost, options: UpOptions) -> _Plan:
     """Baseline, plan, view helpers, checksums and strict mode — the lock is held."""
     assert session._migrator is not None
     force, on_event, auto_baseline = options.force, options.on_event, options.auto_baseline
+    _bring_pg_tviews_up_to_date(session, options)
     if auto_baseline is not None:
         _policy.auto_baseline(
             conn=session._conn,
@@ -641,6 +659,7 @@ def apply_one(
         )
     lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout)
     with lock.acquire():
+        pg_tviews_update.bring_up_to_date(session._conn)
         session._migrator.initialize()
         if version in set(session._migrator.get_applied_versions()):
             raise MigrationError(

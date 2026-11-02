@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
 from confiture.core.ddl_walk import AS_WRITTEN
@@ -82,14 +83,14 @@ def _read(file: Path) -> str:
 
 
 def _segments(
-    source: SchemaSource | None, *, env: str | None, project_dir: Path | None
+    source: SchemaSource | None, *, env: str | Environment | None, project_dir: Path | None
 ) -> list[Segment]:
     """*source*'s DDL file by file, in the order it is read — the file each came from kept.
 
     *env* is the project's build: the schema files ``confiture build --schema-only``
     selects, in build order, each named relative to the project, so a position is
     a line of a file the author edits and a statement PostgreSQL rejects is named
-    by its file.
+    by its file. A loaded :class:`Environment` is read as its name would be.
     """
     if (source is None) == (env is None):
         raise ValueError("Give exactly one of a schema source or an environment.")
@@ -129,7 +130,7 @@ def env_segments(env: str, project_dir: Path | None = None) -> list[Segment]:
 def read_schema(
     source: SchemaSource | None = None,
     *,
-    env: str | None = None,
+    env: str | Environment | None = None,
     project_dir: Path | None = None,
 ) -> SchemaRead:
     """:func:`parse_schema`'s model, from one parse, with what that parse knows beside it.
@@ -195,7 +196,7 @@ def require_supported_pg_tviews_on(database: str | Connection) -> None:
     The check every live read of TVIEWs makes first (drift, ``migrate up`` of a
     TVIEW migration, ``introspect``), for a tool that asks it before a deploy:
     a database without pg_tviews passes; one whose ``tviews.contract_version()``
-    is not the contract confiture reads, or whose registry lacks a column it reads
+    is not a contract confiture reads (2 or 3), or whose registry lacks a column it reads
     (pg_tviews before ``MINIMUM_PG_TVIEWS``), is refused. A URL is connected
     to and closed here; a connection is the caller's.
 

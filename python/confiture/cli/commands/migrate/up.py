@@ -42,7 +42,7 @@ from confiture.cli.options import (
     output_option,
     verbose_option,
 )
-from confiture.config.environment import BackfillConfig
+from confiture.config.environment import BackfillConfig, Environment
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.backfill import BackfillSettings
@@ -55,8 +55,10 @@ from confiture.core.locking import (
     resolve_lock_settings,
 )
 from confiture.core.migrator import find_duplicate_migration_versions
+from confiture.core.schema_model import SchemaModel
+from confiture.core.schema_sources import read_schema
 from confiture.error_codes import FINDINGS, USAGE, exit_code_of
-from confiture.exceptions import MigrationConflictError
+from confiture.exceptions import ConfigurationError, MigrationConflictError
 
 NoConfigOpt = Annotated[bool, typer.Option("--no-config", help=NO_CONFIG_OPTION_HELP)]
 TargetOpt = Annotated[
@@ -135,6 +137,13 @@ AllowDestructiveOpt = Annotated[
         help="Apply migrations gated as destructive (data is lost): the generator's -- confiture:destructive directive, or destructive = True on a Python migration.",
     ),
 ]
+RecreatePgTviewsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--recreate-pg-tviews",
+        help="When the database's pg_tviews catalog has no update to the library the server loaded (a release older than the one before it), drop the extension and create every TVIEW again from the schema files, in one transaction. Needs the environment's YAML config. Without it that case is refused (CONFIG_016); a catalog one release behind is updated with ALTER EXTENSION pg_tviews UPDATE either way.",
+    ),
+]
 OnlineOpt = Annotated[
     bool,
     typer.Option(
@@ -198,6 +207,7 @@ def migrate_up(
     snapshots_dir_up: SnapshotsDirUpOpt = None,
     require_reversible: RequireReversibleOpt = False,
     allow_destructive: AllowDestructiveOpt = False,
+    recreate_pg_tviews: RecreatePgTviewsOpt = False,
     online: OnlineOpt = False,
     max_lock_ms: MaxLockMsOpt = None,
     batched: BatchedOpt = False,
@@ -331,6 +341,9 @@ def migrate_up(
             "install_view_helpers": install_helpers,
             "on_event": reporter,
             "batch": batch,
+            "recreate_pg_tviews_from": (
+                _tree_for_recreate(config) if recreate_pg_tviews and not dry_run else None
+            ),
         }
         with _core_migrator.MigratorSession(
             None,
@@ -462,6 +475,22 @@ def _report_lock_failure(
     raise typer.Exit(lock_error_to_confiture(error).exit_code) from error
 
 
+def _tree_for_recreate(config: Path) -> SchemaModel:
+    """The schema ``--recreate-pg-tviews`` creates the TVIEWs from: the environment's build."""
+    resolved = config.resolve()
+    if not (resolved.exists() and resolved.parent.name == "environments"):
+        raise ConfigurationError(
+            "--recreate-pg-tviews creates the TVIEWs from the environment's schema files, "
+            f"and {config} is not an environment config",
+            error_code="CONFIG_016",
+            resolution_hint="Pass --config db/environments/<env>.yaml",
+        )
+    project_dir = resolved.parent.parent.parent
+    return read_schema(
+        env=Environment.load(resolved.stem, project_dir), project_dir=project_dir
+    ).model
+
+
 # Live lines that carry nothing from the event but its kind.
 _FIXED_LINES: dict[str, LiteralString] = {
     "lock_acquired": "[cyan]🔒 Acquired migration lock[/cyan]\n",
@@ -530,6 +559,8 @@ class _UpReporter:
             )
         elif kind == "target_reached":
             console.print(t"[yellow]⏭️  Skipping {event.version} (after target)[/yellow]")
+        elif kind == "pg_tviews_updated":
+            console.print(t"[cyan]🔧 {event.message}[/cyan]\n")
         elif kind == "skipped_non_transactional":
             console.print(
                 t"[yellow]⏭️  Skipping {event.label} (non-transactional — "

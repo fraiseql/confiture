@@ -493,7 +493,7 @@ def test_a_pg_tviews_offering_another_contract_is_refused(
     tview_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The live model, drift and preflight all read TVIEWs through the contract."""
-    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSIONS", frozenset({99}))
 
     with psycopg.connect(tview_database) as conn:
         for read in (
@@ -510,7 +510,7 @@ def test_a_pg_tviews_offering_another_contract_is_refused(
 def test_a_database_without_pg_tviews_is_never_refused(
     fresh_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSIONS", frozenset({99}))
 
     with psycopg.connect(fresh_database) as conn:
         assert live_catalog.read(conn, schemas=["public"]).tviews == {}
@@ -550,7 +550,9 @@ def test_squash_from_build_accepts_a_tree_with_a_tview(
         create_supported_pg_tviews(conn)
     migrations = tmp_path / "migrations"
     migrations.mkdir()
-    (migrations / "20260101000000_extension.up.sql").write_text("CREATE EXTENSION pg_tviews;\n")
+    (migrations / "20260101000000_extension.up.sql").write_text(
+        "CREATE EXTENSION pg_tviews CASCADE;\n"
+    )
     (migrations / "20260101000000_extension.down.sql").write_text("DROP EXTENSION pg_tviews;\n")
     (migrations / "20260102000000_tree.up.sql").write_text(TREE)
     (migrations / "20260102000000_tree.down.sql").write_text(
@@ -568,7 +570,7 @@ def _materialised_drift(
     scratch_url: str,
     tmp_path,
     *,
-    extension: str = "CREATE EXTENSION IF NOT EXISTS pg_tviews;\n",
+    extension: str = "CREATE EXTENSION IF NOT EXISTS pg_tviews CASCADE;\n",
 ) -> list[tuple[str, str, str]]:
     """``confiture drift`` with a scratch server: the tree built there, read back, compared."""
     from confiture.core.drift import SchemaDriftDetector
@@ -607,7 +609,7 @@ def test_a_materialised_pinned_option_changed_by_hand_is_drift(
 
 @pytest.mark.parametrize(
     "extension",
-    ["", "CREATE EXTENSION pg_tviews;\n"],
+    ["", "CREATE EXTENSION pg_tviews CASCADE;\n"],
     ids=["tree-does-not-create-it", "tree-creates-it-plainly"],
 )
 def test_a_materialised_tree_is_built_with_pg_tviews_whoever_creates_it(

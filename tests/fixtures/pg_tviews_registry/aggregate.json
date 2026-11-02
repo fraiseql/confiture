@@ -1,8 +1,8 @@
 {
   "captured_from": {
-    "commit": "c36b32686860ecfe057ca55e9218051997156377",
-    "contract": 2,
-    "pg_tviews": "0.1.0-beta.34"
+    "commit": "4dda99ec2e1bbcadefca0a8d49b8cc12d8bb9ddc",
+    "contract": 3,
+    "pg_tviews": "0.1.0-beta.35"
   },
   "registry": [
     {

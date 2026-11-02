@@ -399,7 +399,7 @@ CREATE UNIQUE INDEX ux_tv_post_title ON tv_post (title, pk_post);
 
 @pytest.fixture
 def built_tview(fresh_database: str, tmp_path: Path) -> tuple[str, Path]:
-    from tests.conftest import create_supported_pg_tviews
+    from tests.conftest import PG_TVIEWS_EXTENSIONS, create_supported_pg_tviews
 
     with psycopg.connect(fresh_database, autocommit=True) as conn:
         if not conn.execute(
@@ -409,8 +409,8 @@ def built_tview(fresh_database: str, tmp_path: Path) -> tuple[str, Path]:
         create_supported_pg_tviews(conn)
         conn.execute(TVIEW_TREE)
     schema_file = tmp_path / "schema_tview.sql"
-    # The extension is the tree's too, or the diff would drop it.
-    schema_file.write_text("CREATE EXTENSION pg_tviews;\n" + TVIEW_TREE, encoding="utf-8")
+    # The extensions are the tree's too, or the diff would drop them.
+    schema_file.write_text(PG_TVIEWS_EXTENSIONS + TVIEW_TREE, encoding="utf-8")
     return fresh_database, schema_file
 
 

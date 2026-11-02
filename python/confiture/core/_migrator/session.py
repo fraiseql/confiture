@@ -39,6 +39,7 @@ from confiture.core.locking import (
     resolve_extra_lock_keys,
     resolve_lock_settings,
 )
+from confiture.core.schema_model import SchemaModel
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import (
     CurrentRevision,
@@ -376,6 +377,7 @@ class MigratorSession:
         install_view_helpers: bool | None = None,
         on_event: UpObserver | None = None,
         batch: Any | None = None,
+        recreate_pg_tviews_from: SchemaModel | None = None,
     ) -> MigrateUpResult:
         """Apply pending migrations up to target version.
 
@@ -430,6 +432,13 @@ class MigratorSession:
             batch: A :class:`~confiture.core.large_tables.BatchConfig` set on every
                      migration as ``batch_config`` before it runs (the CLI's
                      ``--batched``). None leaves the class defaults.
+            recreate_pg_tviews_from: The schema whose TVIEWs are created again when
+                     the database's pg_tviews catalog has no update to the library
+                     the server loaded (the CLI's ``--recreate-pg-tviews``): the
+                     extension is dropped and created again, in one transaction.
+                     None (default) refuses that case with ``CONFIG_016``. A catalog
+                     one release behind is updated (``ALTER EXTENSION pg_tviews
+                     UPDATE``) whatever this says.
 
         Returns:
             :class:`~confiture.models.results.MigrateUpResult` (its fields are documented there).
@@ -437,7 +446,9 @@ class MigratorSession:
 
         Raises:
             ConfigurationError: If used outside ``with`` context manager, or
-                ``auto_baseline`` refuses (ledger elsewhere, snapshots missing).
+                ``auto_baseline`` refuses (ledger elsewhere, snapshots missing);
+                ``CONFIG_016`` when the database's pg_tviews catalog cannot be
+                brought to the loaded library.
             MigrationError: If the migrations directory does not exist.
             ChecksumVerificationError: A tampered applied file under
                 ``on_checksum_mismatch="fail"``.
@@ -476,6 +487,7 @@ class MigratorSession:
                 install_view_helpers=install_view_helpers,
                 on_event=on_event,
                 batch=batch,
+                recreate_pg_tviews_from=recreate_pg_tviews_from,
             ),
         )
 
