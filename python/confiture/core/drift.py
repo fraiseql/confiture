@@ -1370,9 +1370,15 @@ class SchemaDriftDetector:
         Returns:
             DriftReport with differences
         """
-        # The database's server spells the tree's constants (#564).
+        # The database's server spells the tree's constants (#564), and knows what
+        # each extension requires: one an extension the tree creates requires is the
+        # tree's. A tree that creates none has nothing to ask.
         constants = server_constants(self.connection, self._kept(expected))
-        return self._compare(expected, actual, replace(_POLICY, constants=constants))
+        creates = any(ref.kind == "extension" for ref in expected.other_objects)
+        requires = live_catalog.extension_requirements(self.connection) if creates else {}
+        return self._compare(
+            expected, actual, replace(_POLICY, constants=constants, requires=requires)
+        )
 
     def _compare(
         self, expected: SchemaModel, actual: SchemaModel, policy: ComparisonPolicy

@@ -37,6 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses, before dropping anything, a database that registers a TVIEW the schema files do not
   declare, or holds a view outside pg_tviews that reads a TVIEW or pg_tviews' schema. Nothing is
   ever dropped without the flag.
+- **An extension another one requires is the tree's when the tree creates its requirer**,
+  compared with a database (`drift`, `migrate diff`, `platform.diff`). `CREATE EXTENSION
+  pg_tviews CASCADE` installs jsonb_delta, `CREATE EXTENSION earthdistance CASCADE` installs
+  cube: the database holds an extension the tree never writes, which drift reported as an
+  `extra_object` and `migrate diff --from db` would have dropped. What each extension requires
+  is read from the database's server (`live_catalog.extension_requirements`: `pg_depend` for an
+  installed extension, the control file for any other) and carried on its side
+  (`Side.requires`, `ComparisonPolicy.requires`); one held by one side and required, directly
+  or through another, by an extension the other side holds is held by both. An extension whose
+  requirer the tree no longer creates is compared as before, and a migration that creates or
+  drops several extensions creates each after what it requires and drops it before. Drift
+  kinds and severities are unchanged; a database built from such a tree reports one
+  `extra_object` fewer.
 
 ### Changed
 
@@ -51,8 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   UPDATE` from the previous release and to `--recreate-pg-tviews` from an older one.
 - **pg_tviews' renamed surface in the docs**: `pg_tviews_ensure_propagation_indexes(tview)` /
   `pg_tviews_ensure_propagation_indexes_all()`, the `_all` operator functions; the pg_tviews
-  guide says pg_tviews requires jsonb_delta (a tree declares `CREATE EXTENSION jsonb_delta;`
-  before pg_tviews), must be preloaded, and refuses writers above READ COMMITTED.
+  guide says pg_tviews requires jsonb_delta (`CREATE EXTENSION pg_tviews CASCADE` installs
+  it), must be preloaded, and refuses writers above READ COMMITTED.
 - **The scratch build creates pg_tviews with `CASCADE`** (`ExpectedSchemaDB`, under
   `--scratch-url`), so jsonb_delta comes with it on a beta.35 server.
 - **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.35** (fraiseql/pg_tviews#285, the head of

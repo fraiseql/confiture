@@ -1794,6 +1794,37 @@ def existing_names(
     )
 
 
+#: Each extension's requirements: an installed one's as ``CREATE EXTENSION`` recorded
+#: them (``pg_depend``), any other's as its default version's control file declares.
+_EXTENSION_REQUIREMENTS = """
+SELECT e.extname, array_agg(r.extname)
+FROM pg_depend d
+JOIN pg_extension e ON d.classid = 'pg_extension'::regclass AND e.oid = d.objid
+JOIN pg_extension r ON d.refclassid = 'pg_extension'::regclass AND r.oid = d.refobjid
+WHERE d.deptype = 'n'
+GROUP BY e.extname
+UNION ALL
+SELECT v.name, v.requires
+FROM pg_available_extensions a
+JOIN pg_available_extension_versions v ON v.name = a.name AND v.version = a.default_version
+WHERE a.installed_version IS NULL AND v.requires IS NOT NULL
+"""
+
+
+def extension_requirements(conn: psycopg.Connection) -> dict[str, frozenset[str]]:
+    """The extensions each extension on *conn*'s server requires, by name; none listed for none.
+
+    Only the server knows: a control file says it (``requires = 'jsonb_delta'``),
+    and ``CREATE EXTENSION … CASCADE`` installs what it names. A tree that writes
+    the one holds the other once applied, which a comparison with a database reads
+    from here (``differ.ComparisonPolicy.requires``).
+    """
+    return {
+        name: frozenset(required)
+        for name, required in conn.execute(_EXTENSION_REQUIREMENTS).fetchall()
+    }
+
+
 #: Each routine ``read`` models, as PostgreSQL writes the statement that creates it.
 #: An aggregate has none (``pg_get_functiondef`` refuses one): it is compared by
 #: its signature, and a change to it is not one this reader can write.

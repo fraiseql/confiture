@@ -124,6 +124,11 @@ class ComparisonPolicy:
         constants: How the database side's server spells the tree's constants
             (:func:`~confiture.core.server_constants.server_constants`), which a
             comparison under ``analysed_expressions`` reads both sides' through.
+        requires: The extensions each extension requires, as the database side's
+            server knows them (:func:`~confiture.core.live_catalog.extension_requirements`).
+            A tree that creates an extension holds what it requires once applied
+            (``CREATE EXTENSION … CASCADE``), so a tree and a database compare it
+            as held by both (:func:`held_by_requirement`).
     """
 
     name: Literal["author", "catalogued", "materialised", "exact"]
@@ -131,6 +136,7 @@ class ComparisonPolicy:
     rules: frozenset[str]
     author: Literal["old", "new"] | None = None
     constants: ConstantSpellings = field(default=AS_WRITTEN, compare=False)
+    requires: Mapping[str, frozenset[str]] = field(default_factory=dict, compare=False)
 
     @property
     def fidelity(self) -> Fidelity:
@@ -196,7 +202,9 @@ class Side:
     is what each view, materialized view and TVIEW carries besides its definition —
     grants, comments, owner — as the statements that set it, keyed by identity: a
     tree's as it writes them (``SchemaRead.attached``, #765), a database's as its
-    catalog holds them (``live_catalog.attached``, #787).
+    catalog holds them (``live_catalog.attached``, #787). ``requires`` is what each
+    extension requires, from a database's server
+    (:func:`~confiture.core.live_catalog.extension_requirements`).
     """
 
     model: SchemaModel = field(default_factory=SchemaModel)
@@ -206,6 +214,7 @@ class Side:
     constants: ConstantSpellings = AS_WRITTEN
     dangling: Mapping[ObjectRef, tuple[Index, ...]] = field(default_factory=dict)
     attached: Mapping[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
+    requires: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, read: SchemaRead, *, held: bool = False) -> Side:
@@ -250,6 +259,93 @@ def without(side: Side, exclusion: Exclusion) -> Side:
         objects=kept.objects,
         dangling=kept.dangling,
         warnings=[*side.warnings, *kept.notes],
+    )
+
+
+def held_by_requirement(
+    old: Side, new: Side, requires: Mapping[str, frozenset[str]]
+) -> tuple[Side, Side]:
+    """*old* and *new*, each without an extension the other holds by requirement.
+
+    ``CREATE EXTENSION pg_tviews CASCADE`` creates ``jsonb_delta`` too, and without
+    ``CASCADE`` it refuses unless ``jsonb_delta`` is there: either way a tree that
+    creates pg_tviews holds ``jsonb_delta`` once applied, whether it writes it or
+    not. An extension one side holds and the other does not is the other's too when
+    an extension the other holds requires it, directly or through another
+    (*requires*); it is left out of the side that holds it, so neither is a change.
+    An extension whose requirer is gone is no one's but its own, and compared.
+    """
+    if not requires:
+        return old, new
+    old_held, new_held = _extensions(old), _extensions(new)
+    return (
+        _without_extensions(old, (old_held - new_held) & _required_by(new_held, requires)),
+        _without_extensions(new, (new_held - old_held) & _required_by(old_held, requires)),
+    )
+
+
+def in_requirement_order(
+    changes: list[DefinitionChange], requires: Mapping[str, frozenset[str]]
+) -> list[DefinitionChange]:
+    """*changes*, each extension created after what it requires and dropped before it.
+
+    ``change_order`` ranks every extension's creation alike, and every drop, so the
+    order kept here is the order they run in: ``DROP EXTENSION`` of a required
+    extension fails while its requirer is installed. Every other change keeps its place.
+    """
+    slots = [i for i, change in enumerate(changes) if change.ref.kind == "extension"]
+    if not requires or len(slots) <= 1:
+        return changes
+    depths: dict[str, int] = {}
+
+    def depth(name: str) -> int:
+        """How many requirements deep *name* stands: 0 for one that requires none."""
+        if name not in depths:
+            depths[name] = 0  # PostgreSQL refuses a requirement cycle; this ends one.
+            depths[name] = 1 + max((depth(r) for r in requires.get(name, ())), default=-1)
+        return depths[name]
+
+    def key(change: DefinitionChange) -> int:
+        found = depth(change.ref.name)
+        return -found if isinstance(change, ObjectDropped) else found
+
+    ordered = list(changes)
+    for slot, change in zip(slots, sorted((changes[i] for i in slots), key=key), strict=True):
+        ordered[slot] = change
+    return ordered
+
+
+def _extensions(side: Side) -> set[str]:
+    """The extensions *side* holds, by name: a statement or a model entry."""
+    return {
+        ref.name for ref in (*side.objects, *side.model.other_objects) if ref.kind == "extension"
+    }
+
+
+def _required_by(held: set[str], requires: Mapping[str, frozenset[str]]) -> set[str]:
+    """Every extension one of *held* requires, directly or through another."""
+    found: set[str] = set()
+    pending = [name for held_name in held for name in requires.get(held_name, ())]
+    while pending:
+        name = pending.pop()
+        if name not in found:
+            found.add(name)
+            pending.extend(requires.get(name, ()))
+    return found
+
+
+def _without_extensions(side: Side, names: set[str]) -> Side:
+    if not names:
+        return side
+
+    def kept(ref: ObjectRef) -> bool:
+        return not (ref.kind == "extension" and ref.name in names)
+
+    others = {ref: obj for ref, obj in side.model.other_objects.items() if kept(ref)}
+    return replace(
+        side,
+        model=replace(side.model, other_objects=others),
+        objects={ref: objs for ref, objs in side.objects.items() if kept(ref)},
     )
 
 
@@ -918,7 +1014,12 @@ class SchemaDiffer:
         if policy.rules and old.model.source != new.model.source:
             policy = replace(policy, author="old" if old.model.source == "author" else "new")
         if policy.rules:
-            policy = replace(policy, constants=policy.constants | old.constants | new.constants)
+            policy = replace(
+                policy,
+                constants=policy.constants | old.constants | new.constants,
+                requires={**policy.requires, **old.requires, **new.requires},
+            )
+            old, new = held_by_requirement(old, new, policy.requires)
 
         changes = self._compare_tables(old.tables, new.tables, policy)
         unattached = self._compare_unattached_indexes(old, new)
@@ -927,6 +1028,7 @@ class SchemaDiffer:
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
         # Objects compared by definition: views, routines and the rest (#288).
         objects, unwritable = self._compare_objects(old, new, policy)
+        objects = in_requirement_order(objects, policy.requires)
         changes.extend(self._carrying(change, old.model, new.model, policy) for change in objects)
         whole = {c.ref for c in objects if c.ref.kind == "matview"}
         changes.extend(self._compare_matview_indexes(old.model, new.model, policy, whole))

@@ -326,10 +326,10 @@ def fresh_database(fresh_database_factory: Callable[[str], str]) -> str:
     return fresh_database_factory("confiture_t")
 
 
-#: How a tree declares pg_tviews: jsonb_delta first, which pg_tviews requires from
-#: 0.1.0-beta.35. Declared, not pulled in by ``CASCADE``, so the tree writes every
-#: extension the database then holds.
-PG_TVIEWS_EXTENSIONS = "CREATE EXTENSION jsonb_delta;\nCREATE EXTENSION pg_tviews;\n"
+#: How a tree declares pg_tviews, as its guide does: ``CASCADE`` creates jsonb_delta,
+#: which pg_tviews requires from 0.1.0-beta.35, and a comparison with a database counts
+#: it as the tree's (``differ.held_by_requirement``).
+PG_TVIEWS_EXTENSIONS = "CREATE EXTENSION pg_tviews CASCADE;\n"
 
 
 def create_supported_pg_tviews(conn: psycopg.Connection) -> None:

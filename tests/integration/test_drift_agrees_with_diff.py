@@ -409,7 +409,7 @@ def built_tview(fresh_database: str, tmp_path: Path) -> tuple[str, Path]:
         create_supported_pg_tviews(conn)
         conn.execute(TVIEW_TREE)
     schema_file = tmp_path / "schema_tview.sql"
-    # The extensions are the tree's too, or the diff would drop them.
+    # The extension is the tree's too, or the diff would drop it.
     schema_file.write_text(PG_TVIEWS_EXTENSIONS + TVIEW_TREE, encoding="utf-8")
     return fresh_database, schema_file
 
@@ -441,3 +441,47 @@ def test_drift_and_diff_agree_on_a_tview_s_indexes(
     assert (drift_only, diff_only) == (set(), set()), mutation
     reported, expected = _index_severities(url, schema_file)
     assert reported == expected, mutation
+
+
+#: A tree that creates an extension by ``CASCADE``: the database holds ``cube``, which
+#: the tree never writes and holds once applied, because ``earthdistance`` requires it.
+CASCADE_TREE = """
+CREATE EXTENSION earthdistance CASCADE;
+CREATE TABLE tb_place (id bigint PRIMARY KEY, at cube);
+"""
+
+
+@pytest.fixture
+def built_cascade(fresh_database: str, tmp_path: Path) -> tuple[str, Path]:
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'earthdistance'"
+        ).fetchone():
+            pytest.skip("earthdistance (contrib) is not installed on this server")
+        conn.execute(CASCADE_TREE)
+    schema_file = tmp_path / "schema_cascade.sql"
+    schema_file.write_text(CASCADE_TREE, encoding="utf-8")
+    return fresh_database, schema_file
+
+
+def test_an_extension_cascade_installs_is_no_drift_and_no_change(
+    built_cascade: tuple[str, Path],
+) -> None:
+    url, schema_file = built_cascade
+    assert _disagreement(url, schema_file) == (set(), set(), set())
+    assert platform.diff(url, schema_file).changes == []
+
+
+def test_a_database_missing_the_requirer_misses_only_the_requirer(
+    built_cascade: tuple[str, Path],
+) -> None:
+    url, schema_file = built_cascade
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute("DROP EXTENSION earthdistance")
+    with psycopg.connect(url) as conn:
+        report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema_file))
+    assert [(i.drift_type.value, i.object_name) for i in report.drift_items] == [
+        ("missing_object", "earthdistance")
+    ]
+    changes = platform.diff(url, schema_file).changes
+    assert [(type(c).__name__, c.ref.name) for c in changes] == [("ObjectAdded", "earthdistance")]

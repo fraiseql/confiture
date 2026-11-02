@@ -51,10 +51,9 @@ From 0.1.0-beta.35, pg_tviews:
 
 - **requires jsonb_delta** (`requires = 'jsonb_delta'`): `CREATE EXTENSION pg_tviews`
   fails without it, and `CREATE EXTENSION pg_tviews CASCADE` installs it. A tree
-  declares both, `CREATE EXTENSION jsonb_delta;` before `CREATE EXTENSION pg_tviews;`:
-  installed by `CASCADE`, jsonb_delta is an extension the database holds and the tree
-  does not write, which drift reports (`extra_object`) and `migrate diff --from db`
-  would drop;
+  writes either; compared with a database, an extension that one the tree creates
+  requires is the tree's too, so drift does not report it and `migrate diff` neither
+  creates nor drops it;
 - **must be preloaded** (`shared_preload_libraries = 'pg_tviews'`): `CREATE EXTENSION`,
   every write to a TVIEW's base table and every pg_tviews function fail with `55000`
   otherwise, and it is installed by a superuser (`superuser = true`);

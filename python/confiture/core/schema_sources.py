@@ -26,7 +26,12 @@ from confiture.core.differ import SchemaDiffer, Side, held_by_definition
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
-from confiture.core.live_catalog import attached, catalogued_objects, user_schemas
+from confiture.core.live_catalog import (
+    attached,
+    catalogued_objects,
+    extension_requirements,
+    user_schemas,
+)
 from confiture.core.live_catalog import read as read_catalog
 from confiture.core.live_catalog import (
     require_supported_pg_tviews_on as _require_supported_pg_tviews_on,
@@ -226,7 +231,9 @@ def database_side(
     without creating, is the tree's whether or not it writes ``CREATE SCHEMA``.
     The model says it is the catalog's (``source``), so a comparison with a tree
     applies the parity rules, and the side carries how its server spells the
-    tree's constants (``server_constants``), so a default compares as a value.
+    tree's constants (``server_constants``), so a default compares as a value, and
+    what each extension requires (``extension_requirements``), so an extension a
+    tree's own requires is the tree's too.
 
     Raises:
         ConfigurationError: ``CONFIG_006`` when the URL does not connect;
@@ -248,6 +255,7 @@ def database_side(
             catalogued_objects(conn, model, wanted),
             constants=constants,
             attached=attached(conn, relations),
+            requires={} if against is None else extension_requirements(conn),
         )
 
 
