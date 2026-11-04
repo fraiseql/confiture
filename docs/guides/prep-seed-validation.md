@@ -49,7 +49,7 @@ responsibilities are deliberately split so conventions live in **one** place:
 |---------|-------|--------------|
 | Schema build | **confiture** | `confiture build` materialises the schema from `db/schema/` |
 | Seed-data *generation* | **[fraiseql-semis](https://pypi.org/project/fraiseql-semis/)** ([source](https://github.com/fraiseql/semis), 0.3.0 when this was written) | fabricates realistic rows on `confiture.platform`, resolving FK graphs |
-| Structured pattern-UUIDs | **fraiseql-uuid** (fraiseql-seed) | the canonical `{table}{type}-{func}-4{scen}-8{…}-{inst}` v4-compliant encoding |
+| Structured pattern-UUIDs | **[fraiseql-uuid](https://pypi.org/project/fraiseql-uuid/)** ([source](https://github.com/fraiseql/fraiseql-uuid)) | the canonical `{table}{type}-{func}-4{scen}-8{…}-{inst}` v4-compliant encoding |
 | Seed-transform *validation* | **confiture** | the 5 levels on this page |
 
 End-to-end the workflow is **`confiture build` → `fraiseql-semis` seed →
