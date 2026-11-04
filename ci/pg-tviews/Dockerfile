@@ -3,13 +3,11 @@
 # pg_tviews is in no distribution, so it is built here from a pinned ref with the
 # pgrx version it pins (Cargo.toml: pgrx = "=0.17.0") against PGDG's PostgreSQL 18,
 # and the tree `cargo pgrx package` writes is copied onto the official image of the
-# same Debian release. The ref is the head of fraiseql/pg_tviews' 0.1.0-beta.35
-# branch (`refactor/architecture-2026-11`, fraiseql/pg_tviews#285); it moves to the
-# signed v0.1.0-beta.35 tag's commit once that is cut. 0.1.0-beta.35 offers read
-# contract 3, which confiture reads beside contract 2 (the registry, its `options`
-# and `pg_tviews_create_or_replace()` as contract 2 has them; the rest of the
-# surface renamed). Fetched by SHA so a build reproduces and the layer cache never
-# serves another tree under the same ref.
+# same Debian release. The ref is the commit of the signed v0.1.0-beta.35 tag.
+# 0.1.0-beta.35 offers read contract 3, which confiture reads beside contract 2
+# (the registry, its `options` and `pg_tviews_create_or_replace()` as contract 2
+# has them; the rest of the surface renamed). Fetched by SHA so a build
+# reproduces and the layer cache never serves another tree under the same ref.
 #
 # pg_tviews requires jsonb_delta (`requires = 'jsonb_delta'`), built here at the
 # commit of its v0.3.0 tag, the release pg_tviews' own CI runs.
@@ -49,7 +47,7 @@ RUN cargo pgrx package --no-default-features --features pg18 \
       --pg-config /usr/lib/postgresql/18/bin/pg_config --out-dir /out
 
 FROM toolchain AS pg_tviews
-ARG PG_TVIEWS_REF=4dda99ec2e1bbcadefca0a8d49b8cc12d8bb9ddc
+ARG PG_TVIEWS_REF=84157ed337b5b94baa60f3734c04f26a17a132b6
 WORKDIR /src
 RUN git init -q \
  && git fetch -q --depth 1 https://github.com/fraiseql/pg_tviews "$PG_TVIEWS_REF" \

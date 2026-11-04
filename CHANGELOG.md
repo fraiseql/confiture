@@ -68,9 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it), must be preloaded, and refuses writers above READ COMMITTED.
 - **The scratch build creates pg_tviews with `CASCADE`** (`ExpectedSchemaDB`, under
   `--scratch-url`), so jsonb_delta comes with it on a beta.35 server.
-- **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.35** (fraiseql/pg_tviews#285, the head of
-  its `refactor/architecture-2026-11` branch until the tag is cut; it built 0.1.0-beta.34 for
-  #795) with jsonb_delta 0.3.0, and carries 0.1.0-beta.34's install script, so
+- **The `pg-tviews` CI leg builds pg_tviews 0.1.0-beta.35** (the signed v0.1.0-beta.35 tag; it
+  built 0.1.0-beta.34 for #795) with jsonb_delta 0.3.0, and carries 0.1.0-beta.34's install script, so
   `ci/pg-tviews/upgrade-suites.txt` runs the update and the recreate against a real
   previous-release catalog. The lint is right under both sides of beta.34's change, and
   beta.30–34 keep contract 2, so there is no reading reason to refuse them.
