@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 import psycopg
 import pytest
-from tests.conftest import create_supported_pg_tviews
+from tests.conftest import PG_TVIEWS_EXTENSIONS, create_supported_pg_tviews
 
 from confiture import platform
 from confiture.core.differ_sql import DifferSQLGenerator
@@ -56,7 +56,7 @@ def database(fresh_database_factory: Callable[[str], str]) -> str:
 
 
 def test_a_tview_the_tree_does_not_declare_is_one_drop(database: str) -> None:
-    changes = platform.diff(database, "CREATE EXTENSION pg_tviews;" + BASE).changes
+    changes = platform.diff(database, PG_TVIEWS_EXTENSIONS + BASE).changes
     assert [type(change).__name__ for change in changes] == ["ObjectDropped"]
     (change,) = changes
     assert change.ref.kind == "tview"
@@ -67,4 +67,4 @@ def test_a_tview_the_tree_does_not_declare_is_one_drop(database: str) -> None:
 
 
 def test_a_database_built_from_a_tree_with_a_tview_is_no_change(database: str) -> None:
-    assert platform.diff(database, "CREATE EXTENSION pg_tviews;" + BASE + TVIEW).changes == []
+    assert platform.diff(database, PG_TVIEWS_EXTENSIONS + BASE + TVIEW).changes == []

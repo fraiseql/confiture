@@ -1,0 +1,6 @@
+# The pg_tviews upgrade suites: what the quality gate's pg-tviews leg runs after
+# suites.txt. They need the previous pg_tviews release's install script beside the
+# pinned one (ci/pg-tviews/Dockerfile carries it), which a server built from one
+# pg_tviews commit lacks, so pg_tviews' own run of suites.txt does not include them.
+# One path per line; '#' starts a comment. Every file must run without a skip here.
+tests/integration/test_pg_tviews_update.py

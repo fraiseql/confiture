@@ -12,6 +12,7 @@ from typing import Literal
 
 UpEventKind = Literal[
     "lock_acquired",
+    "pg_tviews_updated",
     "baseline_probe",
     "baseline_detected",
     "baseline_missed",

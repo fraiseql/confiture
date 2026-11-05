@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from tests.unit._doubles import session_double
+from tests.unit._doubles import connection_double, session_double
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -99,7 +99,7 @@ def test_seed_apply_copy_options_reach_the_applier(project: Path) -> None:
     (seeds / "001_rows.sql").write_text("INSERT INTO t (id) VALUES (1);\n")
     with (
         patch("confiture.cli.seed.SeedApplier", autospec=True) as applier_cls,
-        patch("confiture.cli.helpers.create_connection", return_value=MagicMock()),
+        patch("confiture.cli.helpers.create_connection", return_value=connection_double()),
     ):
         applier_cls.return_value.apply_sequential.return_value = MagicMock(
             succeeded=1, failed=0, total=1, failed_files=[], seed_profile=None

@@ -95,6 +95,16 @@ object is compared by existence, and one the tree adds is created, in a migratio
 `migrate diff --generate` writes, with the tree's own statement. One the database holds and
 the tree does not declare is a `DIFFER_404` warning: the diff has no statement to drop it with.
 
+An extension that an extension one side holds requires is held by that side too, between a
+tree and a database (the structural and materialised tiers). `CREATE EXTENSION pg_tviews
+CASCADE` installs jsonb_delta, which pg_tviews requires, so the database holds an extension
+the tree never wrote. It is the tree's all the same, whether the tree writes it or not:
+drift does not report it, and `migrate diff` neither creates nor drops it. What each
+extension requires is the database's server's answer: an installed extension's from
+`pg_depend`, any other's from its control file. An extension whose requirer the tree no
+longer creates is compared like any other. Where a migration creates or drops several
+extensions, each is created after what it requires and dropped before it.
+
 ## What drift reports at each tier
 
 The drift kinds and severities are the same at every tier; the materialised tier reports

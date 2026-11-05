@@ -18,6 +18,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
 from confiture.core.ddl_walk import AS_WRITTEN
@@ -25,7 +26,12 @@ from confiture.core.differ import SchemaDiffer, Side, held_by_definition
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
-from confiture.core.live_catalog import attached, catalogued_objects, user_schemas
+from confiture.core.live_catalog import (
+    attached,
+    catalogued_objects,
+    extension_requirements,
+    user_schemas,
+)
 from confiture.core.live_catalog import read as read_catalog
 from confiture.core.live_catalog import (
     require_supported_pg_tviews_on as _require_supported_pg_tviews_on,
@@ -82,14 +88,14 @@ def _read(file: Path) -> str:
 
 
 def _segments(
-    source: SchemaSource | None, *, env: str | None, project_dir: Path | None
+    source: SchemaSource | None, *, env: str | Environment | None, project_dir: Path | None
 ) -> list[Segment]:
     """*source*'s DDL file by file, in the order it is read — the file each came from kept.
 
     *env* is the project's build: the schema files ``confiture build --schema-only``
     selects, in build order, each named relative to the project, so a position is
     a line of a file the author edits and a statement PostgreSQL rejects is named
-    by its file.
+    by its file. A loaded :class:`Environment` is read as its name would be.
     """
     if (source is None) == (env is None):
         raise ValueError("Give exactly one of a schema source or an environment.")
@@ -129,7 +135,7 @@ def env_segments(env: str, project_dir: Path | None = None) -> list[Segment]:
 def read_schema(
     source: SchemaSource | None = None,
     *,
-    env: str | None = None,
+    env: str | Environment | None = None,
     project_dir: Path | None = None,
 ) -> SchemaRead:
     """:func:`parse_schema`'s model, from one parse, with what that parse knows beside it.
@@ -195,7 +201,7 @@ def require_supported_pg_tviews_on(database: str | Connection) -> None:
     The check every live read of TVIEWs makes first (drift, ``migrate up`` of a
     TVIEW migration, ``introspect``), for a tool that asks it before a deploy:
     a database without pg_tviews passes; one whose ``tviews.contract_version()``
-    is not the contract confiture reads, or whose registry lacks a column it reads
+    is not a contract confiture reads (2 or 3), or whose registry lacks a column it reads
     (pg_tviews before ``MINIMUM_PG_TVIEWS``), is refused. A URL is connected
     to and closed here; a connection is the caller's.
 
@@ -225,7 +231,9 @@ def database_side(
     without creating, is the tree's whether or not it writes ``CREATE SCHEMA``.
     The model says it is the catalog's (``source``), so a comparison with a tree
     applies the parity rules, and the side carries how its server spells the
-    tree's constants (``server_constants``), so a default compares as a value.
+    tree's constants (``server_constants``), so a default compares as a value, and
+    what each extension requires (``extension_requirements``), so an extension a
+    tree's own requires is the tree's too.
 
     Raises:
         ConfigurationError: ``CONFIG_006`` when the URL does not connect;
@@ -247,6 +255,7 @@ def database_side(
             catalogued_objects(conn, model, wanted),
             constants=constants,
             attached=attached(conn, relations),
+            requires={} if against is None else extension_requirements(conn),
         )
 
 

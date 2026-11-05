@@ -128,6 +128,7 @@ def up(
     install_view_helpers: bool | None = None,
     on_event: Callable[[UpEvent], None] | None = None,
     batch: "BatchConfig | None" = None,
+    recreate_pg_tviews_from: "SchemaModel | None" = None,
 ) -> "MigrateUpResult":
     """Apply pending migrations (atomically) up to an optional target."""
 ```
@@ -164,8 +165,15 @@ that cannot be taken raises `LockAcquisitionError`; a failing migration is a
   directory is missing or empty.
 - `install_view_helpers`: install the view helper functions first; `None` follows
   `migration.view_helpers: auto`.
+- `recreate_pg_tviews_from`: the schema (a `SchemaModel`, e.g.
+  `confiture.platform.parse_schema(env="production")`) whose TVIEWs are created again
+  when the database's pg_tviews catalog has no update to the library the server
+  loaded (the CLI's `--recreate-pg-tviews`). `None` refuses that case with
+  `CONFIG_016`. Under the lock and before anything else, `up()` runs `ALTER
+  EXTENSION pg_tviews UPDATE` when the catalog is one release behind the library;
+  see [pg_tviews TVIEWs](../guides/pg-tviews.md#upgrading-pg_tviews).
 - `on_event`: live progress. Each `UpEvent` has a `kind` (`lock_acquired`,
-  `baseline_probe`, `baseline_detected`, `baseline_missed`, `view_helpers_installed`,
+  `pg_tviews_updated`, `baseline_probe`, `baseline_detected`, `baseline_missed`, `view_helpers_installed`,
   `checksums_verified`, `pending`, `applying`, `applied`, `failed`, `superuser_halt`,
   `target_reached`), a `version`/`name` when one migration is concerned, a
   `message`, and `elapsed_ms` on `applied`.

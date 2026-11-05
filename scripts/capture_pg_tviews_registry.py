@@ -36,8 +36,9 @@ def capture(server_url: str, case: Path, commit: str) -> dict[str, object]:
     try:
         with psycopg.connect(_database_url(server_url, name), autocommit=True) as conn:
             # Its own round trip: in one batch with the CREATE EXTENSION, pg_tviews'
-            # hook is not loaded yet and a `CREATE TABLE tv_x AS` stays a plain table.
-            conn.execute("CREATE EXTENSION pg_tviews")
+            # hook is not loaded yet and a `CREATE TABLE tv_x AS` stays a plain table. CASCADE
+            # installs jsonb_delta, which pg_tviews requires from 0.1.0-beta.35.
+            conn.execute("CREATE EXTENSION pg_tviews CASCADE")
             conn.execute(case.read_text())
             release = conn.execute(
                 "SELECT extversion FROM pg_extension WHERE extname = 'pg_tviews'"

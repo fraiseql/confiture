@@ -70,13 +70,16 @@ def connection_double(
     counts functions in ``pg_proc``; ``COUNT(*)`` probes (is this version
     applied?) answer 0; the ledger probe (``to_regclass``/``pg_class``) finds no
     tracking table; the checksum verifier reads an (empty) ledger with
-    ``fetchall()``. Anything else fetches ``(dbname,)``.
+    ``fetchall()``; ``pg_extension`` holds no pg_tviews. Anything else fetches
+    ``(dbname,)``.
     """
     conn = MagicMock(name="connection")
     last: dict[str, str] = {"sql": ""}
 
     def _fetchone() -> tuple[Any, ...]:
         sql = last["sql"].lower()
+        if "pg_extension" in sql:
+            return None  # no pg_tviews: nothing to bring up to date
         if "pg_proc" in sql:
             return (2 if view_helpers_installed else 0,)
         if "count(" in sql:
@@ -95,10 +98,13 @@ def connection_double(
         cursor.fetchall.return_value = []  # an empty ledger
         cursor.rowcount = -1  # what psycopg reports before any statement
 
-    _wire(conn.execute.return_value)
+    # Held here, not read back through `conn.execute`: a test that wraps `execute`
+    # still gets the wired result from the original.
+    result = conn.execute.return_value
+    _wire(result)
     conn.execute.side_effect = lambda sql, *a, **k: (
         last.__setitem__("sql", str(sql)),
-        conn.execute.return_value,
+        result,
     )[1]
     cursor = conn.cursor.return_value
     _wire(cursor)

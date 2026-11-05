@@ -238,7 +238,8 @@ class ExpectedSchemaDB:
         """pg_tviews in the scratch database, or ``CONFIG_014`` where the server has none.
 
         ``pg_available_extensions``, not ``pg_extension``: the database is new, and
-        what matters is whether the *server* has the files.
+        what matters is whether the *server* has the files. ``CASCADE`` installs
+        jsonb_delta, which pg_tviews requires from 0.1.0-beta.35.
         """
         assert self._temp_url is not None
         with psycopg.connect(self._temp_url, autocommit=True) as conn:
@@ -255,7 +256,7 @@ class ExpectedSchemaDB:
                         "installed, the release the database you compare with runs"
                     ),
                 )
-            conn.execute("CREATE EXTENSION pg_tviews")
+            conn.execute("CREATE EXTENSION pg_tviews CASCADE")
 
     def _set_search_path(self, schema: str) -> None:
         """Every later session on the scratch database resolves a bare name in *schema* first."""

@@ -401,17 +401,16 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
     {
         "code": "CONFIG_014",
         "message_template": (
-            "pg_tviews {installed} offers read contract {contract}; confiture reads "
-            "contract {supported}"
+            "pg_tviews {installed} offers read contract {contract}; confiture reads {supported}"
         ),
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Run pg_tviews 0.1.0-beta.30 or later, whose `tviews.contract_version()` is the "
-            "contract confiture reads (2) and whose registry holds every column it reads: "
-            "from an earlier beta, ALTER EXTENSION pg_tviews UPDATE, then SELECT * FROM "
-            "tviews.pg_tviews_reregister_all(); an extension created by 0.1.0-beta.19 or "
-            "earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql"
+            "Run pg_tviews 0.1.0-beta.30 or later, whose `tviews.contract_version()` is a "
+            "contract confiture reads (2 or 3) and whose registry holds every column it "
+            "reads. From the release before the one installed, ALTER EXTENSION pg_tviews "
+            "UPDATE (confiture migrate up runs it); from an older one, drop the extension "
+            "and create the TVIEWs again (confiture migrate up --recreate-pg-tviews)"
         ),
     },
     {
@@ -425,6 +424,22 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": (
             "Point at the existing ledger — set migration.tracking_table to it, or put its "
             "schema on the connection's search_path"
+        ),
+    },
+    {
+        "code": "CONFIG_016",
+        "message_template": (
+            "pg_tviews {installed} in this database cannot be brought to the loaded "
+            "library {library}"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "A pg_tviews release updates only from the one before it: from an older "
+            "catalog, confiture migrate up --recreate-pg-tviews drops the extension and "
+            "creates every TVIEW again from the schema files. A library that matches "
+            "neither the catalog nor the installed package needs PostgreSQL restarted; "
+            "ALTER EXTENSION needs the extension's owner or a superuser"
         ),
     },
     # ========== Default error codes for exception types ==========

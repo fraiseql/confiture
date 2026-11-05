@@ -28,29 +28,79 @@ any other view. A TVIEW whose definition embeds another TVIEW reads that TVIEW's
 | `migrate preflight --against` | the finding below |
 | `confiture lint --select tview` | the two storage rules below |
 
-Confiture reads pg_tviews through its **read contract 2**: `tviews.registry` for what
-a database registers, `tviews.pg_tviews_create_or_replace()` and
+Confiture reads pg_tviews through its **read contracts 2 and 3**: `tviews.registry`
+for what a database registers, `tviews.pg_tviews_create_or_replace()` and
 `tviews.pg_tviews_drop()` for what a migration writes, and `tviews.contract_version()`
 to say which contract they keep. Under contract 2 every option is a key of
 `tviews.registry.options`, its default filled, and the options a call passes are the
-whole declaration. Confiture needs **pg_tviews 0.1.0-beta.30** or later, the first
-release offering it, and reads the registry's `schema`, `name`, `query`, `options`,
-`view` and `managed_indexes`. The column is the gate, not the version: a build whose
-registry lacks one is refused too. A pg_tviews that offers contract 1 (0.1.0-beta.27
-and earlier) is refused with the upgrade: `ALTER EXTENSION pg_tviews UPDATE`, then
-`SELECT * FROM tviews.pg_tviews_reregister_all()` once.
+whole declaration; contract 3 (pg_tviews 0.1.0-beta.35) renamed the rest of pg_tviews'
+surface and kept those three as they were. Confiture needs **pg_tviews 0.1.0-beta.30**
+or later, the first release offering contract 2, and reads the registry's `schema`,
+`name`, `query`, `options`, `view` and `managed_indexes`. The column is the gate, not
+the version: a build whose registry lacks one is refused too.
 Where confiture reads TVIEWs from a live database (drift, `schema dump-model`,
 `migrate preflight --against`, the platform's `introspect`), a pg_tviews that answers
 another contract, has none, or whose registry lacks one of those columns is refused
 with `CONFIG_014` (exit 5), naming the release installed and what it lacks. `migrate up` refuses the same way, before applying anything, when a
 pending migration creates or drops a TVIEW. A migration that touches no TVIEW deploys
-as before. Upgrade the extension (`ALTER EXTENSION pg_tviews UPDATE`) **out of band,
-before the deploy**: a migration that upgrades it beside a TVIEW migration is refused
-with the rest, since the check runs before anything is applied.
+as before.
 
-pg_tviews 0.1.0-beta.19 and earlier kept their objects wherever `search_path` put
-them and have no contract. An extension created by one of them is moved with
-pg_tviews' `scripts/migrate-from-0.1.0.sql`, not `ALTER EXTENSION … UPDATE`.
+### Running pg_tviews
+
+From 0.1.0-beta.35, pg_tviews:
+
+- **requires jsonb_delta** (`requires = 'jsonb_delta'`): `CREATE EXTENSION pg_tviews`
+  fails without it, and `CREATE EXTENSION pg_tviews CASCADE` installs it. A tree
+  writes either; compared with a database, an extension that one the tree creates
+  requires is the tree's too, so drift does not report it and `migrate diff` neither
+  creates nor drops it;
+- **must be preloaded** (`shared_preload_libraries = 'pg_tviews'`): `CREATE EXTENSION`,
+  every write to a TVIEW's base table and every pg_tviews function fail with `55000`
+  otherwise, and it is installed by a superuser (`superuser = true`);
+- **refuses a writer at REPEATABLE READ or SERIALIZABLE** (`0A000`): a transaction
+  that writes a table a TVIEW reads runs at READ COMMITTED. Reads are not concerned.
+  confiture applies migrations at the server's default isolation; an application
+  that raised it for its writers lowers it again.
+
+### Upgrading pg_tviews
+
+A pg_tviews release updates only from the one before it: install the package, restart
+PostgreSQL (the library is preloaded), then `ALTER EXTENSION pg_tviews UPDATE` in each
+database, which re-derives every TVIEW (`pg_tviews_reregister_all()` after it is no
+longer needed). Between the restart and the update, every write to a TVIEW's base
+table and every pg_tviews function fails with `55000` (`pg_tviews library catalog
+revision <n> does not match the installed extension (<m>)`).
+
+`migrate up`, `migrate down` and `migrate apply-as` close that window themselves: once
+they hold the migration lock, and before anything else, they compare the library the
+server loaded (`tviews.pg_tviews_version()`) with the database's catalog
+(`pg_extension.extversion`). When they differ, the library is the installed package's
+release and the package's scripts lead to it from the catalog, they run `ALTER EXTENSION
+pg_tviews UPDATE` and commit it (`🔧 pg_tviews 0.1.0-beta.34 updated to
+0.1.0-beta.35`). The role needs to own the extension or be a superuser. A dry run
+updates nothing.
+
+They refuse with `CONFIG_016` (exit 5), changing nothing, when:
+
+- the loaded library is not the installed package: PostgreSQL was not restarted after
+  the package was installed (a library still at the catalog's release is no window, and
+  is left alone);
+- the catalog is older than the release before the library, so no update reaches it.
+
+The second case is a recreate, which confiture can do from the schema files, since they
+hold every TVIEW's definition, and only when asked: `confiture migrate up
+--recreate-pg-tviews` (needs `--config db/environments/<env>.yaml`), or
+`MigratorSession.up(recreate_pg_tviews_from=<SchemaModel>)`. In **one transaction** it
+drops the extension (`DROP EXTENSION pg_tviews CASCADE`, then pg_tviews' `tviews`
+schema), drops each TVIEW's table, creates the extension again (`CASCADE`, so jsonb_delta
+comes with it) and creates every TVIEW the schema files declare, in the order the build
+creates them, each with its indexes, through the same `pg_tviews_create_or_replace()`
+call a generated migration writes. The base tables keep their rows; the TVIEWs are
+refilled from them. It refuses, before dropping anything, when the database registers a
+TVIEW the schema files do not declare, or when a view outside pg_tviews reads a TVIEW
+or pg_tviews' schema (the drop would take it along: drop it, recreate, and create it
+again). Any failure rolls the whole recreate back. Grants on a TVIEW's table are not
+carried over: grant them again.
 
 ### What a generated migration writes
 
@@ -219,8 +269,9 @@ compares what each writes, with no registry to ask, so:
 
 - Never copy pg_tviews' own index into a tree. Adopted, it is pg_tviews'; a later tree
   that removes it generates `DROP INDEX CONCURRENTLY IF EXISTS`, which drops
-  **pg_tviews'** index, and pg_tviews forgets it. `pg_tviews_ensure_propagation_indexes()`
-  creates it again (from 0.1.0-beta.27 a role needs `GRANT EXECUTE` on it).
+  **pg_tviews'** index, and pg_tviews forgets it. `pg_tviews_ensure_propagation_indexes(tview)`
+  creates it again for that TVIEW's owner, and `pg_tviews_ensure_propagation_indexes_all()`
+  for every TVIEW (an operator's: `GRANT EXECUTE` on it).
 - A new index under a reserved name that pg_tviews has not created yet is generated as
   `CREATE INDEX CONCURRENTLY`, which pg_tviews refuses (`42939`) partway through a file
   that runs outside a transaction: the statements before it have committed. Rename it.
@@ -229,11 +280,11 @@ compares what each writes, with no registry to ask, so:
   (`55000`). Generate against the database (`migrate diff --from db`, which drops and
   rebuilds the INVALID index around the replace), or `REINDEX` the index first.
 
-**Privileges.** pg_tviews revokes `EXECUTE` from `PUBLIC` on its operator functions
-(`pg_tviews_refresh_all()`, `pg_tviews_rebuild_all()`, `pg_tviews_reregister_all()`,
-`pg_tviews_ensure_propagation_indexes()`, `pg_tviews_invalidate_caches()`, …), and the
-per-TVIEW functions require ownership: grant them to the roles that call them.
-confiture calls none of them.
+**Privileges.** pg_tviews revokes `EXECUTE` from `PUBLIC` on its operator functions,
+those acting on every TVIEW (`pg_tviews_refresh_all()`, `pg_tviews_rebuild_all()`,
+`pg_tviews_reregister_all()`, `pg_tviews_ensure_propagation_indexes_all()`,
+`pg_tviews_reset_stats_all()`, …), and the functions acting on or showing one TVIEW
+require owning it: grant them to the roles that call them. confiture calls none of them.
 
 ## Preflight finding
 

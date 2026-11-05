@@ -781,7 +781,7 @@ Refuse *database*'s pg_tviews where confiture cannot read its TVIEWs.
 The check every live read of TVIEWs makes first (drift, `migrate up` of a
 TVIEW migration, `introspect`), for a tool that asks it before a deploy:
 a database without pg_tviews passes; one whose `tviews.contract_version()`
-is not the contract confiture reads, or whose registry lacks a column it reads
+is not a contract confiture reads (2 or 3), or whose registry lacks a column it reads
 (pg_tviews before `MINIMUM_PG_TVIEWS`), is refused. A URL is connected
 to and closed here; a connection is the caller's.
 

@@ -326,8 +326,14 @@ def fresh_database(fresh_database_factory: Callable[[str], str]) -> str:
     return fresh_database_factory("confiture_t")
 
 
+#: How a tree declares pg_tviews, as its guide does: ``CASCADE`` creates jsonb_delta,
+#: which pg_tviews requires from 0.1.0-beta.35, and a comparison with a database counts
+#: it as the tree's (``differ.held_by_requirement``).
+PG_TVIEWS_EXTENSIONS = "CREATE EXTENSION pg_tviews CASCADE;\n"
+
+
 def create_supported_pg_tviews(conn: psycopg.Connection) -> None:
-    """``CREATE EXTENSION pg_tviews``; skip, with the reason, where confiture does not read its contract.
+    """``CREATE EXTENSION pg_tviews CASCADE``; skip, with the reason, where confiture does not read its contract.
 
     The ``pg-tviews`` CI leg proves its build is supported before the suites run,
     so a skip there cannot pass for a green run.
@@ -335,7 +341,7 @@ def create_supported_pg_tviews(conn: psycopg.Connection) -> None:
     from confiture.core import live_catalog
     from confiture.exceptions import ConfigurationError
 
-    conn.execute("CREATE EXTENSION pg_tviews")
+    conn.execute("CREATE EXTENSION pg_tviews CASCADE")
     try:
         live_catalog.require_supported_pg_tviews_on(conn)
     except ConfigurationError as refused:

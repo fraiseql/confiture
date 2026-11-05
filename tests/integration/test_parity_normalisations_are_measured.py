@@ -30,7 +30,10 @@ Measured on PostgreSQL 15 (CI) and 18.4 (local), 2026-09-21:
 10. a view's query is stored as a parse tree and read back deparsed;
 11. a TVIEW's options are all in ``tviews.registry``, those the tree left to pg_tviews'
     defaults included — measured where pg_tviews is installed, in
-    ``tests/integration/test_tview_live.py``.
+    ``tests/integration/test_tview_live.py``;
+12. ``CREATE EXTENSION … CASCADE`` installs the extensions the one named requires, and
+    records each requirement in ``pg_depend``, which is how a comparison knows the
+    database's ``cube`` is the tree's ``earthdistance``'s (``differ.held_by_requirement``).
 
 And one the first draft of the plan listed that does **not** exist: an index whose
 statement writes no ``USING`` is ``btree`` on both sides, because PostgreSQL's
@@ -42,6 +45,7 @@ from collections.abc import Callable
 import psycopg
 import pytest
 
+from confiture.core.live_catalog import extension_requirements
 from confiture.core.schema_read import read_text
 
 
@@ -223,3 +227,14 @@ def test_a_views_query_reads_back_deparsed(conn: psycopg.Connection) -> None:
     # `*` is expanded; PostgreSQL 15 also qualifies the column (`t.id`), 16 on does not.
     assert "*" not in deparsed
     assert "id" in deparsed
+
+
+def test_cascade_installs_what_an_extension_requires(conn: psycopg.Connection) -> None:
+    if not conn.execute(
+        "SELECT 1 FROM pg_available_extensions WHERE name = 'earthdistance'"
+    ).fetchone():
+        pytest.skip("earthdistance (contrib) is not installed on this server")
+    conn.execute("CREATE EXTENSION earthdistance CASCADE")
+    held = {row[0] for row in conn.execute("SELECT extname FROM pg_extension").fetchall()}
+    assert {"earthdistance", "cube"} <= held
+    assert extension_requirements(conn)["earthdistance"] == frozenset({"cube"})

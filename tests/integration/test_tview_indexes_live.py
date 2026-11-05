@@ -19,7 +19,7 @@ from typing import Any
 import psycopg
 import pytest
 from psycopg import errors
-from tests.conftest import create_supported_pg_tviews
+from tests.conftest import PG_TVIEWS_EXTENSIONS, create_supported_pg_tviews
 
 from confiture.core import live_catalog
 from confiture.core.differ import CATALOGUED, adopted_by_pg_tviews
@@ -208,7 +208,7 @@ def _drift(url: str, tree: str, tmp_path: Any) -> Any:
     from confiture.core.drift import SchemaDriftDetector
 
     schema_file = tmp_path / "schema.sql"
-    schema_file.write_text("CREATE EXTENSION pg_tviews;\n" + tree, encoding="utf-8")
+    schema_file.write_text(PG_TVIEWS_EXTENSIONS + tree, encoding="utf-8")
     with psycopg.connect(url) as conn:
         return SchemaDriftDetector(conn).compare_with_schema_file(str(schema_file))
 

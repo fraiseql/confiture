@@ -192,7 +192,7 @@ def test_migrate_up_refuses_a_tview_migration_on_an_unsupported_pg_tviews(
     from confiture.core.migrator import MigratorSession
     from confiture.exceptions import ConfigurationError
 
-    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSIONS", frozenset({99}))
     _write(tmp_path, "20260101000000_tview", OLD)
 
     with MigratorSession(None, tmp_path, database_url_override=tview_database) as session:
@@ -209,7 +209,7 @@ def test_migrate_up_applies_a_migration_that_touches_no_tview_there(
 ) -> None:
     from confiture.core.migrator import MigratorSession
 
-    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSIONS", frozenset({99}))
     _write(tmp_path, "20260101000000_column", "ALTER TABLE tb_post ADD COLUMN body text;\n")
 
     with MigratorSession(None, tmp_path, database_url_override=tview_database) as session:
