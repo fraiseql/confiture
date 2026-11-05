@@ -2,7 +2,7 @@
 
 The FraiseQL stack's structured pattern-UUID convention — the v4-compliant
 ``{table}{type}-{func}-4{scen}-8{...}-{inst}`` encoding — has **one** canonical
-home: ``fraiseql-uuid`` (in fraiseql-seed). Confiture's seed-validation only does
+home: ``fraiseql-uuid`` (fraiseql/fraiseql-uuid). Confiture's seed-validation only does
 generic RFC-4122 *format* checks and deliberately keeps **no** parallel copy of
 that convention; the old ``uuid_patterns.py`` / ``uuid_validator.py`` island was
 deleted (P04b, commit caf0153).
