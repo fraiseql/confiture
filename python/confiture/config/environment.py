@@ -37,9 +37,12 @@ Configuration Structure
 Environment Variables
 ====================
 
-All ``database_url`` values support ``${VAR}`` substitution::
+``database_url`` and ``scratch_url`` support ``${VAR}`` substitution, whole or in part::
 
     database_url: ${DATABASE_URL}
+    database_url: postgresql://app:${DB_PASSWORD}@localhost:${TUNNEL_LOCAL_PORT}/app
+
+``${TUNNEL_LOCAL_PORT}`` is left for ``ssh_tunnel``, which fills in the port it opened.
 
 File Discovery
 ==============
@@ -67,7 +70,7 @@ from pydantic import (
     model_validator,
 )
 
-from confiture.config._env_vars import expand_env_vars
+from confiture.config._env_vars import expand_connection_url, expand_env_vars, references
 from confiture.core.schema_identity import identifier_identity
 from confiture.exceptions import ConfigurationError
 from confiture.url_redaction import redact_credentials_in, redact_url
@@ -1077,8 +1080,8 @@ class Environment(BaseModel):
         security_lint: The ``sec_002`` SECURITY DEFINER lint: enabled flag, schema scope, ignore globs and severity.
         lint: What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build.
         name: Environment name (e.g., "local", "production")
-        database_url: PostgreSQL connection URL
-        scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide (``null`` reports their references as unchecked), and ``confiture seed drift --build`` builds the seed side there.
+        written_database_url: PostgreSQL connection URL. ``${VAR}`` references (whole or in part) are expanded when the URL is used, so a command that never connects needs none of them set; ``${TUNNEL_LOCAL_PORT}`` is left for ``ssh_tunnel``.
+        written_scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide (``null`` reports their references as unchecked), and ``confiture seed drift --build`` builds the seed side there.
         include_dirs: Directories to include when building schema (supports both string and dict formats)
         superuser_post_dirs: Directories routed to the post-schema superuser phase in build_split()
         exclude_dirs: Directories to exclude from schema build
@@ -1090,7 +1093,7 @@ class Environment(BaseModel):
 
     # `database_url` may embed a password: pydantic must not echo rejected input
     # back in error text; the validators quote a redacted form instead.
-    model_config = ConfigDict(hide_input_in_errors=True)
+    model_config = ConfigDict(hide_input_in_errors=True, populate_by_name=True)
 
     # ``name`` and ``include_dirs`` are build-only fields and are never read on
     # the migrate path (``MigratorSession`` uses only ``database_url`` and
@@ -1101,8 +1104,10 @@ class Environment(BaseModel):
     # injects ``name`` and guards a missing ``include_dirs``, and
     # ``SchemaBuilder`` independently rejects an empty ``include_dirs``.
     name: str = ""
-    database_url: str
-    scratch_url: str | None = None
+    # The connection URLs as the file writes them, ``${VAR}`` references and all;
+    # read through ``database_url`` / ``scratch_url``, which expand them (#813).
+    written_database_url: str = Field(alias="database_url")
+    written_scratch_url: str | None = Field(default=None, alias="scratch_url")
     include_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_post_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
@@ -1138,6 +1143,26 @@ class Environment(BaseModel):
     lint: LintSettings = Field(default_factory=LintSettings)
     # Issue #743 — what ``confiture seed drift`` compares, and what it accepts.
     seed_drift: SeedDriftSettings = Field(default_factory=SeedDriftSettings)
+
+    @property
+    def database_url(self) -> str:
+        """The URL to connect to: the written one with its ``${VAR}`` references expanded.
+
+        Expanded on each read, not at load: ``build`` and ``lint`` load an
+        environment without connecting, and need none of its variables set.
+
+        Raises:
+            ConfigurationError: A referenced variable is unset (named, never
+                emptied), or the expansion is not a PostgreSQL URL (``CONFIG_003``).
+        """
+        return expand_connection_url(self.written_database_url, field="database_url")
+
+    @property
+    def scratch_url(self) -> str | None:
+        """The scratch server's URL, expanded as :attr:`database_url` is; ``None`` when unset."""
+        if self.written_scratch_url is None:
+            return None
+        return expand_connection_url(self.written_scratch_url, field="scratch_url")
 
     @property
     def database(self) -> DatabaseConfig:
@@ -1190,13 +1215,22 @@ class Environment(BaseModel):
                 )
         return data
 
-    @field_validator("database_url", "scratch_url")
+    @field_validator("written_database_url", "written_scratch_url")
     @classmethod
     def validate_database_url(cls, v: str | None, info: ValidationInfo) -> str | None:
-        """Validate PostgreSQL connection URL format"""
-        if v is not None and not v.startswith(("postgresql://", "postgres://")):
+        """A PostgreSQL URL, or one whose ``${VAR}`` references are well formed.
+
+        A value that starts with a reference is a URL only once expanded, so its
+        scheme is checked then (:meth:`database_url`); its syntax is checked here.
+        """
+        field = info.field_name.removeprefix("written_") if info.field_name else "url"
+        if v is None:
+            return v
+        if references(v, context=field) and v.startswith("${"):
+            return v
+        if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError(
-                f"Invalid {info.field_name}: must start with postgresql:// or postgres://, "
+                f"Invalid {field}: must start with postgresql:// or postgres://, "
                 f"got: {redact_url(v)}"
             )
         return v

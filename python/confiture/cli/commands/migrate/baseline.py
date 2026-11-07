@@ -8,8 +8,10 @@ from typing import Annotated, Any
 
 import typer
 
+from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, config_is_explicit, resolve_database_url
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
+    _current_context,
     _get_tracking_table,
     console,
     emit,
@@ -17,7 +19,12 @@ from confiture.cli.helpers import (
     open_connection,
     redact_url,
 )
-from confiture.cli.options import config_option, format_option, migrations_dir_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    format_option,
+    migrations_dir_option,
+)
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import (
@@ -35,16 +42,15 @@ def _baseline_from_db_flow(
     through: str | None,
     source_table: str | None,
     migrations_dir: Path,
-    config: Path,
+    config_data: dict[str, Any],
     dry_run: bool,
 ) -> dict[str, Any]:
     """Drive the ``--from-db`` copy path and return what it copied (#119).
 
-    Connects to the target database via the standard config flow and
-    delegates to :meth:`Migrator.baseline_from_db`.
+    Connects to the target database *config_data* names and delegates to
+    :meth:`Migrator.baseline_from_db`.
     """
 
-    config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
         migrator = _core_migrator.Migrator(
             connection=conn,
@@ -147,11 +153,13 @@ DryRunOpt = Annotated[
 
 @cli_boundary
 def migrate_baseline(
+    *,
     through: ThroughOpt = None,
     from_db: FromDbOpt = None,
     source_table: SourceTableOpt = None,
     migrations_dir: Path = migrations_dir_option(),
     config: Path = config_option(),
+    database_url: str | None = database_url_option(help=DATABASE_URL_OPTION_HELP),
     dry_run: DryRunOpt = False,
     format_output: str = format_option("text", "json"),
 ) -> None:
@@ -180,6 +188,9 @@ def migrate_baseline(
       confiture migrate baseline --from-db postgresql://prod/myapp --through 042
         ↳ Copy production's history, but stop at version 042
 
+      confiture migrate baseline --through 042 --database-url "$TARGET_URL"
+        ↳ Mark the target database a URL names, with no config file
+
     RELATED:
       confiture migrate up       - Apply migrations normally
       confiture migrate status   - View migration history
@@ -187,7 +198,22 @@ def migrate_baseline(
     """
 
     json_mode = is_json(format_output)
-    _baseline_preconditions(through, from_db, config, migrations_dir, json_mode=json_mode)
+    override = resolve_database_url(
+        database_url,
+        config,
+        config_explicit=config_is_explicit(_current_context(silent=True)),
+        require_intentional_source=True,
+    )
+    _baseline_preconditions(
+        through,
+        from_db,
+        None if override is not None else config,
+        migrations_dir,
+        json_mode=json_mode,
+    )
+    config_data = (
+        {"database_url": override} if override is not None else _core_connection.load_config(config)
+    )
 
     if from_db is not None:
         report = _baseline_from_db_flow(
@@ -195,7 +221,7 @@ def migrate_baseline(
             through=through,
             source_table=source_table,
             migrations_dir=migrations_dir,
-            config=config,
+            config_data=config_data,
             dry_run=dry_run,
         )
         if json_mode:
@@ -206,7 +232,9 @@ def migrate_baseline(
 
     _refuse_duplicate_baseline(migrations_dir, json_mode=json_mode)
     assert through is not None  # _baseline_preconditions: --through or --from-db
-    report = _mark_through(through, migrations_dir, config, dry_run=dry_run, json_mode=json_mode)
+    report = _mark_through(
+        through, migrations_dir, config_data, dry_run=dry_run, json_mode=json_mode
+    )
     if json_mode:
         emit(report)
     else:
@@ -214,9 +242,17 @@ def migrate_baseline(
 
 
 def _baseline_preconditions(
-    through: str | None, from_db: str | None, config: Path, migrations_dir: Path, *, json_mode: bool
+    through: str | None,
+    from_db: str | None,
+    config: Path | None,
+    migrations_dir: Path,
+    *,
+    json_mode: bool,
 ) -> None:
-    """One of --through / --from-db, a config file and a migrations directory — before any DB work."""
+    """One of --through / --from-db, a target and a migrations directory — before any DB work.
+
+    *config* is ``None`` when the target is a URL (``--database-url``, ``--no-config``).
+    """
     if through is None and from_db is None:
         fail(
             ConfigurationError(
@@ -224,7 +260,7 @@ def _baseline_preconditions(
             ),
             json_mode=json_mode,
         )
-    if not config.exists():
+    if config is not None and not config.exists():
         fail(
             ConfigurationError(
                 f"Config file not found: {config}",
@@ -244,10 +280,14 @@ def _baseline_preconditions(
 
 
 def _mark_through(
-    through: str, migrations_dir: Path, config: Path, *, dry_run: bool, json_mode: bool
+    through: str,
+    migrations_dir: Path,
+    config_data: dict[str, Any],
+    *,
+    dry_run: bool,
+    json_mode: bool,
 ) -> dict[str, Any]:
     """Mark every migration up to and including *through* as applied; say what each became."""
-    config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
         migrator = _core_migrator.Migrator(
             connection=conn, migration_table=_get_tracking_table(config_data)

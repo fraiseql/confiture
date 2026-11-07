@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from confiture.core import live_catalog
-from confiture.core.connection import load_config, open_connection
+from confiture.core.connection import configured, load_config, open_connection
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.validation.signature_drift import _resolve_source_sql, _ssh_override
 from confiture.core.view_body_drift import ViewBodyDriftDetector
@@ -50,7 +50,7 @@ def _config_database_url(config_data: Any) -> str | None:
     if hasattr(config_data, "database_url"):
         return config_data.database_url
     if isinstance(config_data, dict):
-        return config_data.get("database_url")
+        return configured(config_data, "database_url")
     return None
 
 

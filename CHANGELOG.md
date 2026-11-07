@@ -14,7 +14,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`migrate baseline --database-url`** (#813), resolved under the same precedence as
+  `migrate up`: the flag, `CONFITURE_DATABASE_URL`, or the config file; an explicit `--config`
+  with `CONFITURE_DATABASE_URL` is refused (`CONFIG_007`), and so is a merely ambient
+  `DATABASE_URL`, as for every command that writes the ledger.
+
+- **`migrate diff --fail-on-change`** (#811): exit 1 (`FINDINGS`, the code `drift` already uses for
+  a gate's answer) when the sides differ, after the changes are reported; without it
+  `migrate diff` exits 0 either way. A release gate is one command:
+  `migrate diff --from db --to build.sql --scratch-url … --fail-on-change`.
+
+### Changed
+
+- Refreshed the dependency lock (#807). Notable updates: psycopg 3.3.8,
+  pydantic 2.14.3, typer 0.28.0, sqlglot 30.30.0. The `docs` extra's mkdocs now
+  pulls python-dateutil 4 and watchdog 7, and the strict docs build passes.
+- ruff 0.17.3 (#784) and ty 0.0.99 are pinned together in the lock, the
+  pre-commit hook, the CI workflows and the local Dagger pipeline. ty's
+  `unresolved-import` suppressions use its new name, `import-not-found`.
+
 ### Fixed
+
+- **The declared dependency floors install and run** (#814). confiture executes template
+  strings (`cursor.execute(t"…")`), which psycopg accepts from 3.3.0, yet declared
+  `psycopg>=3.1.0`; the lockfile pinned 3.3.x, so no test ever ran the floor. A new required CI
+  leg, *Declared floors*, installs every runtime dependency at its declared floor
+  (`uv pip compile --resolution lowest-direct`) and runs the unit and contract suites on it. It
+  found two more: `pydantic>=2.5.0` does not install on Python 3.14 (its pydantic-core has no
+  cp314 wheel, and 2.12.0 cannot read 3.14's deferred annotations; 2.12.2 is the first that
+  passes), and `typer>=0.12.0` allows a click older than 8.2, on which the CLI fails. The floors are now `psycopg>=3.3.0`,
+  `pydantic>=2.12.2` and `typer>=0.24.0` (the first typer that requires `click>=8.2.1`), and
+  `tests/unit/test_psycopg_floor.py` fails on a psycopg floor below 3.3 while any module executes
+  a template string.
+
+- **`${VAR}` in an environment's connection URLs is expanded** (#813). The configuration
+  docs promised `database_url: ${DATABASE_URL}`, but `Environment.load` expanded only `acls`,
+  `ownership` and `function_coverage`, so the URL validator refused the literal `${…}`, and
+  a `--config` command handed it to libpq as written. `database_url`, `scratch_url` and a
+  `database:` block now expand `${UPPER_NAME}` (whole or in part) **when a command connects
+  with them**: loading checks only the references' syntax, so `build` and `lint` need none of
+  the variables. An unset variable is a `ConfigurationError` naming it, never an empty
+  string, and `${TUNNEL_LOCAL_PORT}` stays in the URL for `ssh_tunnel`. `Environment` keeps the
+  URL as written in `written_database_url` / `written_scratch_url` (the YAML and
+  `model_validate` keys are unchanged); `database_url` and `scratch_url` are properties that
+  expand on read. No error prints an expanded value: one that does not expand to a PostgreSQL
+  URL is quoted as the file writes it (`CONFIG_003`), and the nested-reference error names the
+  variable instead of quoting the reference inside its value.
 
 - **`--exclude` exempts what it leaves out from the quoted-name refusal** (#811). A relation
   `diff.exclude` or `--exclude` names was left out of the comparison (#767), but a name in it
@@ -26,13 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   columns', indexes', constraints' or triggers') refuses nothing. A name anywhere else
   still refuses the tree. `confiture lint`'s `naming_003`/`naming_004` skip the same names
   when the environment's `diff.exclude` names their relation.
-
-### Added
-
-- **`migrate diff --fail-on-change`** (#811): exit 1 (`FINDINGS`, the code `drift` already uses for
-  a gate's answer) when the sides differ, after the changes are reported; without it
-  `migrate diff` exits 0 either way. A release gate is one command:
-  `migrate diff --from db --to build.sql --scratch-url … --fail-on-change`.
 
 ## [1.45.0] - 2026-11-05
 
