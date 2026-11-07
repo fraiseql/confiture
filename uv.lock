@@ -367,8 +367,8 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.26" },
     { name = "pglast", specifier = ">=8.7" },
-    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.1.0" },
-    { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.0" },
+    { name = "pydantic", specifier = ">=2.12.2" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=8.0.0" },
@@ -386,7 +386,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6.0" },
     { name = "sqlglot", specifier = ">=28.0" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.7" },
-    { name = "typer", specifier = ">=0.12.0" },
+    { name = "typer", specifier = ">=0.24.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'mcp-http'", specifier = ">=0.29" },
 ]
 provides-extras = ["testing", "dev", "fraiseql", "seed-uuid", "ast", "mcp-http", "docs", "notifications"]
