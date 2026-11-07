@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.ddl_walk import walk_nodes
+from confiture.core.ddl_walk import SubqueryName, figure_colname, walk_nodes
 
 #: ``(schema, relation, column)``, each as the parser folds it.
 ColumnId = tuple[str, str, str]
@@ -70,7 +70,8 @@ Source = Origin | Unread | None
 class Output:
     """One output column: the name PostgreSQL gives it, and where it comes from.
 
-    ``name`` is ``None`` for a ``*`` over something unread, whose columns are unknown.
+    ``name`` is ``None`` for a ``*`` over something unread, whose columns are unknown,
+    and for a scalar sub-select whose first output is one of them.
     """
 
     name: str | None
@@ -204,7 +205,19 @@ class _Tracer:
                 self.observe(qualification, scope, ctes, tests=True)
                 self.equalities(qualification, scope, _Scope(entries, None))
             self.observe(stmt.targetList, scope, ctes, tests=False)
-        return [out for target in stmt.targetList or () for out in _target(target, scope)]
+        return [
+            out
+            for target in stmt.targetList or ()
+            for out in _target(target, scope, lambda sub: self.first_name(sub, ctes, scope))
+        ]
+
+    def first_name(self, stmt: Any, ctes: _Ctes, scope: _Scope) -> str | None:
+        """The name of a sub-select's first output: what a scalar sub-select is called.
+
+        Walked without the observer, which the qualification walk tells already.
+        """
+        found = _Tracer(self.relations).select(stmt, ctes, scope)
+        return found[0].name if found else None
 
     def observe(self, expression: Any, scope: _Scope, ctes: _Ctes, *, tests: bool) -> None:
         """Tell the observer the columns *expression* tests, and walk its sub-selects.
@@ -400,11 +413,14 @@ def _alias(node: Any) -> str | None:
     return alias.aliasname if alias is not None else None
 
 
-def _target(target: Any, scope: _Scope) -> list[Output]:
-    """The output column(s) one target-list entry yields: ``*`` expands to many."""
+def _target(target: Any, scope: _Scope, subquery_name: SubqueryName) -> list[Output]:
+    """The output column(s) one target-list entry yields: ``*`` expands to many.
+
+    An expression is named as PostgreSQL names it (:func:`figure_colname`).
+    """
     value = target.val
     if type(value).__name__ != "ColumnRef":
-        return [Output(target.name or _figure_name(value), None)]
+        return [Output(target.name or figure_colname(value, subquery_name), None)]
     fields = value.fields
     last = fields[-1]
     if type(last).__name__ == "A_Star":
@@ -423,18 +439,6 @@ def _reference(node: Any, scope: _Scope) -> Source:
     if len(fields) == 1:
         return scope.column(last.sval)
     return scope.qualified(fields[-2].sval, last.sval)
-
-
-def _figure_name(node: Any) -> str | None:
-    """The name PostgreSQL gives an unaliased expression (``FigureColname``), where it gives one."""
-    kind = type(node).__name__
-    if kind == "TypeCast":
-        return _figure_name(node.arg)
-    if kind == "ColumnRef" and type(node.fields[-1]).__name__ == "String":
-        return node.fields[-1].sval
-    if kind == "FuncCall":
-        return node.funcname[-1].sval
-    return None
 
 
 def outputs(

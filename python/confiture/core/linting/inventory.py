@@ -35,6 +35,7 @@ from confiture.core.ddl_walk import (
     column_edit,
     default_kind,
     dropped_constraint,
+    named_query,
     object_edits,
     object_kinds,
     read_column_constraints,
@@ -777,7 +778,8 @@ def _relation_object(sql: str, kind: str, rv: Any, offset: int) -> SchemaObject:
 def _view_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     view = _relation_object(sql, "view", stmt.view, offset)
     view.replace = bool(getattr(stmt, "replace", False))
-    view.view = View(name=view.name, definition=RawStream()(stmt.query))
+    names = [alias.sval for alias in stmt.aliases or ()]
+    view.view = View(name=view.name, definition=named_query(stmt.query, names, view.name))
     return view
 
 
@@ -797,7 +799,12 @@ def _from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | No
         return tview
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
     matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
-    matview.view = View(name=matview.name, materialized=True, definition=RawStream()(stmt.query))
+    names = [name.sval for name in stmt.into.colNames or ()]
+    matview.view = View(
+        name=matview.name,
+        materialized=True,
+        definition=named_query(stmt.query, names, matview.name),
+    )
     return matview
 
 

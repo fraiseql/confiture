@@ -125,6 +125,34 @@ It reports the first primary-key column named `pk_*`, and a column named `id`.
 Treat both as signals, not facts. The seam does not guess audit columns: a
 generator that fills `created_by` knows why, and supplies it.
 
+## What a view outputs and reads
+
+`view_columns(model, view)` names the columns a view, a materialized view or a
+TVIEW outputs, in order. `view_reads(model, view)` returns the relations it reads,
+directly or through the views, materialized views and TVIEWs it reads. Both are
+derived from the definition the model holds, so a model from `parse_schema` and
+one from `introspect` give the same answer.
+
+- A `*` or `t.*` expands through `FROM`: a table's columns; another view's
+  columns, asked again; joins, with `USING` and `NATURAL` columns first;
+  subqueries, CTEs, `VALUES` (`column1`, …); a set operation's first branch.
+- A view's column list (`CREATE VIEW v (x, y) AS …`) renames its first outputs.
+- An expression with no alias is named as PostgreSQL names it. A column
+  reference uses its last field and a call its function. A cast keeps its inner
+  name, or uses its type when that name is weak (`CASE … END::int` is `int4`).
+  `CASE` takes its `ELSE`'s name, else `case`. `ARRAY`, `ROW`, `coalesce`,
+  `greatest`, `nullif` and `exists` are named after themselves. A scalar
+  sub-select uses its first column. Anything else is `?column?`.
+- A routine's body is not read. A TVIEW's `function_reads` tables are counted as
+  reads.
+- A relation the model does not hold, such as an extension's or one in a schema
+  that was not read, is returned as a reference of kind `relation`. It is never
+  dropped.
+
+A name that is no view raises `NotInModelError`. Two cases raise `SchemaError`
+naming the view: a definition the parser rejects, and a `*` over something the
+model cannot expand (a relation it does not hold, a set-returning function).
+
 ## Writing seeds
 
 `write_copy_seed` and `write_insert_seed` take the same arguments: the table, the
