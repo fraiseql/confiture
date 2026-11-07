@@ -138,6 +138,12 @@ error  naming_004  app.t."Mixed Col" needs quotes: confiture supports a name onl
 (`DIFFER_403`, exit 5), on either side and a trigger's included, because generation does
 not run the lint. Generated DDL still quotes the names it writes, as a second layer.
 
+A relation the environment's `diff.exclude` names is shaped by another program and left
+out of every comparison, so neither rule reports a name it holds: the relation's own, its
+columns', indexes', constraints' or triggers'. `migrate diff --exclude`, `confiture drift
+--exclude` and `diff.exclude` exempt the same names from `DIFFER_403`; a name anywhere else
+is still reported and still refused.
+
 ## The `doc` family — every commentable object carries a `COMMENT`
 
 All four rules read the pglast-built object inventory, so a schema qualifier

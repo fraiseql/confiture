@@ -1161,6 +1161,7 @@ confiture migrate diff [OPTIONS] [old_schema] [new_schema]
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` |
 | `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
 | `--exclude` | - | str | - | Leave the relations matching this pattern out of the comparison, on both sides: `name` in any schema, `schema.name` in that one, each part a case-sensitive glob (repeatable; adds to diff.exclude in the config) |
+| `--fail-on-change` | - | Flag | off | Exit 1 when the sides differ, after reporting the changes: the comparison as a CI gate (default: exit 0 either way) |
 | `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |
 | `--name` | - | str | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
