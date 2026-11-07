@@ -5,7 +5,8 @@ Read a schema into the model — from DDL (:func:`parse_schema`) or from a datab
 (:func:`tier_of`); order a model's tables by their foreign keys
 (:func:`dependency_order`); and ask which columns a writer supplies
 (:func:`writable_columns`) and what each must respect (:func:`column_facts`,
-:func:`naming_hints`); write seeds (:func:`write_copy_seed`,
+:func:`naming_hints`); ask what a view outputs (:func:`view_columns`) and what it
+reads (:func:`view_reads`); write seeds (:func:`write_copy_seed`,
 :func:`write_insert_seed`), apply them (:func:`apply_seeds`) and validate them
 (:func:`validate_seeds`). Nothing here is defined here: every name is confiture's
 own, re-exported so that a consumer depends on this list and nothing behind it.
@@ -117,6 +118,7 @@ from confiture.core.seed.validation.prep_seed.models import (
 )
 from confiture.core.seed.validation.prep_seed.orchestrator import validate_seeds
 from confiture.core.seed.writer import SeedFile, write_copy_seed, write_insert_seed
+from confiture.core.view_facts import view_columns, view_reads
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError, SeedError
 from confiture.models.introspection import TableHints
 from confiture.models.warnings import BuildWarning
@@ -209,6 +211,8 @@ __all__ = [
     "require_supported_pg_tviews_on",
     "tier_of",
     "validate_seeds",
+    "view_columns",
+    "view_reads",
     "writable_columns",
     "write_copy_seed",
     "write_insert_seed",

@@ -116,6 +116,9 @@ WRITER = (
     "NotInModelError",
 )
 
+#: What a view outputs, and the relations it reads.
+VIEWS = ("view_columns", "view_reads")
+
 #: Writing, applying and validating seeds.
 SEEDS = (
     "SeedFile",
@@ -137,7 +140,9 @@ ERRORS = ("ConfiturError", "ConfigurationError")
 #: Whether confiture can read a database's pg_tviews: the check its live reads make.
 PG_TVIEWS = ("MINIMUM_PG_TVIEWS", "require_supported_pg_tviews_on")
 
-EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS + ERRORS + PG_TVIEWS)
+EXPORTS = frozenset(
+    MODEL + CHANGES + READING + ORDERING + WRITER + VIEWS + SEEDS + ERRORS + PG_TVIEWS
+)
 
 #: ``str(string_signature(...))`` of every callable the seam defines: each
 #: annotation as its source text (``annotationlib.Format.STRING``).
@@ -164,6 +169,8 @@ SIGNATURES: dict[str, str] = {
         "(model: 'SchemaModel', table: 'ObjectRef | str', column: 'str') -> 'ColumnFacts'"
     ),
     "naming_hints": "(model: 'SchemaModel', table: 'ObjectRef | str') -> 'TableHints'",
+    "view_columns": "(model: 'SchemaModel', view: 'ObjectRef | str') -> 'tuple[str, ...]'",
+    "view_reads": "(model: 'SchemaModel', view: 'ObjectRef | str') -> 'frozenset[ObjectRef]'",
     "write_copy_seed": (
         "(path: 'Path | str', table: 'ObjectRef | str', columns: 'Sequence[str]', "
         "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"

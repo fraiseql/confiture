@@ -17,9 +17,10 @@ pglast's members are answered for and, for the rest, why not — because a membe
 nobody considered looks exactly like one that was decided (#288, #301).
 """
 
+import copy
 import json
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TypedDict
 
@@ -30,7 +31,7 @@ from pglast.stream import RawStream
 from pglast.visitors import Visitor
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity, quote_identifier
 from confiture.core.schema_model import (
     TVIEW_PREFIX,
     TVIEWS_SCHEMA,
@@ -562,9 +563,9 @@ def query_outputs(query: Any, aliases: list[str] | None = None) -> tuple[str, ..
     """The names of the columns *query* (a parsed ``SELECT``) outputs, in order.
 
     The names PostgreSQL gives them: *aliases* (a view's column list) first, then
-    each target's alias, the column a reference or a cast of one reads, or the
-    function a call names. ``None`` where one cannot be read: a ``*``, an
-    expression PostgreSQL would call ``?column?``, a ``VALUES`` list.
+    each target's alias, or :func:`figure_colname`'s name for it. ``None`` where one
+    cannot be read: a ``*``, an expression PostgreSQL would call ``?column?``, a
+    ``VALUES`` list.
     """
     while query.larg is not None:
         query = query.larg
@@ -577,20 +578,209 @@ def query_outputs(query: Any, aliases: list[str] | None = None) -> tuple[str, ..
 
 
 def _output_name(target: Any) -> str | None:
-    """A target's output column name, as PostgreSQL's ``FigureColname`` gives it."""
+    """A target's output column name; ``None`` for a ``*`` or a ``?column?``."""
     if target.name:
         return target.name
-    node = target.val
-    while type(node).__name__ == "TypeCast":
-        node = node.arg
-    match type(node).__name__:
-        case "ColumnRef":
-            last = node.fields[-1]
-            return last.sval if type(last).__name__ == "String" else None
-        case "FuncCall":
-            return node.funcname[-1].sval
-        case _:
-            return None
+    if _is_star(target.val):
+        return None
+    name = figure_colname(target.val)
+    return None if name == UNNAMED_COLUMN else name
+
+
+def named_query(query: Any, names: Sequence[str], alias: str) -> str:
+    """*query* (a parsed ``SELECT``) rendered with a view's column list written into it.
+
+    ``CREATE VIEW v (x, y) AS SELECT id, label …`` outputs ``x`` and ``y``, and
+    ``pg_get_viewdef`` writes the list into the query (``SELECT id AS x, label AS y``),
+    so a tree's definition holds it the same way. Where a renamed position is a
+    ``*`` — or the query is a ``VALUES`` list — the names go on the query as a whole
+    instead: ``SELECT * FROM (…) AS alias (x, y)``. *query* is not changed.
+    """
+    if not names:
+        return RawStream()(query)
+    renamed = copy.deepcopy(query)
+    first = renamed
+    while first.larg is not None:
+        first = first.larg
+    targets = list(first.targetList or ())[: len(names)]
+    if len(targets) == len(names) and not any(_is_star(target.val) for target in targets):
+        for target, name in zip(targets, names, strict=True):
+            target.name = name
+        return RawStream()(renamed)
+    columns = ", ".join(quote_identifier(name) for name in names)
+    return f"SELECT * FROM ({RawStream()(query)}) AS {quote_identifier(alias)} ({columns})"
+
+
+def _is_star(node: Any) -> bool:
+    return type(node).__name__ == "ColumnRef" and type(node.fields[-1]).__name__ == "A_Star"
+
+
+#: The name PostgreSQL gives an output column no rule names.
+UNNAMED_COLUMN = "?column?"
+
+#: How a sub-select's first output is named, for a scalar sub-select in a target list.
+SubqueryName = Callable[[Any], str | None]
+
+#: Expressions PostgreSQL names by their kind alone, a name a cast around them keeps.
+_NAMED_BY_KIND: dict[str, str] = {
+    "GroupingFunc": "grouping",
+    "MergeSupportFunc": "merge_action",
+    "A_ArrayExpr": "array",
+    "RowExpr": "row",
+    "CoalesceExpr": "coalesce",
+    "XmlSerialize": "xmlserialize",
+    "JsonParseExpr": "json",
+    "JsonScalarExpr": "json_scalar",
+    "JsonSerializeExpr": "json_serialize",
+    "JsonObjectConstructor": "json_object",
+    "JsonArrayConstructor": "json_array",
+    "JsonArrayQueryConstructor": "json_array",
+    "JsonObjectAgg": "json_objectagg",
+    "JsonArrayAgg": "json_arrayagg",
+}
+
+
+def _operator_names(enum: str, prefix: str, members: tuple[str, ...]) -> dict[int, str]:
+    """Each member of *enum*, resolved by name, to its name as a column: ``SVFOP_USER`` → ``user``."""
+    return {
+        _pg_member(enum, member): member.removeprefix(prefix).removesuffix("_N").lower()
+        for member in members
+    }
+
+
+#: Expressions PostgreSQL names by an operator they carry: the field, and each name.
+_NAMED_BY_OPERATOR: dict[str, tuple[str, dict[int, str]]] = {
+    "A_Expr": ("kind", _operator_names("A_Expr_Kind", "AEXPR_", ("AEXPR_NULLIF",))),
+    "MinMaxExpr": ("op", _operator_names("MinMaxOp", "IS_", ("IS_GREATEST", "IS_LEAST"))),
+    "SubLink": (
+        "subLinkType",
+        {
+            _pg_member("SubLinkType", "EXISTS_SUBLINK"): "exists",
+            _pg_member("SubLinkType", "ARRAY_SUBLINK"): "array",
+        },
+    ),
+    "SQLValueFunction": (
+        "op",
+        _operator_names(
+            "SQLValueFunctionOp",
+            "SVFOP_",
+            (
+                "SVFOP_CURRENT_DATE",
+                "SVFOP_CURRENT_TIME",
+                "SVFOP_CURRENT_TIME_N",
+                "SVFOP_CURRENT_TIMESTAMP",
+                "SVFOP_CURRENT_TIMESTAMP_N",
+                "SVFOP_LOCALTIME",
+                "SVFOP_LOCALTIME_N",
+                "SVFOP_LOCALTIMESTAMP",
+                "SVFOP_LOCALTIMESTAMP_N",
+                "SVFOP_CURRENT_ROLE",
+                "SVFOP_CURRENT_USER",
+                "SVFOP_USER",
+                "SVFOP_SESSION_USER",
+                "SVFOP_CURRENT_CATALOG",
+                "SVFOP_CURRENT_SCHEMA",
+            ),
+        ),
+    ),
+    "XmlExpr": (
+        "op",
+        _operator_names(
+            "XmlExprOp",
+            "IS_",
+            (
+                "IS_XMLCONCAT",
+                "IS_XMLELEMENT",
+                "IS_XMLFOREST",
+                "IS_XMLPARSE",
+                "IS_XMLPI",
+                "IS_XMLROOT",
+                "IS_XMLSERIALIZE",
+            ),
+        ),
+    ),
+    "JsonFuncExpr": (
+        "op",
+        {
+            _pg_member("JsonExprOp", "JSON_EXISTS_OP"): "json_exists",
+            _pg_member("JsonExprOp", "JSON_QUERY_OP"): "json_query",
+            _pg_member("JsonExprOp", "JSON_VALUE_OP"): "json_value",
+        },
+    ),
+}
+
+_EXPR_SUBLINK = _pg_member("SubLinkType", "EXPR_SUBLINK")
+
+
+def figure_colname(node: Any, subquery_name: SubqueryName | None = None) -> str | None:
+    """The name PostgreSQL gives an unaliased output expression: its ``FigureColname``.
+
+    A column reference's last field, a call's function name, a cast's inner name —
+    or, when that is weak, the type it casts to — a ``CASE``'s ``ELSE``, else
+    ``case`` (weak: a cast's type replaces it); ``ARRAY``, ``ROW``, ``COALESCE``,
+    ``GREATEST``/``LEAST``, ``NULLIF``, ``EXISTS``, the SQL value functions, the
+    XML and JSON constructors by name; a scalar sub-select its first output's name,
+    which *subquery_name* answers (without it, or when it answers ``None``, that
+    name is unknown: ``None``).
+    Anything else is :data:`UNNAMED_COLUMN`.
+    """
+    name, strength = _figured(node, subquery_name)
+    return name if strength else UNNAMED_COLUMN
+
+
+def _figured(node: Any, subquery_name: SubqueryName | None) -> tuple[str | None, int]:
+    """PostgreSQL's ``FigureColnameInternal``: a name and its strength, 0 for none."""
+    kind = type(node).__name__
+    if kind in _NAMED_BY_KIND:
+        return _NAMED_BY_KIND[kind], 2
+    if kind in _NAMED_BY_OPERATOR:
+        return _named_by_operator(node, kind, subquery_name)
+    figure = _FIGURED_BY_NODE.get(kind)
+    return figure(node, subquery_name) if figure is not None else (None, 0)
+
+
+def _named_by_operator(
+    node: Any, kind: str, subquery_name: SubqueryName | None
+) -> tuple[str | None, int]:
+    field_name, names = _NAMED_BY_OPERATOR[kind]
+    operator = int(getattr(node, field_name))
+    if operator in names:
+        return names[operator], 2
+    if kind == "SubLink" and operator == _EXPR_SUBLINK:
+        return (subquery_name(node.subselect) if subquery_name else None), 2
+    return None, 0
+
+
+def _field_named(node: Any, subquery_name: SubqueryName | None) -> tuple[str | None, int]:
+    """A column reference or a field selection: its last named field."""
+    indirection = type(node).__name__ == "A_Indirection"
+    fields = node.indirection if indirection else node.fields
+    strings = [f.sval for f in fields if type(f).__name__ == "String"]
+    if strings:
+        return strings[-1], 2
+    return _figured(node.arg, subquery_name) if indirection else (None, 0)
+
+
+def _cast_named(node: Any, subquery_name: SubqueryName | None) -> tuple[str | None, int]:
+    """A cast keeps a firm inner name, and names a weak one by its type."""
+    name, strength = _figured(node.arg, subquery_name)
+    return (node.typeName.names[-1].sval, 1) if strength <= 1 else (name, strength)
+
+
+def _case_named(node: Any, subquery_name: SubqueryName | None) -> tuple[str | None, int]:
+    """A ``CASE`` keeps its ``ELSE``'s firm name; else it is ``case``."""
+    name, strength = _figured(node.defresult, subquery_name)
+    return (name, strength) if strength > 1 else ("case", 1)
+
+
+_FIGURED_BY_NODE: dict[str, Callable[[Any, SubqueryName | None], tuple[str | None, int]]] = {
+    "ColumnRef": _field_named,
+    "A_Indirection": _field_named,
+    "FuncCall": lambda node, _: (node.funcname[-1].sval, 2),
+    "CollateClause": lambda node, subquery_name: _figured(node.arg, subquery_name),
+    "TypeCast": _cast_named,
+    "CaseExpr": _case_named,
+}
 
 
 def rendered_query(text: str) -> str:

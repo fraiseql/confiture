@@ -28,6 +28,10 @@ ALLOWED: dict[str, str] = {
         "whether CREATE OR REPLACE VIEW can keep them and tview_001 whether a TVIEW "
         "projects its own updated_at — never where a column comes from"
     ),
+    "core.ddl_walk:named_query": (
+        "writes a view's column list into its query's target aliases, as pg_get_viewdef "
+        "does, so the model's definition holds the names — renames, never traces"
+    ),
     "core.ddl_walk:_comparable": (
         "an expression read as `SELECT <expr>` to compare its value: the one expression, "
         "not a view's output"

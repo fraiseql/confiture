@@ -46,6 +46,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "backfill_gate.py": (CRATE, TRANSFORM),
     "change_order.py": (CRATE, TRANSFORM),
     "view_dependents.py": (CRATE, TRANSFORM),
+    "view_facts.py": (CRATE, TRANSFORM),
     "change_set": (CRATE, TRANSFORM),
     "cor_extractor.py": (CRATE, TRANSFORM),
     "created_relations.py": (CRATE, TRANSFORM),
