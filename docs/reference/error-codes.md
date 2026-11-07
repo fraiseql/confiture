@@ -132,7 +132,8 @@ there are. `confiture lint` lists them all (`naming_003` for a dotted name,
 `naming_004` for the rest). Rename them, then re-run. What counts as needing
 quotes is what `schema_identity.quote_identifier` would quote: a capital, a
 space or other punctuation, a non-ASCII character, a leading digit, or a
-reserved word such as `user`. `confiture build` still builds such a tree.
+reserved word such as `user`. `confiture build` still builds such a tree. A name in a
+relation the comparison leaves out (`--exclude`, `diff.exclude`) refuses nothing (#811).
 
 ## `LOCK_1300` — lock-holder identity (`details.holder`)
 

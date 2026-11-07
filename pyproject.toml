@@ -29,11 +29,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "typer>=0.12.0",
+    "typer>=0.24.0",  # the first that requires click>=8.2.1, which the CLI needs
     "rich>=13.7.0",
-    "pydantic>=2.5.0",
+    "pydantic>=2.12.2",  # the first that installs (cp314 wheels) and reads 3.14 annotations
     "pyyaml>=6.0.1",
-    "psycopg[binary,pool]>=3.1.0",
+    "psycopg[binary,pool]>=3.3.0",  # executes template strings (t"…"): 3.3+
     "sqlglot>=28.0",
     # PostgreSQL's own parser (libpg_query) — the one parser since 0.50.0 (D13).
     # One major, uncapped. 8.5 is the first pglast whose libpg_query serialises a
@@ -389,5 +389,5 @@ invalid-argument-type = "error"
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
-    "ruff==0.17.1",
+    "ruff==0.17.3",
 ]

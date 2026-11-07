@@ -28,6 +28,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from confiture.config.environment import DiffConfig
+from confiture.core.linting.quoted_names import QuotedName
 from confiture.core.schema_model import ObjectRef, SchemaModel
 from confiture.core.sql_lexer import name_parts
 from confiture.exceptions import ConfigurationError
@@ -126,6 +127,14 @@ class Exclusion:
     def excludes(self, schema: str, name: str) -> bool:
         """Whether the relation *schema*.*name* is left out."""
         return self.pattern_for(schema, name) is not None
+
+    def keeps_name(self, quoted: QuotedName) -> bool:
+        """Whether *quoted* is still compared: it is not, nor is it on, an excluded relation (#811).
+
+        Read from the relation the name was found on, in two parts, never from its
+        spelling: a quoted name may hold a dot.
+        """
+        return quoted.relation is None or not self.excludes(*quoted.relation.identity)
 
     def excludes_ref(self, ref: ObjectRef) -> bool:
         """Whether *ref* is an excluded relation, or a policy or rule on one."""

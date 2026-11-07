@@ -11,6 +11,7 @@ import psycopg
 import yaml
 from psycopg.conninfo import make_conninfo
 
+from confiture.config._env_vars import expand_connection, expand_connection_url
 from confiture.config.environment import DatabaseConfig, SshTunnelConfig
 from confiture.core import ssh_tunnel as _core_ssh_tunnel
 from confiture.exceptions import ConfigurationError, base_message
@@ -157,6 +158,18 @@ def load_config(config_file: Path) -> dict[str, Any]:
         ) from e
 
 
+def configured(config: dict[str, Any], key: str) -> Any:
+    """A connection setting of a raw configuration, its ``${VAR}`` references expanded.
+
+    Expanded when it is read rather than when the file is, so a command that never
+    connects does not need the variables its URL names (#813).
+    """
+    value = config.get(key)
+    if isinstance(value, str) and key in ("database_url", "scratch_url"):
+        return expand_connection_url(value, field=key)
+    return None if value is None else expand_connection(value, context=key)
+
+
 def dsn_from_config(config: dict[str, Any] | str | Any) -> str:
     """The libpq connection string a configuration resolves to.
 
@@ -179,10 +192,10 @@ def dsn_from_config(config: dict[str, Any] | str | Any) -> str:
         # An ``Environment`` (or anything else carrying a resolved URL).
         return str(config.database_url)
     data: dict[str, Any] = config or {}
-    database_url = data.get("database_url")
+    database_url = configured(data, "database_url")
     if database_url:
         return str(database_url)
-    block = data.get("database") or {}
+    block = configured(data, "database") or {}
     return make_conninfo(
         host=block.get("host", "localhost"),
         port=block.get("port", 5432),
@@ -204,8 +217,8 @@ def scratch_url_from_config(
     Raises:
         ConfigurationError: ``CONFIG_003`` for a value that is not a PostgreSQL URL.
     """
-    configured = config.get("scratch_url") if isinstance(config, dict) else None
-    url = override if override is not None else configured
+    from_config = configured(config, "scratch_url") if isinstance(config, dict) else None
+    url = override if override is not None else from_config
     if url is None:
         return None
     if not isinstance(url, str) or not url.startswith(("postgresql://", "postgres://")):
@@ -352,7 +365,7 @@ def open_connection(
         if hasattr(config, "database_url"):
             database_url = str(config.database_url)
         elif isinstance(config, dict):
-            database_url = config.get("database_url", "")
+            database_url = configured(config, "database_url") or ""
         else:
             raise ConfigurationError(
                 "Cannot determine database_url for SSH tunnel",

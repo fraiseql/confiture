@@ -159,6 +159,22 @@ class TestQualityGate:
         assert "coverage" in data["jobs"]["quality-gate"]["needs"]
         assert "needs.coverage.result" in _run_scripts(_steps("quality-gate.yml", "quality-gate"))
 
+    def test_the_declared_floors_are_installed_and_tested(self) -> None:
+        """The lock pins the newest of each dependency, so only this leg runs the floor.
+
+        ``psycopg>=3.1.0`` was declared for months while confiture executed template
+        strings, which psycopg takes from 3.3.0 (#814): every other leg installed the
+        locked 3.3.x. The leg downgrades the runtime dependencies to their declared
+        floors over the locked environment and runs the suite without re-syncing.
+        """
+        floors = _run_scripts(_steps("quality-gate.yml", "floors"))
+        assert re.search(r"uv pip compile pyproject\.toml --resolution lowest-direct", floors)
+        assert "uv pip install -r" in floors
+        assert re.search(r"uv run --no-sync python -m pytest tests/unit tests/contract", floors)
+        data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
+        assert "floors" in data["jobs"]["quality-gate"]["needs"]
+        assert "needs.floors.result" in _run_scripts(_steps("quality-gate.yml", "quality-gate"))
+
     def test_no_job_runs_a_suite_the_test_job_already_runs(self) -> None:
         data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
         assert "integration-parallel" not in data["jobs"]
