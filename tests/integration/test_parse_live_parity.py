@@ -218,3 +218,20 @@ def test_a_temporal_key_reads_back_as_itself(
     temporal = [c["kind"] for t in parsed["tables"] for c in t["constraints"] if c["temporal"]]
     assert sorted(temporal) == ["foreign_key", "primary_key", "unique"], parsed
     assert live == parsed, _explain(parsed, live)
+
+
+def test_both_readers_give_a_table_one_identity(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """#815: ``display`` is each reader's spelling; ``identity`` and the ref are one key."""
+    sql = (
+        "CREATE TABLE tb_probe (pk_probe INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, "
+        "id UUID NOT NULL UNIQUE);"
+    )
+    (parsed,) = read_text(sql).model.tables
+    with psycopg.connect(fresh_database_factory("confiture_identity"), autocommit=True) as conn:
+        conn.execute(sql)
+        (live,) = read(conn, schemas=["public"]).tables
+    assert (parsed.display, live.display) == ("tb_probe", "public.tb_probe")
+    assert parsed.identity == live.identity == ("public", "tb_probe")
+    assert parsed == live
