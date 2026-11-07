@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ObjectRef.identity`** (#815): `(schema, name)`, the same whichever reader built the
+  model, as `RelationName.identity` gives a relation's. `ObjectRef.display` is a *spelling*:
+  `parse_schema` writes what the author wrote (`tb_probe`), `introspect` the catalog's
+  `public.tb_probe`, and generated DDL prints it, so neither reader is made to invent or drop
+  `public.` (a project whose `search_path` is not `public` would have its DDL moved). The
+  docs now say so: key a model by the ref (its equality and hash leave `display` out) or by
+  `identity`, never by `display`. The model's wire and goldens are unchanged.
+
 ## [1.45.0] - 2026-11-05
 
 ### Added
