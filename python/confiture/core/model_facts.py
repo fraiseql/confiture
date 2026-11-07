@@ -55,7 +55,7 @@ def resolve(refs: Iterable[ObjectRef], written: RelationName | str | None) -> Ob
     ``my.s`` and an unquoted part is folded; text that is not one name means
     nothing (#478).
     """
-    relation = written if isinstance(written, RelationName) else _read_name(written)
+    relation = written if isinstance(written, RelationName) else read_name(written)
     if relation is None:
         return None
     schema, name = relation.schema, relation.name
@@ -72,7 +72,7 @@ def resolve(refs: Iterable[ObjectRef], written: RelationName | str | None) -> Ob
 _QUALIFIED = 2
 
 
-def _read_name(written: str | None) -> RelationName | None:
+def read_name(written: str | None) -> RelationName | None:
     """``schema.name`` or ``name`` as a caller typed it, read by the scanner; else ``None``."""
     parts = sql_lexer.name_parts(written) if written else None
     if parts is None or len(parts) > _QUALIFIED:

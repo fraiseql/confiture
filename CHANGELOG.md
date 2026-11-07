@@ -14,6 +14,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `confiture.platform.view_columns(model, view)` and `view_reads(model, view)` (#812).
+  `view_columns` names a view's, materialized view's or TVIEW's output columns in
+  order. It expands `*` through the model's tables and views, and names an
+  unaliased expression by PostgreSQL's `FigureColname` rule (`?column?` included).
+  `view_reads` returns the relations a view reads, directly or through other
+  views. A relation the model does not hold is returned as a `relation`
+  reference, never dropped. Both answer from the model alone, the same for
+  `parse_schema` and `introspect`. A `*` the model cannot expand and a
+  definition the parser rejects raise `SchemaError`.
+
+### Fixed
+
+- A tree's model holds a view's or materialized view's column list
+  (`CREATE VIEW v (x, y) AS …`) in its definition, written into the query as
+  `pg_get_viewdef` writes it. It had been dropped.
+- The column tracer (`tenant_003`, `softdel_003`) names every unaliased output
+  as PostgreSQL does: a cast to a type, `CASE`, `ARRAY`, `coalesce`, a scalar
+  sub-select and the rest. Before, only a column, a call or a cast of one was
+  named.
+
 ## [1.45.0] - 2026-11-05
 
 ### Added

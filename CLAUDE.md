@@ -469,7 +469,7 @@ engine names that its table does not answer for.
 
 **The seam** — `confiture.platform` re-exports what a tool builds on: `parse_schema`,
 `introspect`, `diff`, `dependency_order`, `writable_columns`, `column_facts`,
-`naming_hints`, `write_copy_seed`, `write_insert_seed`, `apply_seeds`, `validate_seeds`,
+`naming_hints`, `view_columns`, `view_reads`, `write_copy_seed`, `write_insert_seed`, `apply_seeds`, `validate_seeds`,
 `tier_of`, the model types and the change union. A function that needs a database takes
 a URL (confiture opens, commits and closes it) or any object meeting the `Connection`
 Protocol (the caller owns its transaction). What the seam refuses it refuses in a
@@ -723,6 +723,7 @@ confiture/
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
 │   │   ├── view_dependents.py    # The views a column change is refused under: what a migration drops and…
+│   │   ├── view_facts.py         # What a view outputs and what it reads, answered from the model alone (#…
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
 │   │   ├── _migrator/            # (23 modules)
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)

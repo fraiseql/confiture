@@ -932,6 +932,41 @@ def of(primary_key: Iterable[str], columns: Collection[str]) -> TableHints
 
 The convention a table's names show: its first `pk_*` key column, a column `id`.
 
+## What a view outputs and reads
+
+### `view_columns`
+
+```python
+def view_columns(model: SchemaModel, view: ObjectRef | str) -> tuple[str, ...]
+```
+
+The names of the columns *view* outputs, in order.
+
+*view* is a view, a materialized view or a TVIEW: a reference the model holds,
+or a name resolved as DDL's is (`schema.name`, or a bare name the default
+schema holds or exactly one schema does).
+
+**Raises**
+
+- `NotInModelError`: when *model* holds no such view.
+- `SchemaError`: when its definition does not parse, or a `*` in it reads what the model cannot expand.
+
+### `view_reads`
+
+```python
+def view_reads(model: SchemaModel, view: ObjectRef | str) -> frozenset[ObjectRef]
+```
+
+The relations *view* reads, directly or through the views it reads.
+
+Tables, views, materialized views and TVIEWs, each the model's reference; one
+the model does not hold as a reference of kind `relation`.
+
+**Raises**
+
+- `NotInModelError`: when *model* holds no such view.
+- `SchemaError`: when a definition on the way does not parse.
+
 ## Seeds
 
 ### `write_copy_seed`

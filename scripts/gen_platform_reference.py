@@ -73,6 +73,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "TableHints",
         ],
     ),
+    ("What a view outputs and reads", ["view_columns", "view_reads"]),
     (
         "Seeds",
         [
