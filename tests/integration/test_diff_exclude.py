@@ -142,3 +142,78 @@ class TestValidateLiveDrift:
         )
         assert result.exit_code == 5, result.output
         assert "--exclude requires --check-live-drift" in result.output
+
+
+#: The shape of #811: a table another program writes into names its own columns.
+CALL_RECORD = """
+CREATE SCHEMA telephony;
+CREATE TABLE telephony.tb_call_record (
+    id BIGSERIAL PRIMARY KEY, start TIMESTAMPTZ, "end" TIMESTAMPTZ, billsec INTEGER
+);
+CREATE TABLE telephony.tb_line (id BIGINT PRIMARY KEY, label TEXT);
+"""
+
+
+@pytest.fixture
+def telephony(
+    fresh_database_factory: Callable[[str], str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path]:
+    """A database built from the tree, an environment whose build is that tree, and the tree."""
+    url = fresh_database_factory("confiture_exclude_quoted")
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute(CALL_RECORD)
+    (tmp_path / "db" / "schema").mkdir(parents=True)
+    tree = tmp_path / "db" / "schema" / "telephony.sql"
+    tree.write_text(CALL_RECORD)
+    (tmp_path / "db" / "environments").mkdir()
+    config = tmp_path / "db" / "environments" / "ci.yaml"
+    config.write_text(f"name: ci\ndatabase_url: {url}\ninclude_dirs: [db/schema]\n")
+    monkeypatch.chdir(tmp_path)
+    return config, tree
+
+
+class TestQuotedNamesInAnExcludedRelation:
+    """``--exclude`` exempts what it leaves out from the quoted-name refusal (#811)."""
+
+    def _run(self, config: Path, *sides: str) -> tuple[int, dict]:
+        result = runner.invoke(
+            app,
+            ["migrate", "diff", "--from", "db", *sides, "--config", str(config),
+             "--format", "json"],
+        )  # fmt: skip
+        return result.exit_code, json.loads(result.stdout)
+
+    def test_the_tree_is_refused_without_the_exclusion(self, telephony: tuple[Path, Path]) -> None:
+        config, tree = telephony
+        code, payload = self._run(config, "--to", str(tree))
+        assert code != 0
+        assert payload["error"]["code"] == "DIFFER_403"
+
+    def test_a_scratch_build_compares_the_rest(
+        self, telephony: tuple[Path, Path], test_db_url: str
+    ) -> None:
+        config, tree = telephony
+        sides = ("--to", str(tree), "--scratch-url", test_db_url)
+        code, payload = self._run(config, *sides, "--exclude", "telephony.tb_call_record")
+        assert code == 0, payload
+        assert payload["changes"] == []
+        tree.write_text(CALL_RECORD.replace("label TEXT", "label TEXT, kind TEXT"))
+        code, payload = self._run(config, *sides, "--exclude", "telephony.tb_call_record")
+        assert code == 0, payload
+        assert "kind" in _named(payload)
+
+    def test_an_environment_build_compares_the_rest(self, telephony: tuple[Path, Path]) -> None:
+        config, _tree = telephony
+        code, payload = self._run(config, "--to-env", "ci", "--exclude", "telephony.tb_call_record")
+        assert code == 0, payload
+        assert payload["changes"] == []
+
+    def test_drift_compares_the_rest(self, telephony: tuple[Path, Path]) -> None:
+        config, tree = telephony
+        result = runner.invoke(
+            app,
+            ["drift", "--config", str(config), "--schema", str(tree), "--format", "json",
+             "--exclude", "telephony.tb_call_record"],
+        )  # fmt: skip
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["drift_items"] == []

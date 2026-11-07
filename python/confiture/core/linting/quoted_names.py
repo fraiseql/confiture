@@ -23,12 +23,16 @@ from typing import TYPE_CHECKING
 
 from confiture.core.linting.inventory import distinct
 from confiture.core.schema_identity import quote_identifier
+from confiture.core.schema_model import RelationName
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
     from confiture.core.schema_model import Trigger
 
 _DOT = "."
+#: The kinds of object that are relations: what ``diff.exclude`` leaves out, with
+#: everything on one (``relation_exclusion.RELATION_KINDS``; a test holds them equal).
+_RELATIONS = frozenset({"table", "view", "matview", "tview", "sequence", "foreign_table"})
 #: The characters a bare identifier is written with, after the first.
 _BARE = frozenset(string.ascii_lowercase + string.digits + "_$")
 
@@ -45,6 +49,9 @@ class QuotedName:
         suggested: The same object under a name that needs no quotes.
         file: The file it is given in, when the lint read files.
         line: The line it is given on.
+        relation: The relation the name is, or is on (a column's table, a
+            trigger's), in two parts; ``None`` for a schema, a routine or a type.
+            What an exclusion reads (#811), so ``spelled`` is never taken apart.
     """
 
     kind: str
@@ -53,6 +60,7 @@ class QuotedName:
     suggested: str
     file: str | None
     line: int
+    relation: RelationName | None = None
 
 
 def quoted_names(inventory: Inventory) -> Iterator[QuotedName]:
@@ -68,7 +76,10 @@ def quoted_names(inventory: Inventory) -> Iterator[QuotedName]:
             reported.add(qualifier)
             yield _named("schema", None, qualifier, obj.file, obj.line)
         if needs_quotes(obj.folded_name):
-            yield _named(obj.kind, _quoted(qualifier), obj.folded_name, obj.file, obj.line)
+            relation = RelationName(qualifier, obj.folded_name) if obj.kind in _RELATIONS else None
+            yield _named(
+                obj.kind, _quoted(qualifier), obj.folded_name, obj.file, obj.line, relation
+            )
         yield from _parts(obj)
 
 
@@ -80,12 +91,14 @@ def quoted_trigger_names(triggers: Iterable[Trigger]) -> Iterator[QuotedName]:
     """
     for trigger in triggers:
         if needs_quotes(trigger.name):
-            yield _named("trigger", None, trigger.name, None, 0)
+            on = RelationName(trigger.schema, trigger.table)
+            yield _named("trigger", None, trigger.name, None, 0, on)
 
 
 def _parts(table: SchemaObject) -> Iterator[QuotedName]:
     """A table's columns, indexes and constraints whose names need quotes."""
     within = _join(_quoted(table.folded_schema), quote_identifier(table.folded_name))
+    on = RelationName(table.folded_schema, table.folded_name)
     for column in table.columns:
         if needs_quotes(column.folded):
             yield _named(
@@ -94,14 +107,15 @@ def _parts(table: SchemaObject) -> Iterator[QuotedName]:
                 column.folded,
                 column.file or table.file,
                 column.line or table.line,
+                on,
             )
     for index in table.indexes:
         if index.name and needs_quotes(index.name):
             file, line = table.index_sites.get(index, (table.file, table.line))
-            yield _named("index", _quoted(table.folded_schema), index.name, file, line)
+            yield _named("index", _quoted(table.folded_schema), index.name, file, line, on)
     for constraint in table.constraints:
         if constraint.name and needs_quotes(constraint.name):
-            yield _named("constraint", within, constraint.name, table.file, table.line)
+            yield _named("constraint", within, constraint.name, table.file, table.line, on)
 
 
 def needs_quotes(name: str) -> bool:
@@ -109,7 +123,14 @@ def needs_quotes(name: str) -> bool:
     return quote_identifier(name) != name
 
 
-def _named(kind: str, within: str | None, name: str, file: str | None, line: int) -> QuotedName:
+def _named(
+    kind: str,
+    within: str | None,
+    name: str,
+    file: str | None,
+    line: int,
+    relation: RelationName | None = None,
+) -> QuotedName:
     """*name*, given in *within*: a schema or a table, already spelled as SQL writes it."""
     dotted = _DOT in name
     return QuotedName(
@@ -122,6 +143,7 @@ def _named(kind: str, within: str | None, name: str, file: str | None, line: int
         ),
         file=file,
         line=line,
+        relation=relation,
     )
 
 

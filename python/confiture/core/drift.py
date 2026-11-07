@@ -477,7 +477,9 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
     return expected_schema(_read_expected(lambda: read_text(sql)), default_schema)
 
 
-def expected_schema(read: SchemaRead, default_schema: str = DEFAULT_SCHEMA) -> ExpectedSchema:
+def expected_schema(
+    read: SchemaRead, default_schema: str = DEFAULT_SCHEMA, *, exclude: Exclusion | None = None
+) -> ExpectedSchema:
     """The expected schema a tree declares, as PostgreSQL would hold it.
 
     The tree's catalogued model (``SchemaRead.catalogued``): a ``PARTITION OF`` or
@@ -486,9 +488,11 @@ def expected_schema(read: SchemaRead, default_schema: str = DEFAULT_SCHEMA) -> E
     declares a schema and no table.
 
     Raises:
-        DifferError: ``DIFFER_403`` when the tree names an object that needs quotes.
+        DifferError: ``DIFFER_403`` when the tree names an object that needs quotes,
+            outside the relations *exclude* leaves out of the comparison (#811).
     """
-    refuse_quoted_names("expected", read.quoted)
+    kept = Exclusion() if exclude is None else exclude
+    refuse_quoted_names("expected", [q for q in read.quoted if kept.keeps_name(q)])
     model = _in_schema(read.catalogued, default_schema)
     schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}
     schemas |= {declared.name for declared in read.inventory.schemas}
@@ -1467,7 +1471,7 @@ class SchemaDriftDetector:
 
         source = load_desired_state(schema_file_path)
         read = _read_expected(lambda: read_segments(source.segments()))
-        expected = expected_schema(read, default_schema)
+        expected = expected_schema(read, default_schema, exclude=self.exclude)
         actual = self.get_live_schema(expected.schemas, objects=True)
         # Before a scratch build, which would fail on the index rather than name it.
         refuse_undeclared_relations(

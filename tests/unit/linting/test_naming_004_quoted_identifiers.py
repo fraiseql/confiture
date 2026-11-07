@@ -194,3 +194,36 @@ def test_the_suggestion_keeps_an_accented_letter_as_its_base_letter() -> None:
 
     assert finding.suggested_fix is not None
     assert finding.suggested_fix.endswith("t.cree")
+
+
+class TestAnExcludedRelation:
+    """``diff.exclude`` exempts a relation another program shapes from 003/004 (#811)."""
+
+    SQL = (
+        "CREATE SCHEMA telephony;\n"
+        'CREATE TABLE telephony.tb_call_record (id bigint PRIMARY KEY, "end" timestamptz);\n'
+        'CREATE INDEX "CallEnd" ON telephony.tb_call_record ("end");\n'
+        'CREATE TABLE telephony.tb_line (id bigint PRIMARY KEY, "Label" text);\n'
+    )
+
+    def _quoted(self, tmp_path, exclude: str) -> list[tuple[str, str]]:
+        env_dir = tmp_path / "db" / "environments"
+        env_dir.mkdir(parents=True)
+        (env_dir / "ci.yaml").write_text(
+            f"database_url: postgresql://localhost/app\ninclude_dirs: []\n{exclude}"
+        )
+        report = SchemaLinter(env="ci", project_dir=tmp_path).lint(self.SQL)
+        return sorted(
+            (v.object_type, v.object_name) for v in report.errors if v.rule_id == "naming_004"
+        )
+
+    def test_without_an_exclusion_every_name_is_reported(self, tmp_path) -> None:
+        assert self._quoted(tmp_path, "") == [
+            ("column", 'telephony.tb_call_record."end"'),
+            ("column", 'telephony.tb_line."Label"'),
+            ("index", 'telephony."CallEnd"'),
+        ]
+
+    def test_the_names_of_an_excluded_relation_are_not(self, tmp_path) -> None:
+        exclude = "diff:\n  exclude: [telephony.tb_call_record]\n"
+        assert self._quoted(tmp_path, exclude) == [("column", 'telephony.tb_line."Label"')]

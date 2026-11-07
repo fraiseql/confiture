@@ -763,7 +763,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `exclude` | list[str] | `[]` | Relation patterns left out of every comparison, on both sides: ``name`` matches the relation's name in any schema, ``schema.name`` that schema's only; each part is a case-sensitive glob (``*``, ``?``, ``[…]``). A table, view, materialized view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers, policies and rules; a foreign key or trigger of the tree's own on one is reported (``DIFFER_411``). |
+| `exclude` | list[str] | `[]` | Relation patterns left out of every comparison, on both sides: ``name`` matches the relation's name in any schema, ``schema.name`` that schema's only; each part is a case-sensitive glob (``*``, ``?``, ``[…]``). A table, view, materialized view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers, policies and rules; a foreign key or trigger of the tree's own on one is reported (``DIFFER_411``). A name in an excluded relation that needs quotes is neither refused (``DIFFER_403``) nor linted (``naming_003``/``naming_004``). |
 
 #### `SshTunnelConfig`
 
