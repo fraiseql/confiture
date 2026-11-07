@@ -481,6 +481,39 @@ jobs:
           --only-binary fraiseql-confiture dist/*.whl
         /tmp/v314/bin/python -c "import sys; from confiture.core.builder import HAS_RUST; assert HAS_RUST, 'no native extension'; print(sys.version)"
 
+  floors:
+    name: Declared floors (lowest-direct)
+    # The lock pins the newest of every dependency, so every other leg tests the
+    # newest. This one installs the floor pyproject.toml declares for each runtime
+    # dependency and runs the suite on it: psycopg>=3.1.0 was declared while
+    # confiture executed template strings, which psycopg takes from 3.3.0 (#814).
+    # Only the runtime dependencies move; the test tooling stays locked.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up Python and uv
+      uses: ./.github/actions/python-uv
+      with:
+        python-version: '3.14'
+        native: 'true'
+
+    - name: Install the locked environment, then the declared floors over it
+      run: |
+        uv venv
+        uv sync --locked --extra dev --extra notifications --extra seed-uuid
+        uv run maturin develop --uv
+        uv pip compile pyproject.toml --resolution lowest-direct --no-header -o "$RUNNER_TEMP/floors.txt"
+        uv pip install -r "$RUNNER_TEMP/floors.txt"
+        cat "$RUNNER_TEMP/floors.txt"
+
+    - name: Unit and contract suites on the floors
+      # --no-sync: `uv run` would otherwise put the locked versions back.
+      # test_doc_sync_cli compares typer's rendered help with the committed
+      # cli.md, written by the locked typer: the bytes of a version, not a floor.
+      run: >-
+        uv run --no-sync python -m pytest tests/unit tests/contract -q
+        --deselect tests/unit/docs/test_doc_sync_cli.py::test_every_generated_block_is_current
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -620,7 +653,7 @@ jobs:
   quality-gate:
     name: Quality Gate ✅
     runs-on: ubuntu-latest
-    needs: [test, coverage, pggit-plugin, plpgsql-check, pg-tviews, wheel-python-314, lint, type-check, rust-checks, security]
+    needs: [test, coverage, pggit-plugin, plpgsql-check, pg-tviews, wheel-python-314, floors, lint, type-check, rust-checks, security]
     if: always()
     steps:
       - name: Check quality gate status
@@ -657,6 +690,11 @@ jobs:
           # Required: the newest supported CPython must get a wheel (#586, #587).
           if [[ "${{ needs.wheel-python-314.result }}" != "success" ]]; then
             echo "❌ Python 3.14 wheel failed - Quality gate blocked"
+            exit 1
+          fi
+          # Required: a declared floor the package cannot run on is a broken install.
+          if [[ "${{ needs.floors.result }}" != "success" ]]; then
+            echo "❌ Declared dependency floors failed - Quality gate blocked"
             exit 1
           fi
           if [[ "${{ needs.lint.result }}" != "success" ]]; then

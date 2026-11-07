@@ -93,10 +93,10 @@ uv run ty check python/confiture/
 # pyproject.toml dependencies
 [project.dependencies]
 python = ">=3.14"
-typer = ">=0.12"          # CLI framework
-pydantic = ">=2.5"        # Configuration validation
+typer = ">=0.24"          # CLI framework
+pydantic = ">=2.12.2"     # Configuration validation
 pyyaml = ">=6.0"          # YAML parsing
-psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
+psycopg = {version = ">=3.3", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
 pglast = ">=8.7"          # PostgreSQL's own C parser (libpg_query) — the one parser
