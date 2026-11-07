@@ -108,6 +108,13 @@ class ObjectRef:
     folded for the same reason; :attr:`display` keeps the spelling a change
     prints.
 
+    **Key by the ref, or by** :attr:`identity`, **never by** ``display``: equality
+    and the hash leave ``display`` out, and each reader spells it its own way. The
+    DDL reader writes what the author wrote (``tb_probe``); the live reader writes
+    the catalog's ``public.tb_probe``. Generated DDL prints ``display``, so it is
+    never made to invent ``public.`` for a project whose ``search_path`` is
+    elsewhere (#815).
+
     ``signature`` is the inventory's :func:`~confiture.core.linting.inventory.signature_bucket`
     — the canonical *names* of a routine's input parameter types, without their
     own schemas. It is deliberately not the full signature: a dict key cannot
@@ -122,11 +129,21 @@ class ObjectRef:
     schema: str
     name: str
     signature: tuple[str, ...] | None
-    #: The spelling a change prints. Out of the key deliberately: it carries the
-    #: *signature as written*, and ``fn(bigint)`` and ``fn(int8)`` are one
-    #: routine written two ways (#275). Keyed on it, a respelled type would report
-    #: as a dropped and an added function.
+    #: The spelling a change prints, not a key: each reader spells it its own way
+    #: (#815). Out of the key deliberately: it carries the *signature as written*,
+    #: and ``fn(bigint)`` and ``fn(int8)`` are one routine written two ways (#275).
+    #: Keyed on it, a respelled type would report as a dropped and an added function.
     display: str = field(compare=False)
+
+    @property
+    def identity(self) -> tuple[str, str]:
+        """``(schema, name)``, the same whichever reader built the model (#815).
+
+        The schema folded and defaulted, as :attr:`RelationName.identity` gives a
+        relation's. Two routines overloading one name share it; the ref itself,
+        which carries the signature bucket, tells them apart.
+        """
+        return self.schema, self.name
 
     @property
     def qualified(self) -> str:
