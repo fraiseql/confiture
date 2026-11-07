@@ -10,11 +10,19 @@ from typer.testing import CliRunner
 
 from confiture.cli.main import app
 from confiture.core.differ import SchemaDiffer, Side, stated_side, without
+from confiture.core.drift import expected_schema
 from confiture.core.relation_exclusion import Exclusion, RelationPattern, exclusion_from
-from confiture.core.schema_model import SchemaModel, Table, Trigger, ref_for, trigger_ref
+from confiture.core.schema_model import (
+    RelationName,
+    SchemaModel,
+    Table,
+    Trigger,
+    ref_for,
+    trigger_ref,
+)
 from confiture.core.schema_read import read_text
 from confiture.core.seed.drift import scope_for
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, DifferError
 
 runner = CliRunner()
 
@@ -185,3 +193,68 @@ class TestSeedDrift:
     def test_a_library_caller_adds_patterns_to_the_environments(self, seeded: Path) -> None:
         report = scope_for("local", exclude=["_fraiseql_?"])
         assert report.skipped == (("app._fraiseql_x", "diff.exclude: _fraiseql_?"),)
+
+
+#: The issue's shape (#811): a table another program writes into, whose column it names.
+CALL_RECORD = """
+CREATE SCHEMA telephony;
+CREATE TABLE telephony.tb_call_record (
+    id      BIGSERIAL PRIMARY KEY,
+    start   TIMESTAMPTZ,
+    "end"   TIMESTAMPTZ,
+    billsec INTEGER,
+    CONSTRAINT "Positive Bill" CHECK (billsec >= 0)
+);
+CREATE INDEX "CallRecord_end" ON telephony.tb_call_record ("end");
+CREATE FUNCTION telephony.touch() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+CREATE TRIGGER "Touch" BEFORE UPDATE ON telephony.tb_call_record
+    FOR EACH ROW EXECUTE FUNCTION telephony.touch();
+CREATE TABLE telephony.tb_line (id BIGINT PRIMARY KEY);
+"""
+
+TELEPHONY = Exclusion.of(["telephony.tb_call_record"])
+
+
+class TestQuotedNames:
+    """A name that needs quotes, in a relation the comparison leaves out, refuses nothing."""
+
+    def test_the_tree_is_refused_without_the_exclusion(self) -> None:
+        side = Side.of(read_text(CALL_RECORD))
+        with pytest.raises(DifferError) as caught:
+            SchemaDiffer().compare_sides(side, side)
+        assert caught.value.error_code == "DIFFER_403"
+
+    def test_every_quoted_name_of_an_excluded_relation_goes_with_it(self) -> None:
+        side = without(Side.of(read_text(CALL_RECORD)), TELEPHONY)
+        assert side.quoted == []
+
+    def test_the_comparison_runs_once_the_relation_is_excluded(self) -> None:
+        old = Side.of(read_text(CALL_RECORD))
+        new = Side.of(read_text(CALL_RECORD + "CREATE TABLE telephony.tb_trunk (id INT);\n"))
+        diff = SchemaDiffer().compare_sides(old, new, exclude=TELEPHONY)
+        assert [str(c.ref.name) for c in diff.changes] == ["tb_trunk"]
+
+    def test_a_quoted_name_outside_the_exclusion_still_refuses(self) -> None:
+        sql = CALL_RECORD + 'CREATE TABLE telephony.tb_trunk ("Port" INT);\n'
+        side = Side.of(read_text(sql))
+        with pytest.raises(DifferError) as caught:
+            SchemaDiffer().compare_sides(side, side, exclude=TELEPHONY)
+        assert "tb_trunk" in str(caught.value)
+
+    def test_a_pattern_in_another_schema_exempts_nothing(self) -> None:
+        side = without(Side.of(read_text(CALL_RECORD)), Exclusion.of(["public.tb_call_record"]))
+        assert {q.kind for q in side.quoted} == {"column", "constraint", "index", "trigger"}
+
+    def test_each_quoted_name_knows_its_relation(self) -> None:
+        quoted = Side.of(read_text(CALL_RECORD)).quoted
+        assert {q.relation for q in quoted} == {RelationName("telephony", "tb_call_record")}
+
+    def test_drift_reads_the_expected_tree_without_the_excluded_relation(self) -> None:
+        expected = expected_schema(read_text(CALL_RECORD), exclude=TELEPHONY)
+        assert ref_for("table", "telephony", "tb_line") in expected.model.tables
+
+    def test_the_names_and_the_exclusion_agree_on_what_a_relation_is(self) -> None:
+        from confiture.core.linting import quoted_names
+        from confiture.core.relation_exclusion import RELATION_KINDS
+
+        assert quoted_names._RELATIONS == RELATION_KINDS

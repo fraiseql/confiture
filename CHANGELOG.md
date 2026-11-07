@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`--exclude` exempts what it leaves out from the quoted-name refusal** (#811). A relation
+  `diff.exclude` or `--exclude` names was left out of the comparison (#767), but a name in it
+  that needs quotes still refused the whole tree (`DIFFER_403`): a table another program
+  shapes, with a column it must call `"end"`, stopped `migrate diff` (with or without
+  `--scratch-url`, and with `--to-env`) and `confiture drift` from checking anything else.
+  Each name that needs quotes now carries the relation it is on, in two parts
+  (`QuotedName.relation`), and a name on an excluded relation (the relation's own, its
+  columns', indexes', constraints' or triggers') refuses nothing. A name anywhere else
+  still refuses the tree. `confiture lint`'s `naming_003`/`naming_004` skip the same names
+  when the environment's `diff.exclude` names their relation.
+
+### Added
+
+- **`migrate diff --fail-on-change`** (#811): exit 1 (`FINDINGS`, the code `drift` already uses for
+  a gate's answer) when the sides differ, after the changes are reported; without it
+  `migrate diff` exits 0 either way. A release gate is one command:
+  `migrate diff --from db --to build.sql --scratch-url … --fail-on-change`.
+
 ## [1.45.0] - 2026-11-05
 
 ### Added

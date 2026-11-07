@@ -44,6 +44,7 @@ from confiture.core.linting.soft_delete import (
 from confiture.core.linting.soft_delete_views import view_findings
 from confiture.core.linting.tenant import rules as tenant_rules
 from confiture.core.linting.tview_rules import tview_findings
+from confiture.core.relation_exclusion import Exclusion
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import (
     ParsedFile,
@@ -711,8 +712,15 @@ class SchemaLinter:
                 )
 
     def _check_quoted_names(self, report: LintReport) -> None:
-        """``naming_003``: a name holding a dot; ``naming_004``: any other that needs quotes."""
+        """``naming_003``: a name holding a dot; ``naming_004``: any other that needs quotes.
+
+        A relation ``diff.exclude`` names is shaped by another program, and left out
+        of every comparison: its names are not reported either (#811).
+        """
+        exclusion = Exclusion.of(self.environment.diff.exclude)
         for found in quoted_names(self._inventory):
+            if not exclusion.keeps_name(found):
+                continue
             if found.dotted:
                 rule_id, rule_name = "naming_003", "Dotted Identifier"
                 message = (
