@@ -26,7 +26,7 @@ warm uv + cargo cache volumes.
 
 ## Parity notes
 
-- **Pinned tools.** `lint` runs `ruff@0.17.1`; `type-check` runs `ty@0.0.43` —
+- **Pinned tools.** `lint` runs `ruff@0.17.3`; `type-check` runs `ty@0.0.99` —
   the exact versions pinned in the workflow (and the `[dependency-groups]` /
   pre-commit dev pins). Keep `RUFF`/`TY` here in lockstep with those.
 - **`type-check` installs deps.** ty's `unresolved-import` rule needs the
