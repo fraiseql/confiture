@@ -25,7 +25,7 @@ from confiture.cli.options import (
 )
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
-from confiture.core.connection import DatabaseError, load_config
+from confiture.core.connection import DatabaseError, configured, load_config
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
 from confiture.core.function_signature_drift import (
     Definitions,
@@ -256,7 +256,7 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
         def database_url(self) -> str:
             if hasattr(self._base, "database_url"):
                 return self._base.database_url
-            return self._base.get("database_url", "")
+            return configured(self._base, "database_url") or ""
 
         def get(self, key: str, default: Any = None) -> Any:
             return getattr(self._base, key, None) or (

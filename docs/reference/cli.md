@@ -2917,6 +2917,7 @@ confiture migrate baseline [OPTIONS]
 | `--source-table` | - | str | - | Override the source DB's tracking table name when it differs from the target (default: same as target). |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--dry-run` | - | Flag | off | Show what would be marked without making changes (default: off) |
 | `--format` | `-f` | str | `text` | Output format: text or json |
 

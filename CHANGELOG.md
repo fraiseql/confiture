@@ -14,6 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`${VAR}` in an environment's connection URLs is expanded** (#813). The configuration
+  docs promised `database_url: ${DATABASE_URL}`, but `Environment.load` expanded only `acls`,
+  `ownership` and `function_coverage`, so the URL validator refused the literal `${…}`, and
+  a `--config` command handed it to libpq as written. `database_url`, `scratch_url` and a
+  `database:` block now expand `${UPPER_NAME}` (whole or in part) **when a command connects
+  with them**: loading checks only the references' syntax, so `build` and `lint` need none of
+  the variables. An unset variable is a `ConfigurationError` naming it, never an empty
+  string, and `${TUNNEL_LOCAL_PORT}` stays in the URL for `ssh_tunnel`. `Environment` keeps the
+  URL as written in `written_database_url` / `written_scratch_url` (the YAML and
+  `model_validate` keys are unchanged); `database_url` and `scratch_url` are properties that
+  expand on read. No error prints an expanded value: one that does not expand to a PostgreSQL
+  URL is quoted as the file writes it (`CONFIG_003`), and the nested-reference error names the
+  variable instead of quoting the reference inside its value.
+
+### Added
+
+- **`migrate baseline --database-url`** (#813), resolved under the same precedence as
+  `migrate up`: the flag, `CONFITURE_DATABASE_URL`, or the config file; an explicit `--config`
+  with `CONFITURE_DATABASE_URL` is refused (`CONFIG_007`), and so is a merely ambient
+  `DATABASE_URL`, as for every command that writes the ledger.
+
 ## [1.45.0] - 2026-11-05
 
 ### Added

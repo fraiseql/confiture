@@ -214,8 +214,6 @@ def test_from_db_report_never_carries_the_source_password(tmp_path) -> None:
 
     from confiture.cli.commands.migrate import baseline
 
-    config = tmp_path / "local.yaml"
-    config.write_text("database_url: postgresql://localhost/target\n")
     migrator = MagicMock()
     migrator.baseline_from_db.return_value = {
         "copied": [],
@@ -233,7 +231,7 @@ def test_from_db_report_never_carries_the_source_password(tmp_path) -> None:
             through=None,
             source_table=None,
             migrations_dir=tmp_path,
-            config=config,
+            config_data={"database_url": "postgresql://localhost/target"},
             dry_run=True,
         )
 
@@ -249,8 +247,6 @@ def test_from_db_report_writes_applied_at_in_iso_8601(tmp_path) -> None:
 
     from confiture.cli.commands.migrate import baseline
 
-    config = tmp_path / "local.yaml"
-    config.write_text("database_url: postgresql://localhost/target\n")
     migrator = MagicMock()
     migrator.baseline_from_db.return_value = {
         "copied": [
@@ -276,7 +272,7 @@ def test_from_db_report_writes_applied_at_in_iso_8601(tmp_path) -> None:
             through=None,
             source_table=None,
             migrations_dir=tmp_path,
-            config=config,
+            config_data={"database_url": "postgresql://localhost/target"},
             dry_run=True,
         )
 
