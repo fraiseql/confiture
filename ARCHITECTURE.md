@@ -317,11 +317,11 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `typer` | >=0.12 | CLI framework |
+| `typer` | >=0.24 | CLI framework |
 | `rich` | >=13.7 | Terminal formatting |
-| `pydantic` | >=2.5 | Configuration validation |
+| `pydantic` | >=2.12.2 | Configuration validation |
 | `pyyaml` | >=6.0 | YAML parsing |
-| `psycopg[binary,pool]` | >=3.1 | PostgreSQL driver (sync + pool) |
+| `psycopg[binary,pool]` | >=3.3 | PostgreSQL driver (sync + pool) |
 | `sqlglot` | >=28.0 | SQL dialect-aware parsing and transformation |
 
 ### Optional Dependencies
