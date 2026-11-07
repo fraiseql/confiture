@@ -75,7 +75,7 @@ class SQLFluffRunner:
         """Whether sqlfluff is installed."""
         try:
             # Reason: optional dependency — extra 'sqlfluff (undeclared, best-effort)'; imported where used so the core never requires it
-            import sqlfluff  # noqa: F401  # ty: ignore[unresolved-import]
+            import sqlfluff  # noqa: F401  # ty: ignore[import-not-found]
 
             return True
         except ImportError:
@@ -86,7 +86,7 @@ class SQLFluffRunner:
         if not self.available or not files:
             return []
         # Reason: optional dependency — extra 'sqlfluff (undeclared, best-effort)'; imported where used so the core never requires it
-        from sqlfluff.api import simple  # ty: ignore[unresolved-import]
+        from sqlfluff.api import simple  # ty: ignore[import-not-found]
 
         issues = []
         self.failures = []

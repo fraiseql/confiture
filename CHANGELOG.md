@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed the dependency lock (#807). Notable updates: psycopg 3.3.8,
+  pydantic 2.14.3, typer 0.28.0, sqlglot 30.30.0. The `docs` extra's mkdocs now
+  pulls python-dateutil 4 and watchdog 7, and the strict docs build passes.
+- ruff 0.17.3 (#784) and ty 0.0.99 are pinned together in the lock, the
+  pre-commit hook, the CI workflows and the local Dagger pipeline. ty's
+  `unresolved-import` suppressions use its new name, `import-not-found`.
+
 ## [1.45.0] - 2026-11-05
 
 ### Added
