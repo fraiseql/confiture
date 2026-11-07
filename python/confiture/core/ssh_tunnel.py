@@ -23,6 +23,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from confiture.config._env_vars import TUNNEL_LOCAL_PORT
+
 if TYPE_CHECKING:
     from confiture.config.environment import SshTunnelConfig
 
@@ -125,7 +127,7 @@ def ssh_tunnel(
     proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
     try:
         _wait_for_port(local_port, timeout=config.timeout_s)
-        patched_url = database_url.replace("${TUNNEL_LOCAL_PORT}", str(local_port))
+        patched_url = database_url.replace(f"${{{TUNNEL_LOCAL_PORT}}}", str(local_port))
         yield patched_url
     finally:
         proc.terminate()

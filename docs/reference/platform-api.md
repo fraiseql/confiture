@@ -322,6 +322,13 @@ A **bucket**: what makes two `CREATE` statements *candidates* for one object.
 folded for the same reason; `display` keeps the spelling a change
 prints.
 
+**Key by the ref, or by** `identity`, **never by** `display`: equality
+and the hash leave `display` out, and each reader spells it its own way. The
+DDL reader writes what the author wrote (`tb_probe`); the live reader writes
+the catalog's `public.tb_probe`. Generated DDL prints `display`, so it is
+never made to invent `public.` for a project whose `search_path` is
+elsewhere (#815).
+
 `signature` is the inventory's `signature_bucket`
 — the canonical *names* of a routine's input parameter types, without their
 own schemas. It is deliberately not the full signature: a dict key cannot

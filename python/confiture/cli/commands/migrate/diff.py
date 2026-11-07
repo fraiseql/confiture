@@ -36,9 +36,10 @@ from confiture.core.differ import (
 )
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.relation_exclusion import Exclusion, exclusion_from
+from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_read import SchemaRead, read_segments
 from confiture.core.schema_sources import database_side, materialised_side
-from confiture.error_codes import FAILURE
+from confiture.error_codes import FAILURE, FINDINGS
 from confiture.exceptions import ConfigurationError, DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
@@ -74,6 +75,14 @@ def migrate_diff(
     config: Path = config_option(help="Environment config, read for `--from db`"),
     scratch_url: str | None = scratch_url_option(),
     exclude: list[str] | None = exclude_option(),
+    fail_on_change: bool = typer.Option(
+        False,
+        "--fail-on-change",
+        help=(
+            "Exit 1 when the sides differ, after reporting the changes: the comparison "
+            "as a CI gate (default: exit 0 either way)"
+        ),
+    ),
     generate: bool = typer.Option(
         False,
         "--generate",
@@ -119,6 +128,14 @@ def migrate_diff(
       confiture migrate diff db/generated/schema_local.sql db/schema/production.sql
         ↳ Compare local schema with production target
 
+      confiture migrate diff --from db --to build.sql --scratch-url "$SCRATCH" --fail-on-change
+        ↳ Release gate: exit 1 when the migrated database differs from a fresh build
+
+    EXIT CODES:
+      0  The comparison ran (with --fail-on-change: and found no change).
+      1  With --fail-on-change: the sides differ; the changes are reported first.
+      5  A side names an object that needs quotes (DIFFER_403), or the options conflict.
+
     RELATED:
       confiture migrate generate - Create migration template
       confiture migrate validate - Check migration integrity
@@ -138,7 +155,12 @@ def migrate_diff(
         exclusion = _exclusion(config, exclude, json_mode=is_json(format_type), report=report_file)
         try:
             current_side, desired_side, policy, fidelity = _compared(
-                current, desired, desired_read, config=config, scratch_url=scratch_url
+                current,
+                desired,
+                desired_read,
+                config=config,
+                scratch_url=scratch_url,
+                exclusion=exclusion,
             )
             diff = SchemaDiffer().compare_sides(
                 current_side, desired_side, policy, exclude=exclusion
@@ -154,45 +176,20 @@ def migrate_diff(
             )
             for change in diff.changes
         ]
-        migration_file_name = None
-        gate: str | None = None
-
-        # Handle migration generation if requested
-        if generate:
-            if not name:
-                fail(
-                    ValidationError(
-                        "--generate requires --name",
-                        resolution_hint=(
-                            "Usage: confiture migrate diff old.sql new.sql --generate --name migration_name"
-                        ),
-                    ),
-                    json_mode=is_json(format_type),
-                    output_file=report_file,
-                )
-
-            # Ensure migrations directory exists
-            migrations_dir.mkdir(parents=True, exist_ok=True)
-
-            # Generate migration
-            generator = MigrationGenerator(migrations_dir=migrations_dir)
-            ingest = from_ is not None or to is not None
-            gate = _destructive_policy(
-                config,
-                allow=allow_destructive,
-                forbid=forbid_destructive,
+        migration_file_name, gate = (
+            _generated(
+                diff,
+                name,
+                migrations_dir=migrations_dir,
+                ingest=from_ is not None or to is not None,
+                config=config,
+                destructive=(allow_destructive, forbid_destructive),
                 json_mode=is_json(format_type),
                 report=report_file,
             )
-            try:
-                migration_file = (
-                    generator.generate_sql(diff, name=name, destructive=gate)
-                    if ingest
-                    else generator.generate(diff, name=name, destructive=gate)
-                )
-            except DifferError as exc:  # the gate's refusal (DIFFER_401) carries its own code
-                fail(exc, json_mode=is_json(format_type), output_file=report_file)
-            migration_file_name = migration_file.name
+            if generate
+            else (None, None)
+        )
 
         # Create result and format output
         result = MigrateDiffResult(
@@ -208,6 +205,8 @@ def migrate_diff(
         )
 
         format_migrate_diff_result(result, format_type, report_file, console)
+        if fail_on_change and result.has_changes:
+            raise typer.Exit(FINDINGS)
 
     except typer.Exit, typer.BadParameter:
         raise
@@ -220,6 +219,50 @@ def migrate_diff(
         )
         format_migrate_diff_result(result, format_type, report_file, console)
         raise typer.Exit(FAILURE) from e
+
+
+def _generated(
+    diff: SchemaDiff,
+    name: str | None,
+    *,
+    migrations_dir: Path,
+    ingest: bool,
+    config: Path,
+    destructive: tuple[bool, bool],
+    json_mode: bool,
+    report: Path | None,
+) -> tuple[str, str | None]:
+    """``--generate``: write the migration *diff* is, under the destructive gate.
+
+    *destructive* is ``(--allow-destructive, --forbid-destructive)``. Returns the
+    migration's file name and the gate it was written under.
+    """
+    allow, forbid = destructive
+    if not name:
+        fail(
+            ValidationError(
+                "--generate requires --name",
+                resolution_hint=(
+                    "Usage: confiture migrate diff old.sql new.sql --generate --name migration_name"
+                ),
+            ),
+            json_mode=json_mode,
+            output_file=report,
+        )
+    migrations_dir.mkdir(parents=True, exist_ok=True)
+    generator = MigrationGenerator(migrations_dir=migrations_dir)
+    gate = _destructive_policy(
+        config, allow=allow, forbid=forbid, json_mode=json_mode, report=report
+    )
+    try:
+        migration_file = (
+            generator.generate_sql(diff, name=name, destructive=gate)
+            if ingest
+            else generator.generate(diff, name=name, destructive=gate)
+        )
+    except DifferError as exc:  # the gate's refusal (DIFFER_401) carries its own code
+        fail(exc, json_mode=json_mode, output_file=report)
+    return migration_file.name, gate
 
 
 def _one_desired_side(
@@ -304,6 +347,7 @@ def _compared(
     *,
     config: Path,
     scratch_url: str | None,
+    exclusion: Exclusion,
 ) -> tuple[Side, Side, ComparisonPolicy | None, str | None]:
     """The two sides, the policy they are compared under, and its fidelity when it is not theirs.
 
@@ -328,8 +372,9 @@ def _compared(
     if scratch is None:
         return database, tree, None, None
     # Before the scratch build: it would build a name that needs quotes, and fail
-    # on an index rather than name it.
-    refuse_quoted_names("new", tree.quoted)
+    # on an index rather than name it. A name in a relation the comparison leaves
+    # out is built and never compared (#811).
+    refuse_quoted_names("new", [q for q in tree.quoted if exclusion.keeps_name(q)])
     refuse_undeclared_relations(database, tree)
     built = materialised_side(desired.read(), scratch, read=desired_read)
     return database, built, replace(MATERIALISED, author="new"), "materialised"

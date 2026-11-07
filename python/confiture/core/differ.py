@@ -259,6 +259,7 @@ def without(side: Side, exclusion: Exclusion) -> Side:
         objects=kept.objects,
         dangling=kept.dangling,
         warnings=[*side.warnings, *kept.notes],
+        quoted=[q for q in side.quoted if exclusion.keeps_name(q)],
     )
 
 

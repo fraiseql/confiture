@@ -137,7 +137,15 @@ export DATABASE_URL=postgresql://app_user:secret@db.example.com:5432/myapp_produ
 confiture migrate up --config db/environments/production.yaml
 ```
 
-**Note**: Confiture uses `pydantic` validation, so `${VAR}` syntax requires Pydantic v2+ or manual substitution.
+`database_url`, `scratch_url` and a `database:` block expand `${VAR}` when a command
+connects with them, not when it loads the file: `build` and `lint` never need the
+variables. A reference may be the whole value (`${DATABASE_URL}`) or a part of it
+(`postgresql://app:${DB_PASSWORD}@db/app`). Only the strict form `${UPPER_NAME}` is read,
+and a malformed reference is refused at load; an unset variable is a `ConfigurationError`
+naming it, never an empty string. `${TUNNEL_LOCAL_PORT}` is not a variable: it is the port
+an `ssh_tunnel` opens, and stays in the URL until the tunnel fills it in. An error never
+prints the expanded URL: a value that does not expand to a `postgresql://` URL is quoted as
+the file writes it.
 
 **Alternative**: Use a secrets manager (Vault, AWS Secrets Manager):
 
@@ -614,7 +622,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `name` | str | `` | Environment name (e.g., "local", "production") |
-| `database_url` | str | **required** | PostgreSQL connection URL |
+| `database_url` | str | **required** | PostgreSQL connection URL. ``${VAR}`` references (whole or in part) are expanded when the URL is used, so a command that never connects needs none of them set; ``${TUNNEL_LOCAL_PORT}`` is left for ``ssh_tunnel``. |
 | `scratch_url` | str \| NoneType | - | A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. ``confiture lint``'s ``build_003`` builds the tree's extensions there to learn what they provide (``null`` reports their references as unchecked), and ``confiture seed drift --build`` builds the seed side there. |
 | `include_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories to include when building schema (supports both string and dict formats) |
 | `superuser_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash. |
@@ -755,7 +763,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `exclude` | list[str] | `[]` | Relation patterns left out of every comparison, on both sides: ``name`` matches the relation's name in any schema, ``schema.name`` that schema's only; each part is a case-sensitive glob (``*``, ``?``, ``[…]``). A table, view, materialized view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers, policies and rules; a foreign key or trigger of the tree's own on one is reported (``DIFFER_411``). |
+| `exclude` | list[str] | `[]` | Relation patterns left out of every comparison, on both sides: ``name`` matches the relation's name in any schema, ``schema.name`` that schema's only; each part is a case-sensitive glob (``*``, ``?``, ``[…]``). A table, view, materialized view, TVIEW, sequence or foreign table goes with its columns, constraints, indexes, triggers, policies and rules; a foreign key or trigger of the tree's own on one is reported (``DIFFER_411``). A name in an excluded relation that needs quotes is neither refused (``DIFFER_403``) nor linted (``naming_003``/``naming_004``). |
 
 #### `SshTunnelConfig`
 
