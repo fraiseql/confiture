@@ -26,15 +26,17 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg
 
+from confiture.core.ledger import LOCK_HOLDER_TABLE, identifier_in
+
 if TYPE_CHECKING:
     import psycopg
 
 logger = logging.getLogger(__name__)
 
-# Diagnostic metadata table written under the advisory lock (issue #147).
-# Correctness never depends on it — the advisory lock is the mutex; this row is
-# best-effort identity for contenders to read.
-LOCK_HOLDER_TABLE = "confiture_lock_holder"
+# LOCK_HOLDER_TABLE (defined beside the ledger's other names) is the diagnostic
+# metadata table written under the advisory lock (issue #147). Correctness never
+# depends on it — the advisory lock is the mutex; its row is best-effort identity
+# for contenders to read.
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,9 @@ class LockConfig:
         extra_keys: Other tools' advisory keys, each taken in the one-``bigint``
             form after confiture's own lock, in this order, in the same mode and
             with the same timeout, and released in reverse (issue #768)
+        holder_schema: The schema the lock-holder table lives in: the tracking
+            table's (issue #826). ``None`` leaves the name bare, so it resolves
+            through ``search_path`` exactly as a bare tracking table does
 
     Example:
         >>> config = LockConfig(timeout_ms=60000)  # 1 minute timeout
@@ -150,6 +155,7 @@ class LockConfig:
     mode: LockMode = field(default=LockMode.BLOCKING)
     command: str | None = None  # confiture command for the lock-holder metadata (#147)
     extra_keys: tuple[int, ...] = ()
+    holder_schema: str | None = None
 
 
 class LockAcquisitionError(Exception):
@@ -216,6 +222,7 @@ class MigrationLock:
         """
         self.connection = connection
         self.config = config or LockConfig()
+        self._holder_table = identifier_in(self.config.holder_schema, LOCK_HOLDER_TABLE)
         self._lock_held = False
         self._lock_id: int | None = None
         self._extra_held: list[int] = []
@@ -453,7 +460,7 @@ class MigrationLock:
             with self.connection.cursor() as cur:
                 cur.execute(
                     t"""
-                    CREATE TABLE IF NOT EXISTS {LOCK_HOLDER_TABLE:i} (
+                    CREATE TABLE IF NOT EXISTS {self._holder_table:i} (
                         lock_id BIGINT PRIMARY KEY,
                         pid INT,
                         hostname TEXT,
@@ -465,7 +472,7 @@ class MigrationLock:
                 )
                 cur.execute(
                     t"""
-                    INSERT INTO {LOCK_HOLDER_TABLE:i}
+                    INSERT INTO {self._holder_table:i}
                         (lock_id, pid, hostname, usename, command, acquired_at)
                     VALUES ({lock_id}, {identity.pid}, {identity.hostname}, current_user,
                             {identity.command}, now())
@@ -491,7 +498,7 @@ class MigrationLock:
         """Remove this lock's identity row on release (best-effort)."""
         try:
             with self.connection.cursor() as cur:
-                cur.execute(t"DELETE FROM {LOCK_HOLDER_TABLE:i} WHERE lock_id = {lock_id}")
+                cur.execute(t"DELETE FROM {self._holder_table:i} WHERE lock_id = {lock_id}")
             self.connection.commit()
         except psycopg.Error as e:
             logger.debug(f"Could not clear lock-holder metadata (id={lock_id}): {e}")
@@ -536,7 +543,7 @@ class MigrationLock:
                         SELECT 1 FROM pg_locks
                         WHERE locktype = 'advisory' AND classid = {namespace} AND objid = {lock_id}
                     ) AS live
-                FROM {LOCK_HOLDER_TABLE:i} h
+                FROM {self._holder_table:i} h
                 WHERE h.lock_id = {lock_id}
                 """
             )

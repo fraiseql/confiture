@@ -39,7 +39,6 @@ from typing import Any
 import psycopg
 from psycopg import sql as pgsql
 
-from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.sql_lexer import name_parts
 from confiture.exceptions import SQLError
 
@@ -48,6 +47,9 @@ DEFAULT_TRACKING_TABLE = "tb_confiture"
 
 #: What the checkpoint table beside a ledger is named after it.
 STEPS_SUFFIX = "_steps"
+
+#: The migration lock's diagnostic metadata table (issue #147), in the ledger's schema (#826).
+LOCK_HOLDER_TABLE = "confiture_lock_holder"
 
 
 def steps_table(tracking_table: str) -> str:
@@ -456,8 +458,16 @@ def table_identifier(name: str) -> pgsql.Identifier:
     Returns:
         ``Identifier(table)`` or ``Identifier(schema, table)``.
     """
-    schema, base = split_qualified_table(name)
-    parts = (base,) if schema is None else (schema, base)
+    return identifier_in(*split_qualified_table(name))
+
+
+def identifier_in(schema: str | None, name: str) -> pgsql.Identifier:
+    """*name* in *schema* as one identifier, interpolated ``{ident:i}``.
+
+    ``None`` leaves it bare, resolved through ``search_path`` as a bare
+    tracking table is: how confiture's other tables sit beside the ledger.
+    """
+    parts = (name,) if schema is None else (schema, name)
     return pgsql.Identifier(*parts)
 
 

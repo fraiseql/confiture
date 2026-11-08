@@ -33,7 +33,7 @@ from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.events import UpObserver
 from confiture.core._migrator.loader import load_migration_class
 from confiture.core._migrator.options import UpOptions
-from confiture.core.ledger import DEFAULT_TRACKING_TABLE
+from confiture.core.ledger import DEFAULT_TRACKING_TABLE, split_qualified_table
 from confiture.core.locking import (
     LockConfig,
     MigrationLock,
@@ -174,12 +174,7 @@ class MigratorSession:
         if self._migrator is not None:  # attached to a live engine
             return self
 
-        # A URL override replaces the connection, never the configuration (#825).
-        migration_table: str = self._migration_table_override or (
-            self._config.migration.tracking_table
-            if self._config is not None
-            else DEFAULT_TRACKING_TABLE
-        )
+        migration_table = self._tracking_table()
         if self._database_url_override is not None:
             url: str = self._database_url_override
         elif self._config is not None:
@@ -206,6 +201,17 @@ class MigratorSession:
             self._conn = None
             raise
         return self
+
+    def _tracking_table(self) -> str:
+        """The ledger this session reads: the engine's once attached, else as ``__enter__`` resolves it."""
+        if self._migrator is not None:
+            return self._migrator.migration_table
+        # A URL override replaces the connection, never the configuration (#825).
+        if self._migration_table_override is not None:
+            return self._migration_table_override
+        if self._config is not None:
+            return self._config.migration.tracking_table
+        return DEFAULT_TRACKING_TABLE
 
     def __exit__(
         self,
@@ -236,7 +242,8 @@ class MigratorSession:
     ) -> MigrationLock:
         """The migration lock for one run of a verb, on this session's connection.
 
-        Every verb that takes the lock takes it here, so the extra keys come with it.
+        Every verb that takes the lock takes it here, so the extra keys come with it,
+        and its holder table sits in the tracking table's schema (#826).
         """
         return type(self).default_lock(
             self._conn,
@@ -245,6 +252,7 @@ class MigratorSession:
                 timeout_ms=lock_timeout,
                 command=command or self._command,
                 extra_keys=self._extra_lock_keys,
+                holder_schema=split_qualified_table(self._tracking_table())[0],
             ),
         )
 

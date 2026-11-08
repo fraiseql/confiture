@@ -151,8 +151,9 @@ When `migrate up`/`down`/`down-to` cannot acquire the migration lock, the
   "actionable": "Wait for the current migration to finish, then retry." } }
 ```
 
-Identity is recorded best-effort in a `confiture_lock_holder` metadata table
-written *under* the advisory lock. The advisory lock remains the source of truth
+Identity is recorded best-effort in a `confiture_lock_holder` metadata table,
+in the tracking table's schema (bare, and so resolved through `search_path`,
+only when `tracking_table` is bare), written *under* the advisory lock. The advisory lock remains the source of truth
 for "is it held" — if the holder crashes, the advisory lock auto-releases and
 the lingering row is reported as stale. `held_for_seconds > 300` adds a
 stale-lock hint to `actionable`. When no identity is available (older holder, or

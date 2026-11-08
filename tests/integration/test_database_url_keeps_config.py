@@ -96,6 +96,7 @@ def test_every_command_keeps_the_configs_tracking_table(
     assert _ledger(target) == ["001", "002"]
 
     tables = _tables(target)
-    assert set(tables["app"]) <= {"confiture_lock_holder"}  # the lock table: #826
+    assert tables["app"] == []
+    assert "confiture_lock_holder" in tables["public"]
     assert {"ledger_825", "ledger_825_steps"} <= set(tables["public"])
     assert "tb_confiture" not in tables["public"]
