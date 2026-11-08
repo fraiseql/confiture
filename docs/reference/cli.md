@@ -640,8 +640,8 @@ All migration commands are subcommands of `confiture migrate`:
 
 ### Connection source and precedence
 
-`migrate up`, `down`, `down-to`, `current`, `status`, `verify`, and `preflight`
-accept a direct PostgreSQL DSN via `--database-url` / `-d`, so tooling that
+`migrate up`, `down`, `down-to`, `baseline`, `current`, `status`, `verify`, and
+`preflight` accept a direct PostgreSQL DSN via `--database-url` / `-d`, so tooling that
 resolves a DSN at runtime no longer has to synthesize a temporary YAML file.
 
 Since **0.20.0** (#152) the connection source follows a single, secure
@@ -667,7 +667,10 @@ ubiquitous one and must never silently clobber a config. Resolution order:
 
 When a DSN is supplied via flag or env var, **no YAML is required** — the
 migrations directory falls back to `db/migrations` and the tracking table to
-`tb_confiture`. A malformed DSN (not starting with `postgresql://` /
+`tb_confiture`. With an **explicit** `--config`/`--env`, the flag replaces that
+file's connection only (`database_url`, a `database:` block, `ssh_tunnel`): its
+`tracking_table`, `locking`, `strict_mode` and every other setting still apply
+(#825). A malformed DSN (not starting with `postgresql://` /
 `postgres://`) fails with `CONFIG_003` (exit 5).
 
 > **Mutating commands** (`up`, `down`, `down-to`) require an *intentional*
@@ -785,7 +788,7 @@ confiture migrate status [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | - | Config file for database connection. Must appear after 'status': confiture migrate status -c config.yaml |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--format` | `-f` | str | `table` | Output format: table or json or csv |
 | `--output` | `-o` | path | - | Save output to file (default: stdout, useful with json/csv) |
@@ -845,7 +848,7 @@ confiture migrate current [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--format` | `-f` | str | `text` | Output format: text or json |
 | `--output` | `-o` | path | - | Write the output to this file instead of stdout |
@@ -1330,7 +1333,7 @@ confiture migrate up [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--target` | `-t` | str | - | Target migration version (default: applies all pending) |
 | `--strict` | - | Flag | off | Enable strict mode, fail on warnings (default: off) |
@@ -1457,7 +1460,7 @@ confiture migrate down [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--steps` | `-n` | int | `1` | Number of migrations to rollback |
 | `--dry-run` | - | Flag | off | Analyze rollback without executing (default: off) |
@@ -1530,7 +1533,7 @@ confiture migrate down-to [OPTIONS] {revision}
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--dry-run` | - | Flag | off | Print the rollback plan and exit 0 without applying anything. |
 | `--format` | `-f` | str | `text` | Output format: text or json |
@@ -2060,7 +2063,7 @@ confiture migrate verify [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | - | Configuration file (optional) |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--version` | - | str | - | Verify a single migration version (default: verify all applied) |
 | `--format` | `-f` | str | `text` | Output format: text or json |
@@ -2918,7 +2921,7 @@ confiture migrate baseline [OPTIONS]
 | `--source-table` | - | str | - | Override the source DB's tracking table name when it differs from the target (default: same as target). |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--dry-run` | - | Flag | off | Show what would be marked without making changes (default: off) |
 | `--format` | `-f` | str | `text` | Output format: text or json |
 
@@ -3978,7 +3981,7 @@ confiture validate-config [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | - | Configuration file to validate (default: db/environments/local.yaml) |
-| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. With an explicit --config/--env it replaces that file's connection only: its tracking_table, locking and other settings still apply. Without one, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--migrations-path` | - | path | `db/migrations` | Migrations directory to validate |
 | `--format` | `-f` | str | `text` | Output format: text or json |
 | `--strict` | - | Flag | off | Treat warnings as errors for exit purposes. |

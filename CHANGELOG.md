@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A holder table an earlier release left in another schema is not moved; it holds no state once
   its lock is released and can be dropped.
 
+- **`--database-url` with an explicit `--config` replaces the connection only** (#825). Each
+  command that takes the flag (`migrate up`, `down`, `down-to`, `baseline`, `current`, `status`,
+  `verify`, `preflight --scope pending`, `check`) built its configuration from the URL alone,
+  so a named config's `tracking_table`, `locking`, `strict_mode` and `view_helpers` fell back to
+  their defaults: with `tracking_table: public.tb_confiture` and a `search_path` starting with
+  another schema, `baseline` wrote its history to that schema and a later command reading the
+  config saw none. One helper, `cli.dsn.configuration`, now gives every command the named file
+  with its connection (`database_url`, a `database:` block, `ssh_tunnel`) replaced by the URL;
+  with no config named, or `--no-config`, the URL alone as before. `MigratorSession` keeps its
+  config's `tracking_table` under a `database_url_override` too.
+
 ## [1.46.0] - 2026-11-07
 
 ### Added

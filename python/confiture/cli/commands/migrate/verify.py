@@ -10,6 +10,7 @@ from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
+    configuration,
     has_intentional_dsn_source,
     resolve_database_url,
 )
@@ -94,14 +95,12 @@ def migrate_verify(
     is_json(format_output)
     config_data: Any = None
     if has_intentional_dsn_source(ctx, database_url, no_config):
+        explicit = config_is_explicit(ctx)
         _db_url_override = resolve_database_url(
-            database_url,
-            config,
-            config_explicit=config_is_explicit(ctx),
-            no_config=no_config,
+            database_url, config, config_explicit=explicit, no_config=no_config
         )
         if _db_url_override is not None:
-            config_data = {"database_url": _db_url_override}
+            config_data = configuration(_db_url_override, config, config_explicit=explicit)
         elif config and config.exists():
             config_data = _core_connection.load_config(config)
     if config_data is None:

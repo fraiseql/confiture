@@ -13,6 +13,7 @@ from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
+    configuration,
     resolve_database_url,
 )
 from confiture.cli.error_json import (
@@ -289,21 +290,21 @@ def migrate_up(
         # Resolve the DSN under the #152 precedence contract. A resolved
         # override (flag / canonical env / --no-config) skips YAML loading;
         # `up` is mutating, so an ambient-only DATABASE_URL is refused.
+        explicit = config_is_explicit(ctx)
         _db_url_override = resolve_database_url(
             database_url,
             config,
-            config_explicit=config_is_explicit(ctx),
+            config_explicit=explicit,
             no_config=no_config,
             require_intentional_source=True,
         )
-        config_data = (
-            {"database_url": _db_url_override}
-            if _db_url_override is not None
-            else _core_connection.load_config(config)
+        config_data = configuration(_db_url_override, config, config_explicit=explicit)
+        # Environment-level migration settings apply whenever the YAML is read: as the
+        # DSN source, or named explicitly beside --database-url (#825). An invalid file
+        # is an error; only its absence means defaults.
+        env_cfg = (
+            _load_environment_if_present(config) if _db_url_override is None or explicit else None
         )
-        # Environment-level migration settings apply only when YAML is the DSN
-        # source; an invalid file is an error, only its absence means defaults.
-        env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
         install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
         lock_timeout, no_lock = resolve_lock_settings(

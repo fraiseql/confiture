@@ -206,8 +206,9 @@ class MigratorSession:
         """The ledger this session reads: the engine's once attached, else as ``__enter__`` resolves it."""
         if self._migrator is not None:
             return self._migrator.migration_table
-        if self._database_url_override is not None:
-            return self._migration_table_override or DEFAULT_TRACKING_TABLE
+        # A URL override replaces the connection, never the configuration (#825).
+        if self._migration_table_override is not None:
+            return self._migration_table_override
         if self._config is not None:
             return self._config.migration.tracking_table
         return DEFAULT_TRACKING_TABLE

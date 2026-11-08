@@ -11,6 +11,7 @@ from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
+    configuration,
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary
@@ -22,7 +23,6 @@ from confiture.cli.helpers import (
     open_connection,
 )
 from confiture.cli.options import config_option, database_url_option, format_option, output_option
-from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.exceptions import DatabaseNotInitializedError
 from confiture.models.results import CurrentRevision
@@ -61,15 +61,11 @@ def migrate_current(
       confiture migrate current --database-url "$DATABASE_URL" --format json
     """
 
+    explicit = config_is_explicit(ctx)
     override = resolve_database_url(
-        database_url,
-        config,
-        config_explicit=config_is_explicit(ctx),
-        no_config=no_config,
+        database_url, config, config_explicit=explicit, no_config=no_config
     )
-    config_data = (
-        {"database_url": override} if override is not None else _core_connection.load_config(config)
-    )
+    config_data = configuration(override, config, config_explicit=explicit)
     with open_connection(config_data) as conn:
         migrator = _core_migrator.Migrator(
             connection=conn, migration_table=_get_tracking_table(config_data)
