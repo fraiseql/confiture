@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ledger.bookkeeping_schemas()`** (#827): the schemas confiture creates for itself, beside
+  `bookkeeping_tables()`. Today that is the view-helper schema `confiture`
+  (`ledger.VIEW_HELPER_SCHEMA`), which `migrate up` installs under `migration.view_helpers: auto`,
+  the default, with its `saved_views` and `saved_view_indexes` tables. A comparison of a migrated
+  database with a built one can now leave it out from the one list (`pg_dump --exclude-schema`).
+  confiture's own drift and squash were never affected: drift reads only the schemas a tree
+  declares, and squash replays without installing the helpers.
+
 ### Fixed
 
 - **The lock-holder table lives beside the tracking table** (#826). `confiture_lock_holder` was

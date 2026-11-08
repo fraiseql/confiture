@@ -145,7 +145,10 @@ _VIEW_HELPERS = (
 
 def _install_view_helpers(conn: Any, *, dry_run: bool, force: bool) -> dict[str, Any]:
     """Install the view helpers on *conn* (or not), and say which of three things happened."""
-    payload: dict[str, Any] = {"schema": "confiture", "functions": list(_VIEW_HELPERS)}
+    payload: dict[str, Any] = {
+        "schema": _core_ledger.VIEW_HELPER_SCHEMA,
+        "functions": list(_VIEW_HELPERS),
+    }
     if dry_run:
         sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
         return {"status": "dry_run", **payload, "sql": sql}
