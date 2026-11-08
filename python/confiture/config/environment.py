@@ -1236,6 +1236,41 @@ class Environment(BaseModel):
         return v
 
     @classmethod
+    def from_file(cls, config: Path | str) -> Environment:
+        """The environment a YAML config file at any path declares.
+
+        Issue #168: a migrate-only config need only carry ``database_url`` — the
+        build-only fields ``name``/``include_dirs`` default on the model itself, so
+        this accepts the same minimal config the CLI's ``migrate up`` does. A truly
+        invalid config (e.g. missing ``database_url``) still fails validation.
+
+        Raises:
+            ConfigurationError: The file is missing (``CONFIG_004``) or does not
+                validate (``CONFIG_002``).
+        """
+        config_path = Path(config)
+        if not config_path.exists():
+            raise ConfigurationError(
+                f"Configuration file not found: {config_path}",
+                error_code="CONFIG_004",
+                context={"file_path": str(config_path)},
+                resolution_hint=f"Create a config file at {config_path} or use an existing one",
+            )
+        with config_path.open() as f:
+            raw: dict[str, Any] = yaml.safe_load(f)
+        try:
+            return cls.model_validate(raw)
+        except (TypeError, ValueError) as e:
+            if "ValidationError" in type(e).__name__:
+                raise ConfigurationError(
+                    f"Invalid configuration in {config_path}: {e}",
+                    error_code="CONFIG_002",
+                    context={"file_path": str(config_path)},
+                    resolution_hint=f"Fix validation errors in {config_path}",
+                ) from e
+            raise
+
+    @classmethod
     def load(cls, env_name: str, project_dir: Path | None = None) -> Environment:
         """Load environment configuration from YAML file
 

@@ -11,6 +11,7 @@ import typer
 from confiture.cli.dsn import (
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
+    configuration,
     has_intentional_dsn_source,
     require_readable_config,
     resolve_database_url,
@@ -949,11 +950,12 @@ def _pending_scope(tracking: _TrackingDb) -> PendingScope:
 
     def read() -> PendingScope:
         override = tracking.override()
-        if override is not None:
-            config_data: Any = {"database_url": override}
-        elif tracking.config is not None or tracking.env is not None:
+        named = tracking.config is not None or tracking.env is not None
+        if override is not None or named:
             resolved = _resolve_config(tracking.config or Path("confiture.yaml"), tracking.env)
-            config_data = load_config(resolved)
+            config_data: Any = configuration(
+                override, resolved, config_explicit=named and config_is_explicit(tracking.ctx)
+            )
         else:
             raise ConfigurationError(
                 "--scope pending reads the tracking database's ledger, and no database was given",

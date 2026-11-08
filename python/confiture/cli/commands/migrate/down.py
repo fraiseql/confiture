@@ -12,6 +12,7 @@ from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
+    configuration,
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary, fail, lock_error_to_confiture
@@ -32,6 +33,7 @@ from confiture.cli.options import (
     output_option,
     verbose_option,
 )
+from confiture.config.environment import Environment
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.error_handler import print_error_to_console
@@ -121,18 +123,18 @@ def migrate_down(
         logging.getLogger("confiture").setLevel(logging.DEBUG)
 
     try:
+        explicit = config_is_explicit(ctx)
         _db_url_override = resolve_database_url(
             database_url,
             config,
-            config_explicit=config_is_explicit(ctx),
+            config_explicit=explicit,
             no_config=no_config,
             require_intentional_source=True,
         )
-        if _db_url_override is not None:
-            config_data = {"database_url": _db_url_override}
-        else:
-            config_data = _core_connection.load_config(config)
-        env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
+        config_data = configuration(_db_url_override, config, config_explicit=explicit)
+        env_cfg = (
+            _load_environment_if_present(config) if _db_url_override is None or explicit else None
+        )
         locking = env_cfg.migration.locking if env_cfg else None
 
         with _core_migrator.MigratorSession(
@@ -223,24 +225,21 @@ def migrate_down_to(
       confiture migrate down-to 20260101_a --dry-run --format json
     """
 
+    explicit = config_is_explicit(ctx)
     override = resolve_database_url(
         database_url,
         config,
-        config_explicit=config_is_explicit(ctx),
+        config_explicit=explicit,
         no_config=no_config,
         require_intentional_source=True,
     )
-    if override is not None:
-        session = _core_migrator.MigratorSession(
-            config=None,
-            migrations_dir=migrations_dir,
-            database_url_override=override,
-            connection_factory=connect,
-        )
-    else:
-        session = _core_migrator.Migrator.from_config(
-            str(config), migrations_dir=migrations_dir, connection_factory=connect
-        )
+    # --database-url replaces the connection; an explicit config's settings still apply (#825).
+    session = _core_migrator.MigratorSession(
+        Environment.from_file(config) if override is None or explicit else None,
+        migrations_dir,
+        database_url_override=override,
+        connection_factory=connect,
+    )
     with session as s:
         result = s.down_to(revision, dry_run=dry_run, command="confiture migrate down-to")
 
