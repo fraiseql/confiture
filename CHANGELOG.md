@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The lock-holder table lives beside the tracking table** (#826). `confiture_lock_holder` was
+  created and read by its bare name, so PostgreSQL put it in the first schema of `search_path`
+  wherever the ledger was: with `tracking_table: public.tb_confiture` and a `search_path` starting
+  with another schema, the ledger and its checkpoint table were in `public` and the lock table was
+  not. It is now written in the tracking table's schema (`LockConfig.holder_schema`, set by every
+  verb that takes the lock); a bare `tracking_table` keeps resolving both through `search_path`.
+  A holder table an earlier release left in another schema is not moved; it holds no state once
+  its lock is released and can be dropped.
+
 ## [1.46.0] - 2026-11-07
 
 ### Added
