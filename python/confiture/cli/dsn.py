@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from confiture.core import connection as _core_connection
 from confiture.exceptions import ConfigurationError
 from confiture.url_redaction import (
     redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
@@ -33,9 +34,10 @@ DATABASE_URL_OPTION_HELP = (
     "and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* "
     "--config but conflicts with an *explicit* one (CONFIG_007); the ambient "
     "DATABASE_URL never overrides a present config. Pass --no-config to make the "
-    "environment the sole source. When a DSN is supplied, no YAML is required "
-    "(tracking table defaults to tb_confiture). SSH-tunnel configs still require "
-    "--config."
+    "environment the sole source. With an explicit --config/--env it replaces that "
+    "file's connection only: its tracking_table, locking and other settings still "
+    "apply. Without one, no YAML is required (tracking table defaults to "
+    "tb_confiture). SSH-tunnel configs still require --config."
 )
 
 
@@ -164,6 +166,45 @@ def resolve_database_url(
     return None
 
 
+#: What a config says about *how to connect*: what ``--database-url`` replaces (#825).
+_CONNECTION_KEYS = frozenset({"database_url", "database", "ssh_tunnel"})
+
+
+def configuration(
+    override: str | None, config: Path | None, *, config_explicit: bool
+) -> dict[str, Any]:
+    """The raw configuration a command connects with: *config*, its connection replaced (#825).
+
+    No *override*: the file as written. An override with an explicit ``--config``/``--env``:
+    the file with its connection — ``database_url``, a legacy ``database:`` block, an
+    ``ssh_tunnel`` (the flag is for a directly reachable database) — replaced by the
+    override, so its ``tracking_table``, ``locking`` and every other setting still apply.
+    An override with no config named (a default path, ``--no-config``): the URL alone,
+    every other setting at its default.
+
+    Raises:
+        ConfigurationError: The named file is missing (``CONFIG_004``) or not YAML
+            (``CONFIG_002``).
+    """
+    if override is None:
+        if config is None:
+            raise ConfigurationError(
+                "No database: neither a config file nor a database URL was given",
+                error_code="CONFIG_010",
+                resolution_hint="Pass --database-url, --config/--env, or set CONFITURE_DATABASE_URL",
+            )
+        return _core_connection.load_config(config)
+    if config is None or not config_explicit:
+        return {"database_url": override}
+    data = {
+        key: value
+        for key, value in (_core_connection.load_config(config) or {}).items()
+        if key not in _CONNECTION_KEYS
+    }
+    data["database_url"] = override
+    return data
+
+
 def param_is_explicit(ctx: Any, *params: str) -> bool:
     """Whether any named parameter was set on the command line / via env.
 
@@ -255,9 +296,9 @@ def require_readable_config(ctx: Any, config: Path | None, *params: str) -> None
     if config is None or not param_is_explicit(ctx, *(params or ("config",))):
         return
     # Reason: imported here — core.connection imports the CLI helpers at module scope
-    from confiture.core.connection import load_config
+    from confiture.core import connection as _core_connection
 
-    load_config(config)
+    _core_connection.load_config(config)
 
 
 def has_intentional_dsn_source(ctx: Any, flag: str | None, no_config: bool) -> bool:

@@ -11,6 +11,7 @@ from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
+    configuration,
     has_intentional_dsn_source,
     require_readable_config,
     resolve_database_url,
@@ -289,14 +290,12 @@ def _probe_database(
     """
     config_data: Any = None
     if has_intentional_dsn_source(ctx, database_url, no_config):
+        explicit = config_is_explicit(ctx)
         override = resolve_database_url(
-            database_url,
-            config,
-            config_explicit=config_is_explicit(ctx),
-            no_config=no_config,
+            database_url, config, config_explicit=explicit, no_config=no_config
         )
         if override is not None:
-            config_data = {"database_url": override}
+            config_data = configuration(override, config, config_explicit=explicit)
         elif config is not None and config.exists():
             config_data = _core_connection.load_config(config)
     if config_data is None:

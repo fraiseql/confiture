@@ -9,7 +9,7 @@ from typing import Annotated
 
 import typer
 
-from confiture.cli.dsn import config_is_explicit, resolve_database_url
+from confiture.cli.dsn import config_is_explicit, configuration, resolve_database_url
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, error_console, is_json, open_connection
 from confiture.cli.options import (
@@ -21,7 +21,6 @@ from confiture.cli.options import (
 )
 from confiture.config.project import load_project_config
 from confiture.core.builder import SchemaBuilder
-from confiture.core.connection import load_config
 from confiture.core.linting.inventory import label_for
 from confiture.core.sql_lexer import parse_file
 from confiture.core.translations import Coverage, translation_coverage
@@ -85,7 +84,8 @@ def check_translations(
         )
         raise typer.Exit(NOT_RUN)
     env_file = project_dir / "db" / "environments" / f"{env}.yaml"
-    override = resolve_database_url(database_url, env_file, config_explicit=config_is_explicit(ctx))
+    explicit = config_is_explicit(ctx)
+    override = resolve_database_url(database_url, env_file, config_explicit=explicit)
     if override is None and not env_file.is_file():
         fail(
             ConfigurationError(
@@ -100,9 +100,7 @@ def check_translations(
         parse_file(path.read_text(encoding="utf-8"), label_for(path, project_dir))
         for path in SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
     ]
-    with open_connection(
-        {"database_url": override} if override is not None else load_config(env_file)
-    ) as conn:
+    with open_connection(configuration(override, env_file, config_explicit=explicit)) as conn:
         coverage = translation_coverage(conn, files, project, sample)
     if is_json(format_output):
         emit(coverage.to_dict(), output_file)

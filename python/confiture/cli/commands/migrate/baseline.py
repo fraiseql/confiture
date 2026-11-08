@@ -8,7 +8,12 @@ from typing import Annotated, Any
 
 import typer
 
-from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, config_is_explicit, resolve_database_url
+from confiture.cli.dsn import (
+    DATABASE_URL_OPTION_HELP,
+    config_is_explicit,
+    configuration,
+    resolve_database_url,
+)
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     _current_context,
@@ -25,7 +30,6 @@ from confiture.cli.options import (
     format_option,
     migrations_dir_option,
 )
-from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import (
     find_duplicate_migration_versions as _baseline_find,
@@ -198,22 +202,18 @@ def migrate_baseline(
     """
 
     json_mode = is_json(format_output)
+    explicit = config_is_explicit(_current_context(silent=True))
     override = resolve_database_url(
-        database_url,
-        config,
-        config_explicit=config_is_explicit(_current_context(silent=True)),
-        require_intentional_source=True,
+        database_url, config, config_explicit=explicit, require_intentional_source=True
     )
     _baseline_preconditions(
         through,
         from_db,
-        None if override is not None else config,
+        None if override is not None and not explicit else config,
         migrations_dir,
         json_mode=json_mode,
     )
-    config_data = (
-        {"database_url": override} if override is not None else _core_connection.load_config(config)
-    )
+    config_data = configuration(override, config, config_explicit=explicit)
 
     if from_db is not None:
         report = _baseline_from_db_flow(

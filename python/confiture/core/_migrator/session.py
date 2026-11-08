@@ -33,6 +33,7 @@ from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.events import UpObserver
 from confiture.core._migrator.loader import load_migration_class
 from confiture.core._migrator.options import UpOptions
+from confiture.core.ledger import DEFAULT_TRACKING_TABLE
 from confiture.core.locking import (
     LockConfig,
     MigrationLock,
@@ -173,12 +174,16 @@ class MigratorSession:
         if self._migrator is not None:  # attached to a live engine
             return self
 
+        # A URL override replaces the connection, never the configuration (#825).
+        migration_table: str = self._migration_table_override or (
+            self._config.migration.tracking_table
+            if self._config is not None
+            else DEFAULT_TRACKING_TABLE
+        )
         if self._database_url_override is not None:
             url: str = self._database_url_override
-            migration_table: str = self._migration_table_override or "tb_confiture"
         elif self._config is not None:
             url = self._config.database_url
-            migration_table = self._config.migration.tracking_table
         else:
             raise ConfigurationError(
                 "MigratorSession requires either a config or database_url_override",

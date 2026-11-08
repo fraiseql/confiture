@@ -8,11 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
-from confiture.exceptions import ConfigurationError
 
 
 def from_config(
@@ -31,37 +28,7 @@ def from_config(
     Raises:
         ConfigurationError: If the config file cannot be found or is invalid.
     """
-
-    if isinstance(config, Environment):
-        env = config
-    else:
-        config_path = Path(config)
-        if not config_path.exists():
-            raise ConfigurationError(
-                f"Configuration file not found: {config_path}",
-                error_code="CONFIG_004",
-                context={"file_path": str(config_path)},
-                resolution_hint=f"Create a config file at {config_path} or use an existing one",
-            )
-        with Path(config_path).open() as f:
-            raw: dict[str, Any] = yaml.safe_load(f)
-        # Issue #168: a migrate-only config need only carry ``database_url`` —
-        # the build-only fields ``name``/``include_dirs`` default on the
-        # ``Environment`` model itself, so ``from_config`` (and any consumer
-        # calling ``Environment.model_validate`` directly) accepts the same
-        # minimal config the CLI's ``migrate up`` does.  A truly invalid config
-        # (e.g. missing ``database_url``) still fails validation.
-        try:
-            env = Environment.model_validate(raw)
-        except (TypeError, ValueError) as e:
-            if "ValidationError" in type(e).__name__:
-                raise ConfigurationError(
-                    f"Invalid configuration in {config_path}: {e}",
-                    error_code="CONFIG_002",
-                    context={"file_path": str(config_path)},
-                    resolution_hint=f"Fix validation errors in {config_path}",
-                ) from e
-            raise
+    env = config if isinstance(config, Environment) else Environment.from_file(config)
 
     return MigratorSession(
         env,
