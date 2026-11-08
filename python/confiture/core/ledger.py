@@ -49,6 +49,10 @@ DEFAULT_TRACKING_TABLE = "tb_confiture"
 #: What the checkpoint table beside a ledger is named after it.
 STEPS_SUFFIX = "_steps"
 
+#: The schema ``sql/view_helpers.sql`` installs on ``migrate up`` under
+#: ``migration.view_helpers: auto`` (the default): its two tables and two functions.
+VIEW_HELPER_SCHEMA = "confiture"
+
 
 def steps_table(tracking_table: str) -> str:
     """The checkpoint table beside ``tracking_table`` (``tb_confiture`` → ``tb_confiture_steps``)."""
@@ -61,7 +65,8 @@ def bookkeeping_tables(tracking_table: str | None = None) -> frozenset[str]:
     The ledger and its checkpoint table — *tracking_table*'s, and the default's
     either way — the lock holder, and the tables of earlier releases. A table of
     these names in any schema is confiture's, as ``pg_dump --exclude-table``
-    matches a bare name in every schema.
+    matches a bare name in every schema. The schemas confiture owns whole are
+    :func:`bookkeeping_schemas`.
     """
     ledgers = {DEFAULT_TRACKING_TABLE}
     if tracking_table is not None:
@@ -76,6 +81,16 @@ def bookkeeping_tables(tracking_table: str | None = None) -> frozenset[str]:
             "confiture_audit_log",
         }
     )
+
+
+def bookkeeping_schemas() -> frozenset[str]:
+    """The schemas confiture creates for itself: never part of a project's schema.
+
+    The view-helper schema, with everything in it. Leave it out of a comparison of
+    a migrated database with a built one as ``pg_dump --exclude-schema`` does,
+    beside :func:`bookkeeping_tables`.
+    """
+    return frozenset({VIEW_HELPER_SCHEMA})
 
 
 _QUALIFIED_SQL = """

@@ -56,6 +56,11 @@ migration:
 
 To opt out, set `view_helpers: off`. Invalid values (typos) are rejected at config load time.
 
+The `confiture` schema the helpers live in (`saved_views`, `saved_view_indexes` and the two
+functions) is confiture's own, like the tracking table: `confiture.core.ledger.bookkeeping_schemas()`
+names it beside `bookkeeping_tables()`. A comparison of a migrated database with a freshly built
+one leaves both out, e.g. `pg_dump --exclude-schema=confiture --exclude-table=tb_confiture …`.
+
 ---
 
 ## How It Works
