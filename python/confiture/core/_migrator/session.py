@@ -387,7 +387,6 @@ class MigratorSession:
         backfill: Any | None = None,
         strict_mode: bool | None = None,
         auto_baseline: Path | None = None,
-        install_view_helpers: bool | None = None,
         on_event: UpObserver | None = None,
         batch: Any | None = None,
         recreate_pg_tviews_from: SchemaModel | None = None,
@@ -437,8 +436,6 @@ class MigratorSession:
             auto_baseline: Snapshots directory for self-baselining a database
                      whose ledger is missing (the CLI's ``--auto-detect-baseline``).
                      None (default) never baselines.
-            install_view_helpers: Install the view helper functions before
-                     applying. None (default) follows ``migration.view_helpers: auto``.
             on_event: Observer for live progress
                      (:class:`~confiture.core.migrator.UpEvent`): lock acquired,
                      each pending file, applying/applied/failed, the superuser halt.
@@ -497,7 +494,6 @@ class MigratorSession:
                 backfill=backfill,
                 strict_mode=strict_mode,
                 auto_baseline=auto_baseline,
-                install_view_helpers=install_view_helpers,
                 on_event=on_event,
                 batch=batch,
                 recreate_pg_tviews_from=recreate_pg_tviews_from,

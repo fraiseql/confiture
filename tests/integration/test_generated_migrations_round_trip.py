@@ -275,9 +275,7 @@ class TestAutocommitCreates:
 
     def _up(self, url: str, tmp_path: Path) -> tuple[int, str]:
         config = tmp_path / "local.yaml"
-        # No view helpers: the test role is `confiture`, and `"$user"` on the search_path would
-        # put every unqualified object in the helper schema of that name once it exists.
-        config.write_text(f"name: test\ndatabase_url: {url}\nmigration:\n  view_helpers: off\n")
+        config.write_text(f"name: test\ndatabase_url: {url}\n")
         result = CliRunner().invoke(
             app,
             ["migrate", "up", "--migrations-dir", str(tmp_path / "migrations"), "--config", str(config), "--format", "json"],

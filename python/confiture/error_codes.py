@@ -208,6 +208,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_014": 5,  # pg_tviews without the read contract confiture reads
     "CONFIG_015": 5,  # the ledger is only in another schema (preflight --scope pending)
     "CONFIG_016": 5,  # pg_tviews catalog cannot be brought to the loaded library
+    "CONFIG_017": 5,  # the view helpers' schema would be on the role's search_path
     # MIGR family → 1 (an execution failure, never exit 3's unreachable database),
     # with one success-with-signal carve-out at 0.
     "MIGR_001": 1,

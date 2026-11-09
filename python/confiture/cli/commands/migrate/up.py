@@ -304,7 +304,6 @@ def migrate_up(
         # is an error; only its absence means defaults.
         env_cfg = migration_settings(config) if _db_url_override is None or explicit else None
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
-        install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
         lock_timeout, no_lock = resolve_lock_settings(
             env_cfg.migration.locking if env_cfg else None, lock_timeout, no_lock
         )
@@ -337,7 +336,6 @@ def migrate_up(
             "auto_baseline": (
                 (snapshots_dir_up or Path("db/schema_history")) if auto_detect_baseline else None
             ),
-            "install_view_helpers": install_helpers,
             "on_event": reporter,
             "batch": batch,
             "recreate_pg_tviews_from": (
@@ -493,9 +491,6 @@ def _tree_for_recreate(config: Path) -> SchemaModel:
 # Live lines that carry nothing from the event but its kind.
 _FIXED_LINES: dict[str, LiteralString] = {
     "lock_acquired": "[cyan]🔒 Acquired migration lock[/cyan]\n",
-    "view_helpers_installed": (
-        "[cyan]🔧 Auto-installed view helper functions (migration.view_helpers: auto)[/cyan]\n"
-    ),
     "checksums_verified": "[cyan]🔐 Checksum verification passed[/cyan]\n",
     "applied": "[green]✅[/green]",
     "failed": "[red]❌[/red]",

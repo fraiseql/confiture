@@ -1,9 +1,7 @@
-"""Unit tests for view_helpers default change (Issue #97).
+"""The view helpers are installed only by ``confiture install-helpers``.
 
-Verifies that:
-1. MigrationConfig defaults to view_helpers='auto'
-2. Invalid values are rejected by Literal validation
-3. The view column rename regex matches PostgreSQL error messages
+``migrate up`` installed them by default (``migration.view_helpers: auto``, #97); the
+setting is gone. The view column rename regex still names PostgreSQL's refusal.
 """
 
 import pytest
@@ -13,31 +11,11 @@ from confiture.config.environment import MigrationConfig
 from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 
 
-class TestViewHelpersDefault:
-    def test_default_is_auto(self):
-        """MigrationConfig.view_helpers defaults to 'auto'."""
-        config = MigrationConfig()
-        assert config.view_helpers == "auto"
-
-    def test_explicit_manual(self):
-        """Explicit 'manual' overrides the default."""
-        config = MigrationConfig(view_helpers="manual")
-        assert config.view_helpers == "manual"
-
-    def test_explicit_off(self):
-        """Explicit 'off' overrides the default."""
-        config = MigrationConfig(view_helpers="off")
-        assert config.view_helpers == "off"
-
-    def test_invalid_value_rejected(self):
-        """Typos and invalid values are rejected with a validation error."""
+class TestViewHelpersAreNeverAConfigSetting:
+    def test_the_setting_is_gone(self):
+        """``migrate up`` installs nothing: ``view_helpers`` is no longer a key of the block."""
         with pytest.raises(ValidationError, match="view_helpers"):
-            MigrationConfig(view_helpers="auot")
-
-    def test_invalid_value_none_rejected(self):
-        """None is rejected."""
-        with pytest.raises(ValidationError, match="view_helpers"):
-            MigrationConfig(view_helpers=None)
+            MigrationConfig.model_validate({"view_helpers": "auto"})
 
 
 class TestViewColumnRenameRegex:
@@ -58,17 +36,3 @@ class TestViewColumnRenameRegex:
         """Regex does not match unrelated PostgreSQL errors."""
         msg = 'relation "users" does not exist'
         assert not _VIEW_COLUMN_RENAME_RE.search(msg)
-
-
-class TestViewHelpersYamlOff:
-    """YAML reads a bare ``off`` as ``false``: the spelling the guide documents must work."""
-
-    def test_a_bare_off_in_yaml_is_off(self):
-        import yaml
-
-        block = yaml.safe_load("view_helpers: off")
-        assert MigrationConfig.model_validate(block).view_helpers == "off"
-
-    def test_true_is_still_refused(self):
-        with pytest.raises(ValidationError, match="view_helpers"):
-            MigrationConfig.model_validate({"view_helpers": True})

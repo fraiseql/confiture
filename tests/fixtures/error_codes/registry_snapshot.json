@@ -424,5 +424,11 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time"
+  },
+  "CONFIG_017": {
+    "message_template": "The view helpers' schema {schema} would be on the search_path of role {role}",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Every unqualified object a migration creates would land in that schema. Connect as a role not named confiture, or set the role's search_path without \"$user\""
   }
 }

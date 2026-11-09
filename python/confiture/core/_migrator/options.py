@@ -35,7 +35,6 @@ class UpOptions:
     backfill: BackfillSettings | None = None
     strict_mode: bool | None = None
     auto_baseline: Path | None = None
-    install_view_helpers: bool | None = None
     on_event: UpObserver | None = None
     batch: Any | None = None
     recreate_pg_tviews_from: SchemaModel | None = None

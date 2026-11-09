@@ -51,8 +51,8 @@ STEPS_SUFFIX = "_steps"
 #: The migration lock's diagnostic metadata table (issue #147), in the ledger's schema (#826).
 LOCK_HOLDER_TABLE = "confiture_lock_holder"
 
-#: The schema ``sql/view_helpers.sql`` installs on ``migrate up`` under
-#: ``migration.view_helpers: auto`` (the default): its two tables and two functions.
+#: The schema ``confiture install-helpers`` creates, and nothing else does: its two
+#: tables and two functions (``sql/view_helpers.sql``).
 VIEW_HELPER_SCHEMA = "confiture"
 
 

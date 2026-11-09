@@ -318,7 +318,6 @@ class MigrationConfig(BaseModel):
         destructive: What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run.
         backfill: The online runner's backfill settings (batch size, lock-waiter guard)
         locking: Distributed locking configuration
-        view_helpers: View helper installation mode ("auto", "manual", "off")
         migration_generators: Named external generator commands
         snapshot_history: Write schema snapshot alongside each generated migration (default: True)
         snapshots_dir: Directory for schema history snapshots (default: db/schema_history)
@@ -333,7 +332,6 @@ class MigrationConfig(BaseModel):
     destructive: Literal["gated", "allow", "forbid"] = "gated"
     backfill: BackfillConfig = Field(default_factory=BackfillConfig)
     locking: LockingConfig = Field(default_factory=LockingConfig)
-    view_helpers: Literal["auto", "manual", "off"] = "auto"
     migration_generators: dict[str, MigrationGeneratorConfig] = Field(default_factory=dict)
     snapshot_history: bool = True
     snapshots_dir: str = "db/schema_history"
@@ -346,12 +344,6 @@ class MigrationConfig(BaseModel):
     # declared. RISK: you accept that a single-step DDL change may surface
     # errors on read replicas during the replication-lag window.
     allow_unsafe_under_replication: bool = False
-
-    @field_validator("view_helpers", mode="before")
-    @classmethod
-    def _bare_off(cls, value: object) -> object:
-        """YAML reads a bare ``off`` as ``false``; that is the ``off`` the author wrote."""
-        return "off" if value is False else value
 
 
 def migration_block(config_data: Any, source: Path | str) -> MigrationConfig:

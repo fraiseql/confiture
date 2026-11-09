@@ -1,8 +1,10 @@
 """A config outside ``db/environments/`` has its whole ``migration:`` block applied (#832).
 
 ``migrate up --config c.yaml`` took ``tracking_table`` from the file and dropped every
-other setting of the same block: ``view_helpers: auto`` installed nothing and
-``strict_mode: true`` was a non-strict run.
+other setting of the same block: ``strict_mode: true`` was a non-strict run. And
+``migrate up`` writes nothing into the database but its ledger: the view helpers are
+installed by ``confiture install-helpers`` alone, which refuses where their schema
+would capture the connecting role's unqualified objects.
 """
 
 import os
@@ -34,7 +36,6 @@ def flat_project(tmp_path: Path, fresh_database: str) -> Iterator[Path]:
                 "database_url": fresh_database,
                 "migration": {
                     "tracking_table": "public.ledger_832",
-                    "view_helpers": "auto",
                     "strict_mode": True,
                 },
             }
@@ -54,21 +55,26 @@ def _one(url: str, sql: str) -> object:
     return row[0] if row else None
 
 
-def test_migrate_up_installs_helpers_from_a_flat_config(
-    flat_project: Path, fresh_database: str
-) -> None:
+def test_migrate_up_writes_only_its_ledger(flat_project: Path, fresh_database: str) -> None:
     result = runner.invoke(app, ["migrate", "up", "--config", "c.yaml"])
 
     assert result.exit_code == 0, result.output
     assert _one(fresh_database, "SELECT count(*) FROM public.ledger_832") == 1
-    assert (
-        _one(
-            fresh_database,
-            "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
-            f"WHERE n.nspname = '{VIEW_HELPER_SCHEMA}'",
-        )
-        or 0
-    ) > 0
+    assert _one(fresh_database, "SELECT to_regclass('public.widgets') IS NOT NULL") is True
+    assert _one(fresh_database, f"SELECT to_regnamespace('{VIEW_HELPER_SCHEMA}') IS NULL") is True
+
+
+def test_install_helpers_refuses_a_role_whose_search_path_would_resolve_to_them(
+    flat_project: Path, fresh_database: str
+) -> None:
+    if _one(fresh_database, "SELECT current_user") != VIEW_HELPER_SCHEMA:
+        pytest.skip(f"the connecting role is not named {VIEW_HELPER_SCHEMA}")
+
+    result = runner.invoke(app, ["install-helpers", "--config", "c.yaml", "--format", "json"])
+
+    assert result.exit_code == 5, result.output
+    assert "CONFIG_017" in result.output
+    assert _one(fresh_database, f"SELECT to_regnamespace('{VIEW_HELPER_SCHEMA}') IS NULL") is True
 
 
 def test_migrate_up_is_strict_from_a_flat_config(flat_project: Path, fresh_database: str) -> None:

@@ -19,21 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The `migration:` block of the file `--config` names applies wherever the file lives**
   (#832). It was read only from `db/environments/<name>.yaml`; a config anywhere else had
   `tracking_table` honoured and every other setting of the same block silently dropped. Now
-  `strict_mode`, `view_helpers`, `locking` (timeout, `enabled`, `extra_keys`) and `backfill`
-  apply on `migrate up`; `locking` on `migrate down`, `squash-ledger` and `apply-as`;
+  `strict_mode`, `locking` (timeout, `enabled`, `extra_keys`) and `backfill` apply on
+  `migrate up`; `locking` on `migrate down`, `squash-ledger` and `apply-as`;
   `migration_generators`, `snapshot_history`, `live_snapshot` and `snapshots_dir` on
-  `migrate generate`. **`view_helpers` defaults to `auto`**, so `migrate up` with such a config
-  now installs the `confiture` helper schema even when the file has no `migration:` block; set
-  `view_helpers: off` to keep the old behaviour. Only an absent file means the defaults.
+  `migrate generate`. Only an absent file means the defaults.
 - **A key the `migration:` block does not have is refused** (`CONFIG_002`, exit 5), as is a
   value of the wrong type or a block that is not a mapping, by every command that reads it: a
   typo such as `strict_mod: true` was a silently non-strict run. `locking`, `backfill` and each
   `migration_generators` entry refuse unknown keys too.
+- **`migrate up` writes nothing into a database but its ledger.** It installed the view
+  helpers (the `confiture` schema, two tables, two functions) on every first run by default
+  (`migration.view_helpers: auto`), though nothing confiture generates calls them: a generated
+  column change drops and recreates its dependent views as plain DDL. `confiture
+  install-helpers` is now the only way to install them, for a hand-written migration that
+  calls them. `migration.view_helpers` is gone (a config that still sets it is `CONFIG_002`),
+  and so are `MigratorSession.up(install_view_helpers=…)` and the `view_helpers_installed`
+  `UpEvent`.
+- **`install-helpers` refuses where the helpers' schema would be on the connecting role's
+  `search_path`** (`CONFIG_017`, exit 5): a role itself named `confiture` under PostgreSQL's
+  default `"$user", public`, or a path that names `confiture`. Every unqualified object a
+  migration created afterwards landed in the helpers' schema instead of `public`.
 
 ### Fixed
 
-- **`view_helpers: off` works as the guide writes it.** YAML reads a bare `off` as `false`, which
-  the setting refused (`CONFIG_002`); `false` now means `off`. `true` is still refused.
 - `docs/operations/performance-tuning.md` documented `migration.lock_timeout`,
   `migration.statement_timeout` and a per-migration `__lock_timeout__`, none of which exist; it
   now shows `migration.locking.timeout_ms` and `SET LOCAL` in the migration.

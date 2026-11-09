@@ -46,11 +46,10 @@ logger = logging.getLogger(__name__)
 
 _DEPENDENT_VIEWS_HINT = (
     "Dependent views block this column change. "
-    "Call confiture.save_and_drop_dependent_views() before the ALTER "
-    "and confiture.recreate_saved_views() after it. "
-    "If you renamed a column, views referencing the old name cannot be "
-    "auto-recreated — check SELECT schema_name, view_name, error_message, "
-    "definition FROM confiture.saved_views for preserved definitions"
+    "Drop them before the ALTER and create them again after it, as "
+    "`confiture migrate diff --generate` writes; or install the helpers once "
+    "(`confiture install-helpers`) and call confiture.save_and_drop_dependent_views() "
+    "before the ALTER and confiture.recreate_saved_views() after it"
 )
 
 

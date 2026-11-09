@@ -4,7 +4,7 @@ Each command used to read the block its own way: ``migrate up`` only for a file 
 ``db/environments/``, its tracking table from a raw dict, ``migrate steps`` and
 ``migrate diff`` through their own ``MigrationConfig.model_validate``, the grant-sweep
 checks with ``.get("migration", {})``. One ``migrate up`` honoured ``tracking_table``
-from a flat config and ignored ``view_helpers`` from the same block (#832), and a
+from a flat config and ignored ``strict_mode`` from the same block (#832), and a
 malformed block was validated by some readers and not others. This test fails on a
 module that reads the block again: a ``.get("migration", …)`` or a ``MigrationConfig``
 built or validated outside the module that owns it. The allow-list is empty.

@@ -125,7 +125,6 @@ def up(
     backfill: "BackfillSettings | None" = None,
     strict_mode: bool | None = None,
     auto_baseline: Path | None = None,
-    install_view_helpers: bool | None = None,
     on_event: Callable[[UpEvent], None] | None = None,
     batch: "BatchConfig | None" = None,
     recreate_pg_tviews_from: "SchemaModel | None" = None,
@@ -163,8 +162,6 @@ that cannot be taken raises `LockAcquisitionError`; a failing migration is a
   missing (the CLI's `--auto-detect-baseline`). Refuses with `ConfigurationError`
   when a relation of the ledger's name exists in another schema, or when the
   directory is missing or empty.
-- `install_view_helpers`: install the view helper functions first; `None` follows
-  `migration.view_helpers: auto`.
 - `recreate_pg_tviews_from`: the schema (a `SchemaModel`, e.g.
   `confiture.platform.parse_schema(env="production")`) whose TVIEWs are created again
   when the database's pg_tviews catalog has no update to the library the server
@@ -173,7 +170,7 @@ that cannot be taken raises `LockAcquisitionError`; a failing migration is a
   EXTENSION pg_tviews UPDATE` when the catalog is one release behind the library;
   see [pg_tviews TVIEWs](../guides/pg-tviews.md#upgrading-pg_tviews).
 - `on_event`: live progress. Each `UpEvent` has a `kind` (`lock_acquired`,
-  `pg_tviews_updated`, `baseline_probe`, `baseline_detected`, `baseline_missed`, `view_helpers_installed`,
+  `pg_tviews_updated`, `baseline_probe`, `baseline_detected`, `baseline_missed`,
   `checksums_verified`, `pending`, `applying`, `applied`, `failed`, `superuser_halt`,
   `target_reached`), a `version`/`name` when one migration is concerned, a
   `message`, and `elapsed_ms` on `applied`.

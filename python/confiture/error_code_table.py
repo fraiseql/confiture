@@ -442,6 +442,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "ALTER EXTENSION needs the extension's owner or a superuser"
         ),
     },
+    {
+        "code": "CONFIG_017",
+        "message_template": (
+            "The view helpers' schema {schema} would be on the search_path of role {role}"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Every unqualified object a migration creates would land in that schema. Connect "
+            'as a role not named confiture, or set the role\'s search_path without "$user"'
+        ),
+    },
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.

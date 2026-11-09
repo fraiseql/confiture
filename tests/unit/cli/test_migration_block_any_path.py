@@ -30,7 +30,6 @@ apply_as:
 migration:
   tracking_table: public.ledger_832
   strict_mode: true
-  view_helpers: auto
   locking:
     timeout_ms: 1234
     extra_keys: [42]
@@ -67,7 +66,6 @@ def test_the_block_is_read_from_a_file_outside_db_environments(flat: Path) -> No
     settings = migration_settings(Path("c.yaml"))
     assert settings is not None
     assert settings.migration.strict_mode is True
-    assert settings.migration.view_helpers == "auto"
     assert settings.migration.locking.extra_keys == [42]
 
 
@@ -136,7 +134,6 @@ def test_migrate_up_applies_a_flat_block(flat: Path) -> None:
     assert cls.call_args.kwargs["migration_table_override"] == "public.ledger_832"
     options = session.up.call_args.kwargs
     assert options["strict_mode"] is True
-    assert options["install_view_helpers"] is True
     assert options["lock_timeout"] == 1234
     assert options["backfill"].batch_size == 77
 

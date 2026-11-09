@@ -61,13 +61,10 @@ def builder_double(**returns: Any) -> MagicMock:
     return double
 
 
-def connection_double(
-    dbname: str = "confiture_test", *, view_helpers_installed: bool = True
-) -> MagicMock:
+def connection_double(dbname: str = "confiture_test") -> MagicMock:
     """A psycopg connection stand-in that answers the engine's bookkeeping queries.
 
-    The advisory lock asks ``SELECT current_database()``; the view-helper policy
-    counts functions in ``pg_proc``; ``COUNT(*)`` probes (is this version
+    The advisory lock asks ``SELECT current_database()``; ``COUNT(*)`` probes (is this version
     applied?) answer 0; the ledger probe (``to_regclass``/``pg_class``) finds no
     tracking table; the checksum verifier reads an (empty) ledger with
     ``fetchall()``; ``pg_extension`` holds no pg_tviews. Anything else fetches
@@ -80,8 +77,6 @@ def connection_double(
         sql = last["sql"].lower()
         if "pg_extension" in sql:
             return None  # no pg_tviews: nothing to bring up to date
-        if "pg_proc" in sql:
-            return (2 if view_helpers_installed else 0,)
         if "count(" in sql:
             return (0,)  # nothing applied, nothing recorded
         if "to_regclass" in sql or "pg_class" in sql:
