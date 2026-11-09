@@ -36,6 +36,13 @@ confiture build --env local        # Loads db/environments/local.yaml
 confiture build --env production   # Loads db/environments/production.yaml
 ```
 
+`--env <name>` is a shortcut for `--config db/environments/<name>.yaml`. `--config`
+takes a file at any path, and the file it names is read whole wherever it lives: its
+`migration:` block applies to every command, the same as for a file under
+`db/environments/`. The block is validated when a command reads it — a value of the
+wrong type or a key the block does not have is `CONFIG_002` (exit 5), never a silently
+default run. Only an absent file means the defaults.
+
 ---
 
 ## Configuration Schema

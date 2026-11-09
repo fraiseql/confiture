@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `migration:` block of the file `--config` names applies wherever the file lives**
+  (#832). It was read only from `db/environments/<name>.yaml`; a config anywhere else had
+  `tracking_table` honoured and every other setting of the same block silently dropped. Now
+  `strict_mode`, `view_helpers`, `locking` (timeout, `enabled`, `extra_keys`) and `backfill`
+  apply on `migrate up`; `locking` on `migrate down`, `squash-ledger` and `apply-as`;
+  `migration_generators`, `snapshot_history`, `live_snapshot` and `snapshots_dir` on
+  `migrate generate`. **`view_helpers` defaults to `auto`**, so `migrate up` with such a config
+  now installs the `confiture` helper schema even when the file has no `migration:` block; set
+  `view_helpers: off` to keep the old behaviour. Only an absent file means the defaults.
+- **A key the `migration:` block does not have is refused** (`CONFIG_002`, exit 5), as is a
+  value of the wrong type or a block that is not a mapping, by every command that reads it: a
+  typo such as `strict_mod: true` was a silently non-strict run. `locking`, `backfill` and each
+  `migration_generators` entry refuse unknown keys too.
+
+### Fixed
+
+- **`view_helpers: off` works as the guide writes it.** YAML reads a bare `off` as `false`, which
+  the setting refused (`CONFIG_002`); `false` now means `off`. `true` is still refused.
+- `docs/operations/performance-tuning.md` documented `migration.lock_timeout`,
+  `migration.statement_timeout` and a per-migration `__lock_timeout__`, none of which exist; it
+  now shows `migration.locking.timeout_ms` and `SET LOCAL` in the migration.
+
 ## [1.47.0] - 2026-11-08
 
 ### Added

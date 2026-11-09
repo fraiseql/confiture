@@ -77,7 +77,9 @@ CASES = {
 
 def _generate(tmp_path: Path, url: str, old: str, new: str) -> tuple[Path, Path]:
     config = tmp_path / "local.yaml"
-    config.write_text(f"name: test\ndatabase_url: {url}\n")
+    # No view helpers: the test role is `confiture`, and `"$user"` on the search_path would put
+    # every unqualified object in the helper schema of that name once it exists.
+    config.write_text(f"name: test\ndatabase_url: {url}\nmigration:\n  view_helpers: off\n")
     migrations = tmp_path / "migrations"
     migrations.mkdir()
     MigrationGenerator(migrations).generate_sql(

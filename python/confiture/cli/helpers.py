@@ -16,6 +16,7 @@ except ImportError:
     from click import get_current_context as _current_context
 
 from confiture.cli.markup import Printer
+from confiture.config.environment import migration_block
 from confiture.core.connection import DatabaseError, create_connection
 from confiture.core.connection import open_connection as _core_open_connection
 from confiture.core.ledger import recorded_versions, validate_table_name
@@ -257,12 +258,10 @@ def _get_tracking_table(config_data: Any) -> str:
             is opened, so no command carries an unvalidated name into a query.
     """
     candidate: Any = "tb_confiture"
-    if hasattr(config_data, "migration") and hasattr(config_data.migration, "tracking_table"):
+    if isinstance(config_data, dict):
+        candidate = migration_block(config_data, "the --config file").tracking_table
+    elif hasattr(config_data, "migration") and hasattr(config_data.migration, "tracking_table"):
         candidate = config_data.migration.tracking_table
-    elif isinstance(config_data, dict):
-        migration_cfg = config_data.get("migration") or {}
-        if isinstance(migration_cfg, dict):
-            candidate = migration_cfg.get("tracking_table", "tb_confiture")
     table = candidate if isinstance(candidate, str) else "tb_confiture"
     try:
         return validate_table_name(table)

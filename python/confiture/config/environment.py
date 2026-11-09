@@ -65,6 +65,7 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictInt,
+    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -256,6 +257,8 @@ class LockingConfig(BaseModel):
         extra_keys: Other tools' advisory lock keys, each a signed 64-bit integer, that ``migrate up`` and ``migrate down`` also take, in the one-``bigint`` form, after confiture's own lock and in this order, holding them for the whole run (default: none). FraiseQL's boot DDL takes ``0x4652414953450001``.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = True
     timeout_ms: int = 30000  # 30 seconds default
     extra_keys: list[_AdvisoryKey] = Field(default_factory=list)
@@ -268,6 +271,8 @@ class MigrationGeneratorConfig(BaseModel):
         command: Shell command template with {from}, {to}, {output} placeholders
         description: Human-readable label for the generator
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     command: str
     description: str = ""
@@ -291,6 +296,8 @@ class BackfillConfig(BaseModel):
         batch_size: Rows per committed batch of a backfill (default: 5000).
         max_lock_ms: Pause, in milliseconds, between batches while another session waits for a lock on the table; unset disables the guard. ``--max-lock-ms`` on ``migrate steps --resume`` and ``migrate up --online`` overrides it per run.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     batch_size: int = 5000
     max_lock_ms: int | None = None
@@ -320,6 +327,8 @@ class MigrationConfig(BaseModel):
             (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     strict_mode: bool = False  # Whether to fail on warnings/notices
     destructive: Literal["gated", "allow", "forbid"] = "gated"
     backfill: BackfillConfig = Field(default_factory=BackfillConfig)
@@ -337,6 +346,38 @@ class MigrationConfig(BaseModel):
     # declared. RISK: you accept that a single-step DDL change may surface
     # errors on read replicas during the replication-lag window.
     allow_unsafe_under_replication: bool = False
+
+    @field_validator("view_helpers", mode="before")
+    @classmethod
+    def _bare_off(cls, value: object) -> object:
+        """YAML reads a bare ``off`` as ``false``; that is the ``off`` the author wrote."""
+        return "off" if value is False else value
+
+
+def migration_block(config_data: Any, source: Path | str) -> MigrationConfig:
+    """The ``migration:`` block of a config, validated: the one reader of it.
+
+    ``config_data`` is what the file at ``source`` holds — a mapping as
+    ``load_config`` returns it, or an ``Environment`` that has validated it already.
+    Where the file lives does not matter. An absent or empty block is the defaults;
+    a block that is not a mapping, holds a value of the wrong type or a key the block
+    does not have is ``CONFIG_002``, so a typo is never a silently default run.
+
+    Raises:
+        ConfigurationError: The block does not validate (``CONFIG_002``).
+    """
+    if isinstance(config_data, Environment):
+        return config_data.migration
+    block = config_data.get("migration") if isinstance(config_data, dict) else None
+    try:
+        return MigrationConfig.model_validate({} if block is None else block)
+    except ValidationError as e:
+        raise ConfigurationError(
+            f"Invalid `migration:` settings in {source}: {e}",
+            error_code="CONFIG_002",
+            context={"file_path": str(source)},
+            resolution_hint=f"Fix the `migration:` block in {source}.",
+        ) from e
 
 
 class InfrastructureConfig(BaseModel):

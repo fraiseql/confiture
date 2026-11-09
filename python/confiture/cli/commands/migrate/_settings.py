@@ -1,77 +1,44 @@
-"""Environment-file settings the migrate commands read (`migration:` block, DSN).
-
-Split out of the monolithic migrate command modules.
-"""
+"""The ``migration:`` settings and DSN the migrate commands read from their config file."""
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from pydantic import ValidationError as _PydanticValidationError
-
-from confiture.config.environment import MigrationConfig
+from confiture.config.environment import MigrationConfig, migration_block
 from confiture.core import connection as _core_connection
-from confiture.exceptions import ConfigurationError
 
 
 @dataclass(frozen=True)
-class _MigrationSettings:
-    """What ``migrate`` commands read from an environment file: its ``migration:`` block and DSN."""
+class MigrationSettings:
+    """What ``migrate`` commands read from a config file: its ``migration:`` block and DSN."""
 
-    migration: Any  # MigrationConfig
+    migration: MigrationConfig
     database_url: str | None
 
 
-def _load_environment_if_present(config: Path) -> _MigrationSettings | None:
-    """The ``migration:`` settings behind ``db/environments/<name>.yaml``, or None if absent.
+def migration_settings(config: Path) -> MigrationSettings | None:
+    """The ``migration:`` settings of the file ``config`` names, wherever it lives.
 
-    Absence is not an error — defaults apply. An invalid ``migration:`` block *is*
-    (``ConfigurationError`` ``CONFIG_002``, exit 5) instead of being swallowed into
-    "defaults apply", which made a malformed file a silently non-strict run.
-    Only the block these commands read is validated, so a minimal or legacy
-    (``database:`` block, no ``include_dirs``) file still works.
+    ``None`` when the file does not exist: the defaults apply. An invalid block is
+    ``ConfigurationError`` ``CONFIG_002`` (exit 5), read through
+    :func:`~confiture.config.environment.migration_block`. Only the block is
+    validated, so a minimal or legacy (``database:`` block, no ``include_dirs``) file
+    still works.
     """
-    if not (
-        config.parent.name == "environments"
-        and config.parent.parent.name == "db"
-        and config.exists()
-    ):
+    if not config.exists():
         return None
-
     data = _core_connection.load_config(config) or {}
-    if not isinstance(data, dict):
-        # An already-built Environment (tests patch load_config to return one).
-        return _MigrationSettings(
-            migration=getattr(data, "migration", MigrationConfig()),
-            database_url=getattr(data, "database_url", None),
-        )
-    try:
-        migration = MigrationConfig.model_validate(data.get("migration") or {})
-    except _PydanticValidationError as e:
-        raise ConfigurationError(
-            f"Invalid `migration:` settings in {config}: {e}",
-            error_code="CONFIG_002",
-            context={"file_path": str(config)},
-            resolution_hint=f"Fix the `migration:` block in {config}.",
-        ) from e
+    migration = migration_block(data, config)
     try:
         database_url: str | None = _core_connection.dsn_from_config(data)
     # Reason: a config without a usable DSN is 'no URL' for these settings, whatever the cause
     except Exception:
         database_url = None
-    return _MigrationSettings(migration=migration, database_url=database_url)
+    return MigrationSettings(migration=migration, database_url=database_url)
 
 
 def _effective_rebuild_threshold(explicit: int | None, config: Path) -> int:
-    """``--rebuild-threshold``, else ``migration.rebuild_threshold`` from the config, else 5."""
+    """``--rebuild-threshold``, else ``migration.rebuild_threshold`` from the config."""
     if explicit is not None:
         return explicit
-    env = _load_environment_if_present(config)
-    if env is not None:
-        return int(env.migration.rebuild_threshold)
-    if config.exists():
-        data = _core_connection.load_config(config) or {}
-        value = (data.get("migration") or {}).get("rebuild_threshold")
-        if value is not None:
-            return int(value)
-    return 5
+    settings = migration_settings(config)
+    return (settings.migration if settings else migration_block({}, config)).rebuild_threshold

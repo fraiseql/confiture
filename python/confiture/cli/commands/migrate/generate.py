@@ -7,7 +7,7 @@ from typing import Annotated
 import typer
 from rich.text import Text
 
-from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.commands.migrate._settings import migration_settings
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     console,
@@ -354,13 +354,13 @@ def _run_external_generator(
             "--from and --to are required when --generator is used",
             resolution_hint="Pass the old schema file with --from and the new one with --to.",
         )
-    env_config = _load_environment_if_present(config)
+    env_config = migration_settings(config)
     if env_config is None or generator not in env_config.migration.migration_generators:
         raise ConfigurationError(
             f"Generator '{generator}' not found in migration_generators config",
             context={"generator": generator, "config": str(config)},
             resolution_hint="Declare it under migration.migration_generators in the "
-            "environment file --config names.",
+            "file --config names.",
         )
     gen_config = env_config.migration.migration_generators[generator]
     migrations_dir.mkdir(parents=True, exist_ok=True)
@@ -454,7 +454,7 @@ def _write_history_snapshot(
     format_output: str,
 ) -> tuple[Path | None, str]:
     """Write the schema-history snapshot (non-fatal); returns ``(path, mode)``."""
-    settings = _load_environment_if_present(config)
+    settings = migration_settings(config)
     should = (
         snapshot
         if snapshot is not None

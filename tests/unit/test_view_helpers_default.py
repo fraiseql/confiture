@@ -58,3 +58,17 @@ class TestViewColumnRenameRegex:
         """Regex does not match unrelated PostgreSQL errors."""
         msg = 'relation "users" does not exist'
         assert not _VIEW_COLUMN_RENAME_RE.search(msg)
+
+
+class TestViewHelpersYamlOff:
+    """YAML reads a bare ``off`` as ``false``: the spelling the guide documents must work."""
+
+    def test_a_bare_off_in_yaml_is_off(self):
+        import yaml
+
+        block = yaml.safe_load("view_helpers: off")
+        assert MigrationConfig.model_validate(block).view_helpers == "off"
+
+    def test_true_is_still_refused(self):
+        with pytest.raises(ValidationError, match="view_helpers"):
+            MigrationConfig.model_validate({"view_helpers": True})
