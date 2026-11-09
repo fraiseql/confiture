@@ -2,7 +2,7 @@
 
 [← Back to Guides](../index.md) · [Hooks](hooks.md) · [Dry-Run →](dry-run.md)
 
-Automatically manage dependent views when migrations alter columns, rename view columns, or change column types.
+Manage dependent views in a hand-written migration that alters columns, renames view columns, or changes column types.
 
 ---
 
@@ -17,13 +17,24 @@ HINT: Use ALTER VIEW ... RENAME COLUMN ... to change name of view column instead
 
 Similarly, `ALTER COLUMN TYPE` fails when views depend on the column being altered. Without tooling, migration authors must manually `DROP VIEW ... CASCADE` every dependent view (including transitive dependencies like views-on-views), run their DDL, then recreate every view in the correct order. This is error-prone and verbose.
 
-Confiture's **view helpers** automate this: save all dependent view definitions, drop them, let your DDL run, then recreate them in the correct dependency order.
+`confiture migrate diff --generate` already writes this for you: a generated column
+change drops the views that read the column and creates them again after it, as plain
+DDL in the migration. The **view helpers** are for a migration you write by hand: they
+save every dependent view's definition, drop them, let your DDL run, then recreate them
+in dependency order.
 
 ---
 
 ## Quick Start
 
-View helpers are enabled by default (`migration.view_helpers: auto`). On your first `confiture migrate up`, confiture installs two PL/pgSQL functions in the `confiture` schema. Use them in any migration:
+Install them once per database:
+
+```bash
+confiture install-helpers --env production
+```
+
+This creates two PL/pgSQL functions in a `confiture` schema. Nothing else installs them:
+`migrate up` writes nothing into a database but its ledger. Then use them in any migration:
 
 ```sql
 -- 20260329120000_rename_allocation_column.up.sql
@@ -39,45 +50,33 @@ That's it. All dependent views are dropped before the ALTER and recreated after 
 
 ---
 
-## Configuration
-
-In your environment YAML (`db/environments/local.yaml`):
-
-```yaml
-migration:
-  view_helpers: auto    # default
-```
-
-| Value | Behavior |
-|-------|----------|
-| `auto` | Install helper functions automatically on first `migrate up` (default) |
-| `manual` | You run `confiture install-helpers` yourself before using them |
-| `off` | Disabled — manage views in your migration SQL manually |
-
-To opt out, set `view_helpers: off`. Invalid values (typos) are rejected at config load time.
+## Where they live
 
 The `confiture` schema the helpers live in (`saved_views`, `saved_view_indexes` and the two
 functions) is confiture's own, like the tracking table: `confiture.core.ledger.bookkeeping_schemas()`
 names it beside `bookkeeping_tables()`. A comparison of a migrated database with a freshly built
 one leaves both out, e.g. `pg_dump --exclude-schema=confiture --exclude-table=tb_confiture …`.
 
+`install-helpers` refuses (`CONFIG_017`, exit 5) when that schema would be on the connecting
+role's `search_path`: a role itself named `confiture` under PostgreSQL's default
+`"$user", public`, or a path that names `confiture`. Every unqualified table or view a
+migration creates would then land in the helpers' schema instead of `public`. Connect as
+another role, or pin the role's path: `ALTER ROLE confiture SET search_path = public`.
+
 ---
 
 ## How It Works
 
-### What `auto` does
+### What installing does
 
-On `confiture migrate up`, if helpers are not yet installed in the database, confiture creates:
+`confiture install-helpers` creates:
 
 - A `confiture` schema (idempotent)
 - Two PL/pgSQL functions: `confiture.save_and_drop_dependent_views()` and `confiture.recreate_saved_views()`
 - Two support tables: `confiture.saved_views` and `confiture.saved_view_indexes`
 
-This is a one-time setup. Once installed, the functions are available for any migration to call.
-
-### What `auto` does NOT do
-
-The `auto` setting does **not** wrap every migration with view save/drop/recreate. You still call the functions explicitly in migrations that need them. This keeps the behavior predictable — views are only dropped when you say so.
+Installing does not wrap any migration with view save/drop/recreate: you call the functions
+explicitly in the migrations that need them, so views are only dropped when you say so.
 
 ### The save/drop/recreate cycle
 
@@ -217,10 +216,10 @@ When views are saved and recreated, the following are preserved:
 If a migration fails with "cannot change name of view column" and the helper functions were not called, confiture provides a resolution hint:
 
 ```
-Dependent views block this column change. Ensure 'migration.view_helpers'
-is not set to 'off' or 'manual' in your environment config, then call
-confiture.save_and_drop_dependent_views() before the ALTER and
-confiture.recreate_saved_views() after it
+Dependent views block this column change. Drop them before the ALTER and create them
+again after it, as `confiture migrate diff --generate` writes; or install the helpers
+once (`confiture install-helpers`) and call confiture.save_and_drop_dependent_views()
+before the ALTER and confiture.recreate_saved_views() after it
 ```
 
 ---

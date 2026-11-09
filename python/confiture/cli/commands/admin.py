@@ -196,10 +196,10 @@ def install_helpers(
     and `recreate_saved_views()` PL/pgSQL functions for use in migrations
     that need to ALTER COLUMN TYPE on tables with dependent views.
 
-    NOTE: if the role you connect as is *itself* named `confiture`, PostgreSQL's
-    default `search_path` (`"$user", public`) puts this new schema ahead of
-    public for that role — so unqualified CREATE statements start landing in it.
-    Schema-qualify your DDL, or pin `search_path` on that role.
+    Nothing else installs them: `migrate up` never does. Refused (CONFIG_017)
+    when the schema would be on the connection's `search_path` — a role itself
+    named `confiture` under the default `"$user", public` — since every
+    unqualified CREATE would then land in it.
     """
     json_mode = is_json(format_output)
     try:

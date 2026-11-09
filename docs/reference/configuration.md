@@ -36,6 +36,13 @@ confiture build --env local        # Loads db/environments/local.yaml
 confiture build --env production   # Loads db/environments/production.yaml
 ```
 
+`--env <name>` is a shortcut for `--config db/environments/<name>.yaml`. `--config`
+takes a file at any path, and the file it names is read whole wherever it lives: its
+`migration:` block applies to every command, the same as for a file under
+`db/environments/`. The block is validated when a command reads it — a value of the
+wrong type or a key the block does not have is `CONFIG_002` (exit 5), never a silently
+default run. Only an absent file means the defaults.
+
 ---
 
 ## Configuration Schema
@@ -696,7 +703,6 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `destructive` | `gated` \| `allow` \| `forbid` | `gated` | What ``migrate diff --generate`` does with a change that loses data (a dropped table or column, a narrowed type): ``gated`` (default) writes it marked ``-- confiture:destructive`` so ``migrate up`` needs ``--allow-destructive``; ``allow`` writes it unmarked; ``forbid`` refuses to generate (``DIFFER_401``). ``--allow-destructive`` / ``--forbid-destructive`` on ``migrate diff`` override it per run. |
 | `backfill` | [BackfillConfig](#backfillconfig) | (nested) | The online runner's backfill settings (batch size, lock-waiter guard) |
 | `locking` | [LockingConfig](#lockingconfig) | (nested) | Distributed locking configuration |
-| `view_helpers` | `auto` \| `manual` \| `off` | `auto` | View helper installation mode ("auto", "manual", "off") |
 | `migration_generators` | dict[str, [MigrationGeneratorConfig](#migrationgeneratorconfig)] | `{}` | Named external generator commands |
 | `snapshot_history` | bool | `true` | Write schema snapshot alongside each generated migration (default: True) |
 | `snapshots_dir` | str | `db/schema_history` | Directory for schema history snapshots (default: db/schema_history) |
@@ -972,7 +978,6 @@ migration:
     enabled: true
     timeout_ms: 30000
     extra_keys: []
-  view_helpers: auto
   migration_generators:
     <name>:
       command: null
@@ -1434,7 +1439,6 @@ exclude_dirs: array[string]     # Directories to exclude (default: [])
 
 # Migration section (nested)
 migration:
-  view_helpers: string          # "auto" | "manual" | "off" (default: "auto")
   strict_mode: boolean          # Fail on warnings/notices (default: false)
   tracking_table: string        # Tracking table name (default: tb_confiture)
   snapshot_history: boolean     # Write schema snapshots (default: true)

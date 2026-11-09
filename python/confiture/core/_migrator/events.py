@@ -16,7 +16,6 @@ UpEventKind = Literal[
     "baseline_probe",
     "baseline_detected",
     "baseline_missed",
-    "view_helpers_installed",
     "checksums_verified",
     "squashed_baseline_recorded",
     "pending",

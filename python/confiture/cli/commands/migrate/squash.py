@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 import typer
 
-from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.commands.migrate._settings import migration_settings
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json
 from confiture.cli.options import config_option, format_option, migrations_dir_option
@@ -204,7 +204,7 @@ def migrate_squash_ledger(
             json_mode=json_mode,
         )
     config_data = _core_connection.load_config(config)
-    env_cfg = _load_environment_if_present(config)
+    env_cfg = migration_settings(config)
     with _core_migrator.MigratorSession(
         None,
         migrations_dir,

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from confiture.cli.commands.migrate._settings import migration_settings
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
 from confiture.cli.helpers import (
@@ -22,7 +23,6 @@ from confiture.cli.options import (
     migrations_dir_option,
     scratch_url_option,
 )
-from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core.desired_state import DesiredStateSource, EnvSource, load_desired_state
 from confiture.core.destructive import data_loss_reason, resolve_policy
@@ -402,10 +402,8 @@ def _destructive_policy(
     A missing config file (the positional form needs none) means the default,
     ``gated``. Both flags at once is a validation error (exit 5).
     """
-    configured = "gated"
-    if config.exists():
-        migration = _core_connection.load_config(config).get("migration") or {}
-        configured = MigrationConfig.model_validate(migration).destructive
+    settings = migration_settings(config)
+    configured = settings.migration.destructive if settings else "gated"
     try:
         return resolve_policy(configured, allow=allow, forbid=forbid)
     except ValidationError as exc:

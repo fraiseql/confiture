@@ -32,8 +32,6 @@ def _project(tmp_path: Path) -> tuple[Path, Path]:
               port: 5432
               name: confiture_test
               user: confiture
-            migration:
-              dir: db/migrations
             acls:
               - schema: public
                 apply_to: ALL_TABLES

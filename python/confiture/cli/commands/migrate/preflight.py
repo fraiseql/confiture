@@ -37,7 +37,7 @@ from confiture.cli.options import (
     migrations_dir_option,
     output_option,
 )
-from confiture.config.environment import Environment
+from confiture.config.environment import Environment, migration_block
 from confiture.core import connection as _core_connection
 from confiture.core import ledger as _core_ledger
 from confiture.core.connection import ConnectionLost, DatabaseError, connect_url, load_config
@@ -165,18 +165,20 @@ def _preflight_replica_policy(config: Path | None, env_name: str | None) -> tupl
     Reads ``infrastructure.replicas`` and ``migration.allow_unsafe_under_replication``
     from --env or --config when available; otherwise defaults to (False, False)
     — no replicas declared, so the replica lint warns rather than errors (#139).
+    The ``migration:`` block is read like every command reads it: an invalid one is
+    ``CONFIG_002``, never a silently unbypassed run.
     """
+    path = Path("db") / "environments" / f"{env_name}.yaml" if env_name else config
+    if path is None or not path.exists():
+        return False, False
+    data = _core_connection.load_config(path) or {}
+    bypass = migration_block(data, path).allow_unsafe_under_replication
     try:
-        if env_name:
-            e = Environment.load(env_name)
-        elif config is not None and config.exists():
-            e = Environment.model_validate(_core_connection.load_config(config))
-        else:
-            return False, False
-        return bool(e.infrastructure.replicas), bool(e.migration.allow_unsafe_under_replication)
+        replicas = bool(Environment.model_validate(data).infrastructure.replicas)
     # Reason: a replica-config probe; any failure means 'no replicas declared'
     except Exception:
-        return False, False
+        replicas = False
+    return replicas, bypass
 
 
 def _resolve_preflight_pending(

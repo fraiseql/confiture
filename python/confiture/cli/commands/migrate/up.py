@@ -7,7 +7,7 @@ from typing import Annotated, Any, LiteralString
 import typer
 
 from confiture.cli.commands.migrate._dry_run_render import _render_dry_run_analysis, _row_estimator
-from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.commands.migrate._settings import migration_settings
 from confiture.cli.dry_run import ask_dry_run_execute_confirmation, display_dry_run_header
 from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
@@ -302,11 +302,8 @@ def migrate_up(
         # Environment-level migration settings apply whenever the YAML is read: as the
         # DSN source, or named explicitly beside --database-url (#825). An invalid file
         # is an error; only its absence means defaults.
-        env_cfg = (
-            _load_environment_if_present(config) if _db_url_override is None or explicit else None
-        )
+        env_cfg = migration_settings(config) if _db_url_override is None or explicit else None
         effective_strict_mode = strict or bool(env_cfg and env_cfg.migration.strict_mode)
-        install_helpers = bool(env_cfg and env_cfg.migration.view_helpers == "auto")
         lock_timeout, no_lock = resolve_lock_settings(
             env_cfg.migration.locking if env_cfg else None, lock_timeout, no_lock
         )
@@ -339,7 +336,6 @@ def migrate_up(
             "auto_baseline": (
                 (snapshots_dir_up or Path("db/schema_history")) if auto_detect_baseline else None
             ),
-            "install_view_helpers": install_helpers,
             "on_event": reporter,
             "batch": batch,
             "recreate_pg_tviews_from": (
@@ -495,9 +491,6 @@ def _tree_for_recreate(config: Path) -> SchemaModel:
 # Live lines that carry nothing from the event but its kind.
 _FIXED_LINES: dict[str, LiteralString] = {
     "lock_acquired": "[cyan]🔒 Acquired migration lock[/cyan]\n",
-    "view_helpers_installed": (
-        "[cyan]🔧 Auto-installed view helper functions (migration.view_helpers: auto)[/cyan]\n"
-    ),
     "checksums_verified": "[cyan]🔐 Checksum verification passed[/cyan]\n",
     "applied": "[green]✅[/green]",
     "failed": "[red]❌[/red]",

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from confiture.cli.helpers import console
 from confiture.cli.idempotency import _validate_idempotency
+from confiture.config.environment import DEFAULT_GRANT_DIR, migration_block
 from confiture.core.validation.registry import CheckOutcome, ValidationCheck
 from confiture.exceptions import ConfigurationError, ConfiturError, GitError
 
@@ -342,15 +343,8 @@ def _resolve_grant_dir(opts: ValidateOptions, ctx: ValidationContext) -> str:
     would be a trap, so the config wins when it names one.
     """
     if not (opts.config and Path(opts.config).exists()):
-        return "db/7_grant"
-    try:
-        cfg_data = ctx.config_data
-        configured = (
-            cfg_data.get("migration", {}).get("grant_dir") if isinstance(cfg_data, dict) else None
-        )
-    except AttributeError, KeyError, TypeError:
-        return "db/7_grant"
-    return str(configured) if configured else "db/7_grant"
+        return DEFAULT_GRANT_DIR
+    return migration_block(ctx.config_data, opts.config).grant_dir
 
 
 # ---------------------------------------------------------------------------

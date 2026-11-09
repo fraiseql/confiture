@@ -230,20 +230,22 @@ def maintenance(connection):
 
 ### Lock Timeouts
 
+How long `migrate up` waits for confiture's own migration lock is
+`migration.locking.timeout_ms` (`--lock-timeout` overrides it for one run):
+
 ```yaml
-# confiture.yaml
 migration:
-  lock_timeout: 30000      # 30 seconds - wait for locks
-  statement_timeout: 300000 # 5 minutes - max query time
+  locking:
+    timeout_ms: 30000      # 30 seconds - wait for another deployment's lock
 ```
 
-**Per-migration override:**
-```python
-__lock_timeout__ = 60000  # 60 seconds for this migration
+How long a statement waits for a table lock, or runs, is PostgreSQL's to bound. Set
+it in the migration itself, for that migration only:
 
-def up(connection):
-    # Long-running operation
-    ...
+```sql
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+ALTER TABLE orders ADD COLUMN note text;
 ```
 
 ### Avoiding Lock Contention

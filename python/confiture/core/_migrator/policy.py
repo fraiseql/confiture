@@ -1,4 +1,4 @@
-"""Session-level policies for ``up()``: strict mode, view helpers, auto-baseline.
+"""Session-level policies for ``up()``: strict mode, auto-baseline.
 
 These are the decisions an apply loop takes. They live here, not in the CLI, so
 the library path and the CLI path make them the same way.
@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 from confiture.core import baseline_detector as _core_baseline_detector
 from confiture.core import ledger as _ledger
 from confiture.core._migrator.events import UpObserver, emit
-from confiture.core.view_manager import ViewManager
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -23,24 +22,6 @@ def resolve_strict_mode(flag: bool | None, config: Environment | None) -> bool:
     if flag is not None:
         return flag
     return bool(config is not None and config.migration.strict_mode)
-
-
-def wants_view_helpers(flag: bool | None, config: Environment | None) -> bool:
-    """An explicit flag wins; otherwise ``migration.view_helpers: auto``."""
-    if flag is not None:
-        return flag
-    return config is not None and config.migration.view_helpers == "auto"
-
-
-def install_view_helpers(conn: Any, on_event: UpObserver | None = None) -> bool:
-    """Install the view helper functions if they are missing. Returns True if it did."""
-
-    manager = ViewManager(conn)
-    if manager.helpers_installed():
-        return False
-    manager.install_helpers()
-    emit(on_event, "view_helpers_installed", message="migration.view_helpers: auto")
-    return True
 
 
 def auto_baseline(

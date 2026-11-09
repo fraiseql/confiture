@@ -244,8 +244,6 @@ def _plan(session: SessionHost, options: UpOptions) -> _Plan:
             session, pending_files, skipped_versions, dry_run=options.dry_run, on_event=on_event
         )
     _require_tview_support(session, pending_files)
-    if _policy.wants_view_helpers(options.install_view_helpers, session._config):
-        _policy.install_view_helpers(session._conn, on_event)
     checksums_verified, checksum_warnings = _verify_checksums(
         session,
         enabled=options.verify_checksums and not force,

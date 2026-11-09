@@ -18,7 +18,7 @@ from pathlib import Path
 
 import typer
 
-from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.commands.migrate._settings import migration_settings
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, connect, console, emit, is_json
 from confiture.cli.options import (
@@ -131,7 +131,7 @@ def migrate_apply_as(
         )
 
     tracking_table = _get_tracking_table(config_data)
-    env_cfg = _load_environment_if_present(config)
+    env_cfg = migration_settings(config)
     try:
         with _core_migrator.MigratorSession(
             None,

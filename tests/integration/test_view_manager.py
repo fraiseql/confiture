@@ -878,18 +878,27 @@ class TestCrossSchemaViews:
             assert cur.fetchone()[0] == 1
 
 
-def test_install_helpers_says_what_it_did_in_json(
-    vm_db: psycopg.Connection, test_db_url: str, tmp_path
-) -> None:
-    """``install-helpers --format json``: installed, then already installed."""
+def test_install_helpers_says_what_it_did_in_json(fresh_database: str, tmp_path) -> None:
+    """``install-helpers --format json``: installed, then already installed.
+
+    The database pins ``search_path``, as CONFIG_017's remedy says: the connecting
+    role may be named ``confiture``, and ``"$user"`` would resolve to the helpers.
+    """
     import json
 
     from typer.testing import CliRunner
 
     from confiture.cli.main import app
 
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        dbname = conn.execute("SELECT current_database()").fetchone()[0]
+        conn.execute(
+            psycopg.sql.SQL("ALTER DATABASE {} SET search_path = public").format(
+                psycopg.sql.Identifier(dbname)
+            )
+        )
     config = tmp_path / "local.yaml"
-    config.write_text(f"database_url: {test_db_url}\n")
+    config.write_text(f"database_url: {fresh_database}\n")
     argv = ["install-helpers", "-c", str(config), "--format", "json"]
 
     first = CliRunner().invoke(app, argv)

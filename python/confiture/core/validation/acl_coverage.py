@@ -8,7 +8,7 @@ the configured global grant-sweep directory.
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from confiture.config.environment import DEFAULT_GRANT_DIR
+from confiture.config.environment import DEFAULT_GRANT_DIR, migration_block
 from confiture.core import connection as _core_connection
 from confiture.core.linting.schema_linter import SchemaLinter
 from confiture.core.validation.config_loaders import load_acl_expectations
@@ -50,10 +50,9 @@ def check_acl_coverage(
     # ``--migrations-dir`` and the git checks' grant directory are (#715); the
     # config sits in ``db/environments/``, which holds no sweep. A project with no
     # sweep at the default path has none; one it names and lacks is said.
-    configured = (
-        config_data.get("migration", {}).get("grant_dir") if isinstance(config_data, dict) else None
-    )
-    grant_dir = Path(configured or DEFAULT_GRANT_DIR)
+    block = migration_block(config_data, config_path)
+    configured = "grant_dir" in block.model_fields_set and bool(block.grant_dir)
+    grant_dir: Path | None = Path(block.grant_dir or DEFAULT_GRANT_DIR)
     if not configured and not grant_dir.is_dir():
         grant_dir = None
 

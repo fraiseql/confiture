@@ -401,6 +401,13 @@ carries a hex letter, the modal width), and writes them (`format_prefix`, and
 value that would read as a word: `ab9` → `ac0`). `tests/unit/test_one_numbering.py`
 fails on a tree tool that parses or formats a prefix itself.
 
+**One `migration:` block reader** — `config/environment.migration_block(data, source)` reads
+and validates a config's `migration:` block, wherever the file lives (#832): an absent block is
+the defaults, a bad value or an unknown key is `CONFIG_002`. The migrate commands reach it
+through `cli/commands/migrate/_settings.migration_settings(path)` (`None` only when the file is
+absent). `tests/unit/test_one_migration_block_reader.py` fails on a `.get("migration", …)` or
+a `MigrationConfig` built elsewhere; its allow-list is empty.
+
 **One live reader** — `core/live_catalog.py` is the only module that reads schema facts
 from `pg_catalog`, `information_schema` or the catalog views, into the same model
 (`read`, plus routines, views and triggers). `tests/unit/test_one_live_reader.py` fails

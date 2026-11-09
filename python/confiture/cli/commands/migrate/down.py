@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.commands.migrate._dry_run_render import _render_dry_run_analysis, _row_estimator
-from confiture.cli.commands.migrate._settings import _load_environment_if_present
+from confiture.cli.commands.migrate._settings import migration_settings
 from confiture.cli.dry_run import display_dry_run_header
 from confiture.cli.dsn import (
     DATABASE_URL_OPTION_HELP,
@@ -132,9 +132,7 @@ def migrate_down(
             require_intentional_source=True,
         )
         config_data = configuration(_db_url_override, config, config_explicit=explicit)
-        env_cfg = (
-            _load_environment_if_present(config) if _db_url_override is None or explicit else None
-        )
+        env_cfg = migration_settings(config) if _db_url_override is None or explicit else None
         locking = env_cfg.migration.locking if env_cfg else None
 
         with _core_migrator.MigratorSession(

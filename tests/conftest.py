@@ -411,8 +411,8 @@ def clean_test_db(test_db_connection: psycopg.Connection) -> psycopg.Connection:
         Dropping the schema, not its tables one by one, is what takes functions,
         types, sequences and domains with it — the per-object version left
         those behind between tests. Every other user schema goes too, including
-        `confiture`: `migrate up` auto-installs the view helpers into a schema of
-        that name (migration.view_helpers: auto), and under a connecting role
+        `confiture`: `confiture install-helpers` creates a schema of that name,
+        and under a connecting role
         *named* confiture — what CI uses — PostgreSQL's default search_path
         `"$user", public` would make a leaked one the target of every later
         unqualified CREATE TABLE.

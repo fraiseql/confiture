@@ -8,7 +8,7 @@ import typer
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json
 from confiture.cli.options import config_option, format_option, migrations_dir_option, output_option
-from confiture.config.environment import MigrationConfig
+from confiture.config.environment import migration_block
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core import step_runner
@@ -74,7 +74,7 @@ def migrate_steps(
                 resume,
                 migrations_dir=migrations_dir,
                 allow_destructive=allow_destructive,
-                settings=_backfill_settings(config_data, max_lock_ms),
+                settings=_backfill_settings(config_data, config, max_lock_ms),
             )
         result = MigrateStepsResult(
             steps=[r.to_dict() for r in store.records()],
@@ -97,9 +97,11 @@ def migrate_steps(
         )
 
 
-def _backfill_settings(config_data: dict[str, Any], max_lock_ms: int | None) -> BackfillSettings:
+def _backfill_settings(
+    config_data: dict[str, Any], config: Path, max_lock_ms: int | None
+) -> BackfillSettings:
     """``migration.backfill`` from the config, the flag winning for the lock-waiter guard."""
-    backfill = MigrationConfig.model_validate(config_data.get("migration") or {}).backfill
+    backfill = migration_block(config_data, config).backfill
     return BackfillSettings(
         batch_size=backfill.batch_size,
         max_lock_ms=max_lock_ms if max_lock_ms is not None else backfill.max_lock_ms,

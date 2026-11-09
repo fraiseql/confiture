@@ -40,6 +40,10 @@ from typing import Any
 
 import psycopg
 
+from confiture.core.ledger import VIEW_HELPER_SCHEMA
+from confiture.core.schema_identity import identifier_identity
+from confiture.exceptions import ConfigurationError
+
 logger = logging.getLogger(__name__)
 
 # SQL: Recursive CTE to discover all views depending on tables in given schemas.
@@ -244,14 +248,44 @@ class ViewManager:
         This is idempotent — safe to call multiple times (uses
         ``CREATE SCHEMA IF NOT EXISTS`` and ``CREATE OR REPLACE FUNCTION``).
 
+        Refused when the helper schema would be on the connection's ``search_path``
+        — a role named ``confiture`` under the default ``"$user", public``, or the
+        name written there — because every unqualified object a migration creates
+        would then land in it.
+
         Raises:
+            ConfigurationError: The helper schema would be on the search path
+                (``CONFIG_017``).
             psycopg.Error: If the SQL cannot be executed.
         """
+        self._refuse_helper_schema_on_search_path()
         sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
         with self._conn.cursor() as cur:
             cur.execute(sql)
         self._conn.commit()
         logger.info("Installed confiture view helper functions")
+
+    def _refuse_helper_schema_on_search_path(self) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT current_user, current_setting('search_path')")
+            row = cur.fetchone()
+        if row is None:
+            return
+        role, search_path = str(row[0]), str(row[1])
+        entries = [entry.strip() for entry in search_path.split(",") if entry.strip()]
+        resolved = {role if entry == '"$user"' else identifier_identity(entry) for entry in entries}
+        if VIEW_HELPER_SCHEMA in resolved:
+            raise ConfigurationError(
+                f"The view helpers' schema {VIEW_HELPER_SCHEMA!r} would be on the search_path "
+                f"of role {role!r} ({search_path}): every unqualified object a migration "
+                "creates would land in it",
+                error_code="CONFIG_017",
+                context={"role": role, "search_path": search_path},
+                resolution_hint=(
+                    f"Connect as a role not named {VIEW_HELPER_SCHEMA!r}, or set that role's "
+                    'search_path without "$user" (ALTER ROLE … SET search_path = public).'
+                ),
+            )
 
     def helpers_installed(self) -> bool:
         """Check whether the SQL helper functions are installed.

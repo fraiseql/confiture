@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import yaml
+
+from confiture.config.environment import migration_block
 from confiture.core.scaffold.project import scaffold
 
 
@@ -20,10 +23,8 @@ def test_scaffold_writes_every_template_and_every_directory(tmp_path: Path) -> N
         assert (db / directory).is_dir()
 
 
-def test_the_local_environment_names_a_command_that_exists(tmp_path: Path) -> None:
+def test_the_local_environment_is_a_valid_config(tmp_path: Path) -> None:
     local = (tmp_path / "db").joinpath("environments", "local.yaml")
     scaffold(tmp_path / "db")
-    text = local.read_text()
-    assert "view_helpers: auto" in text
-    assert "confiture install-helpers" in text
-    assert "confiture admin" not in text
+    data = yaml.safe_load(local.read_text())
+    assert migration_block(data, local).tracking_table == "tb_confiture"
