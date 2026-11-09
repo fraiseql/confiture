@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.48.0] - 2026-11-09
+
 ### Changed
 
 - **The `migration:` block of the file `--config` names applies wherever the file lives**
