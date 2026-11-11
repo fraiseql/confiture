@@ -27,7 +27,7 @@ from confiture.core.schema_model import RelationName
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
-    from confiture.core.schema_model import Trigger
+    from confiture.core.schema_model import SchemaModel, Table, Trigger
 
 _DOT = "."
 #: The kinds of object that are relations: what ``diff.exclude`` leaves out, with
@@ -93,6 +93,48 @@ def quoted_trigger_names(triggers: Iterable[Trigger]) -> Iterator[QuotedName]:
         if needs_quotes(trigger.name):
             on = RelationName(trigger.schema, trigger.table)
             yield _named("trigger", None, trigger.name, None, 0, on)
+
+
+def quoted_model_names(model: SchemaModel) -> Iterator[QuotedName]:
+    """Every name a model holds that needs quotes: what a database read gives.
+
+    The catalog has no file or line, so ``line`` is 0. A schema is reported once,
+    and its objects are not reported again for it, as :func:`quoted_names` does.
+    """
+    reported: set[str] = set()
+    named = (
+        *((ref, "table") for ref in model.tables),
+        *((ref, ref.kind) for ref in model.views),
+        *((ref, "tview") for ref in model.tviews),
+        *((ref, "type") for ref in model.enum_types),
+        *((ref, "sequence") for ref in model.sequences),
+        *((ref, ref.kind) for ref in model.routines),
+    )
+    for ref, kind in named:
+        if needs_quotes(ref.schema) and ref.schema not in reported:
+            reported.add(ref.schema)
+            yield _named("schema", None, ref.schema, None, 0)
+        if needs_quotes(ref.name):
+            relation = RelationName(ref.schema, ref.name) if kind in _RELATIONS else None
+            yield _named(kind, _quoted(ref.schema), ref.name, None, 0, relation)
+    for table in model.tables.values():
+        yield from _model_parts(table)
+    yield from quoted_trigger_names(model.triggers.values())
+
+
+def _model_parts(table: Table) -> Iterator[QuotedName]:
+    """A live table's columns, indexes and constraints whose names need quotes."""
+    within = _join(_quoted(table.schema), quote_identifier(table.name))
+    on = table.relation
+    for column in table.columns:
+        if needs_quotes(column.folded):
+            yield _named("column", within, column.folded, None, 0, on)
+    for index in table.indexes:
+        if index.name and needs_quotes(index.name):
+            yield _named("index", _quoted(table.schema), index.name, None, 0, on)
+    for constraint in table.constraints:
+        if constraint.name and needs_quotes(constraint.name):
+            yield _named("constraint", within, constraint.name, None, 0, on)
 
 
 def _parts(table: SchemaObject) -> Iterator[QuotedName]:

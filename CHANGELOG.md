@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The seam refuses a name that needs quotes.** `platform.parse_schema` and
+  `platform.introspect` (and `confiture schema dump-model`, which reads through
+  them) raise `DIFFER_403`, as the differ and drift already did, naming the first
+  such object and, for a tree, where it is written. `introspect` looks only at the
+  schemas it reads, so an odd name elsewhere in the database does not fail it.
+  confiture supports a name only as PostgreSQL writes it bare, and a model the seam
+  returns is what a consumer composes SQL from.
 - Refreshed the dependency lock (#834). Notable updates: typer 0.29.1, sqlglot
   30.31.0, fastapi 0.162.4, and the `docs` extra's pymdown-extensions 13.0 (the
   strict docs build passes). typer 0.29 describes a parameter through its own type
@@ -24,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ruff 0.17.4 (#835) and ty 0.0.100 are pinned together in the lock, the
   pre-commit hook, the CI workflows and the local Dagger pipeline. ty's
   `unresolved-attribute` suppressions use its new name, `missing-attribute`.
+
+### Fixed
+
+- **A quoted schema keeps its case in an identity.** `ObjectRef.schema` was
+  lowercased on top of the parser's and the catalog's own folding, so
+  `"Sales"."Tb"` read as `('sales', 'Tb')`, which names no relation, and a
+  consumer composing SQL from the ref missed the table. A schema is now folded as
+  PostgreSQL folds an identifier, as the name already was: unquoted lowercased,
+  quoted kept, by the DDL reader, the live reader, the object list, the differ's
+  identity and `model_facts.resolve`. A `DROP` of a quoted name in the tree now
+  removes the object it names. Unqualified and `public.` still share one bucket.
 
 ## [1.48.0] - 2026-11-09
 

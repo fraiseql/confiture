@@ -61,7 +61,7 @@ def resolve(refs: Iterable[ObjectRef], written: RelationName | str | None) -> Ob
     schema, name = relation.schema, relation.name
     candidates = [ref for ref in refs if ref.name == name]
     if schema:
-        return next((ref for ref in candidates if ref.schema == schema.lower()), None)
+        return next((ref for ref in candidates if ref.schema == schema), None)
     default = next((ref for ref in candidates if ref.schema == DEFAULT_SCHEMA), None)
     if default is not None or len(candidates) != 1:
         return default

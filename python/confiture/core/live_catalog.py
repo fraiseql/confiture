@@ -255,7 +255,7 @@ def _other_objects(
     other kind is held by existence alone.
     """
     found = (
-        OtherObject(kind, (schema or DEFAULT_SCHEMA).lower(), name.lower())
+        OtherObject(kind, schema or DEFAULT_SCHEMA, name)
         for kind, schema, name in conn.execute(_OTHER_OBJECTS, {"schemas": list(schemas)})
     )
     defined = _defined_others(conn, schemas)

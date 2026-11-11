@@ -102,11 +102,13 @@ Signature = tuple[tuple[str | None, str], ...]
 class ObjectRef:
     """A **bucket**: what makes two ``CREATE`` statements *candidates* for one object.
 
-    ``schema`` is folded and defaulted, so an unqualified ``CREATE VIEW v`` and
+    ``schema`` is defaulted, so an unqualified ``CREATE VIEW v`` and
     ``CREATE VIEW public.v`` are one object — what
-    :data:`~confiture.core.schema_identity.DEFAULT_SCHEMA` is for. ``name`` is
-    folded for the same reason; :attr:`display` keeps the spelling a change
-    prints.
+    :data:`~confiture.core.schema_identity.DEFAULT_SCHEMA` is for. ``schema`` and
+    ``name`` are each folded as PostgreSQL folds an identifier, which the parser
+    and the catalog have already done: an unquoted part lowercased, a quoted one
+    kept, so ``"Sales"."Tb"`` is ``('Sales', 'Tb')`` and names the table.
+    :attr:`display` keeps the spelling a change prints.
 
     **Key by the ref, or by** :attr:`identity`, **never by** ``display``: equality
     and the hash leave ``display`` out, and each reader spells it its own way. The
@@ -160,7 +162,7 @@ def ref_for(kind: str, schema: str | None, name: str) -> ObjectRef:
     """The bucket of a relation-like object: ``(kind, folded schema, name)``, no signature."""
     return ObjectRef(
         kind=kind,
-        schema=(schema or DEFAULT_SCHEMA).lower(),
+        schema=schema or DEFAULT_SCHEMA,
         name=name,
         signature=None,
         display=qualified_name(schema, name),
@@ -526,7 +528,7 @@ def routine_ref(routine: Routine) -> ObjectRef:
     """The bucket of a routine: its kind, folded schema, name and argument type names."""
     return ObjectRef(
         kind=routine.kind,
-        schema=(routine.schema or DEFAULT_SCHEMA).lower(),
+        schema=routine.schema or DEFAULT_SCHEMA,
         name=routine.name,
         signature=tuple(name for _schema, name in routine.signature_key),
         display=routine.identity,
@@ -1179,7 +1181,7 @@ ALL_PARITY_RULES = frozenset(PARITY_NORMALISATIONS)
 
 
 def _fold_schema(schema: str | None, rules: frozenset[str]) -> str | None:
-    return (schema or DEFAULT_SCHEMA).lower() if "schema_spelling" in rules else schema
+    return (schema or DEFAULT_SCHEMA) if "schema_spelling" in rules else schema
 
 
 def _parity_relation(relation: RelationName, rules: frozenset[str]) -> RelationName:

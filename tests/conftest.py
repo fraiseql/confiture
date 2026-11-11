@@ -610,14 +610,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture
 def quoted_names_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let the differ and drift read names that need quotes, which both refuse (``DIFFER_403``).
+    """Let the differ, drift and the seam read names that need quotes, which all refuse (``DIFFER_403``).
 
-    For the tests of what generated DDL, or the expected-schema reader, does with
-    such a name anyway: quoting is the second layer behind the refusal, and is
-    tested on its own.
+    For the tests of what generated DDL, the expected-schema reader or a model's
+    identity does with such a name anyway: quoting is the second layer behind the
+    refusal, and is tested on its own.
     """
     monkeypatch.setattr("confiture.core.differ.refuse_quoted_names", lambda *_: None)
     monkeypatch.setattr("confiture.core.drift.refuse_quoted_names", lambda *_: None)
+    monkeypatch.setattr("confiture.core.schema_sources.refuse_quoted_names", lambda *_: None)
 
 
 #: The repository's own schema history, which `migrate generate` writes into when a

@@ -391,8 +391,8 @@ def _extra_ref(stmt: Any, spec: _Extra) -> ObjectRef | None:
         name = f"{parent.relname}.{name}"
     return ObjectRef(
         kind=spec.kind,
-        schema=(schema or DEFAULT_SCHEMA).lower(),
-        name=name.lower(),
+        schema=schema or DEFAULT_SCHEMA,
+        name=name,
         signature=None,
         display=f"{schema}.{name}" if schema else name,
     )
@@ -409,7 +409,7 @@ def _inventory_ref(sql: str, raw: Any) -> tuple[ObjectRef, Signature | None] | N
 def _ref_of(obj: SchemaObject) -> ObjectRef:
     return ObjectRef(
         kind=obj.kind,
-        schema=(obj.folded_schema or DEFAULT_SCHEMA).lower(),
+        schema=obj.folded_schema or DEFAULT_SCHEMA,
         name=obj.folded_name,
         signature=signature_bucket(obj.signature_key),
         display=obj.identity,
@@ -622,9 +622,9 @@ def _matches(ref: ObjectRef, edit: ObjectEdit) -> bool:
 
 
 def _names(ref: ObjectRef, kind: str, schema: str | None, name: str) -> bool:
-    if ref.kind not in object_kinds(kind) or ref.name != name.lower():
+    if ref.kind not in object_kinds(kind) or ref.name != name:
         return False
-    return schema is None or ref.schema == schema.lower()
+    return schema is None or ref.schema == schema
 
 
 def _apply_drop(objects: dict[ObjectRef, list[DDLObject]], edit: ObjectEdit) -> None:

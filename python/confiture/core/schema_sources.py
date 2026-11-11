@@ -22,10 +22,11 @@ from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
 from confiture.core.ddl_walk import AS_WRITTEN
-from confiture.core.differ import SchemaDiffer, Side, held_by_definition
+from confiture.core.differ import SchemaDiffer, Side, held_by_definition, refuse_quoted_names
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
+from confiture.core.linting.quoted_names import quoted_model_names
 from confiture.core.live_catalog import (
     attached,
     catalogued_objects,
@@ -163,13 +164,20 @@ def parse_schema(
     --env <env> --schema-only`` selects, in build order. ``COPY … FROM stdin``
     data is blanked before parsing, so a tree that seeds inline still reads.
 
+    A name that needs quotes is refused: confiture supports a name only as
+    PostgreSQL writes it bare, and a consumer composes SQL from this model.
+
     Raises:
         ValueError: unless exactly one of *source* and *env* is given.
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects the DDL,
             naming the file and line; ``SCHEMA_201`` for a path that does not
             exist, ``SCHEMA_001`` for a file that cannot be read as UTF-8 text.
+        DifferError: ``DIFFER_403`` when the schema names an object that needs
+            quotes, naming the first and where it is written.
     """
-    return read_schema(source, env=env, project_dir=project_dir).model
+    read = read_schema(source, env=env, project_dir=project_dir)
+    refuse_quoted_names("declared", read.quoted)
+    return read.model
 
 
 def introspect(database: str | Connection, *, schemas: Sequence[str] | None = None) -> SchemaModel:
@@ -183,8 +191,13 @@ def introspect(database: str | Connection, *, schemas: Sequence[str] | None = No
     nothing, so it adds nothing: ``schemas=["nope"]`` is an empty model, not an
     error.
 
+    A name that needs quotes in a schema it reads is refused, as
+    :func:`parse_schema` refuses one; a schema it does not read is not looked at.
+
     Raises:
         ConfigurationError: ``CONFIG_006`` when the URL does not connect.
+        DifferError: ``DIFFER_403`` when the database names an object that needs
+            quotes in *schemas*, naming the first.
         TypeError: a *database* that is neither a URL nor a :class:`Connection`.
     """
     with connection_for(database) as conn:
@@ -192,7 +205,9 @@ def introspect(database: str | Connection, *, schemas: Sequence[str] | None = No
             wanted = user_schemas(conn)
         else:
             wanted = [schemas] if isinstance(schemas, str) else list(schemas)
-        return read_catalog(conn, schemas=wanted, routines=True, views=True, triggers=True)
+        model = read_catalog(conn, schemas=wanted, routines=True, views=True, triggers=True)
+    refuse_quoted_names("database", list(quoted_model_names(model)))
+    return model
 
 
 def require_supported_pg_tviews_on(database: str | Connection) -> None:

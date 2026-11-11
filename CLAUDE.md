@@ -354,8 +354,10 @@ dot; its allow-list names what each remaining split reads instead (a module path
 file name, a configured label) or, for a type's key, that `naming_003` refuses the
 dotted name it would misread. confiture supports only names that need no quotes:
 `naming_003` and `naming_004` report the rest, `SchemaDiffer.compare` refuses them on
-either side (`DIFFER_403`) so no generated statement writes one, and generated DDL still
-quotes through `quote_identifier`. A test of that second layer uses the
+either side (`DIFFER_403`) so no generated statement writes one, the seam's
+`parse_schema` and `introspect` refuse them too (`DIFFER_403`, `introspect` only in the
+schemas it reads) so no model a consumer composes SQL from holds one, and generated DDL
+still quotes through `quote_identifier`, and a model folds a quoted part as PostgreSQL does. A test of that second layer uses the
 `quoted_names_allowed` fixture.
 
 **One identifier quoter** — `core/schema_identity.quote_identifier` writes an identifier
