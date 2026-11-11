@@ -17,8 +17,8 @@ written by hand and left alone.
 import argparse
 import re
 import sys
-from pathlib import Path
-from typing import Any
+from pathlib import Path, PurePath
+from typing import Any, get_args
 
 from typer.main import get_command
 
@@ -78,10 +78,18 @@ def _default(param: Any) -> str:
     return f"`{value}`"
 
 
-def _type(param: Any) -> str:
+def _type(param: Any, ctx: Any) -> str:
+    """The value one occurrence of the parameter takes: a repeatable option names its element."""
     if _is_option(param) and getattr(param, "is_flag", False):
         return "Flag"
-    return param.type.name.replace("_", " ")
+    desc = param.type_descriptor
+    if desc.is_choice:
+        return "choice"
+    if desc.is_list:
+        (element,) = get_args(desc.annotation)
+        return "path" if issubclass(element, PurePath) else element.__name__
+    # What typer's own help prints for the parameter, without its angle brackets.
+    return param.display_type(ctx).removeprefix("<").removesuffix(">")
 
 
 def render_block(path: str, cmd: Any) -> str:
@@ -113,7 +121,7 @@ def render_block(path: str, cmd: Any) -> str:
         ]
         for p in arguments:
             lines.append(
-                f"| `{p.human_readable_name}` | {_type(p)} | {'yes' if p.required else 'no'} | "
+                f"| `{p.display_name_raw}` | {_type(p, ctx)} | {'yes' if p.required else 'no'} | "
                 f"{_cell(getattr(p, 'help', '') or '')} |"
             )
         lines.append("")
@@ -130,7 +138,7 @@ def render_block(path: str, cmd: Any) -> str:
             name = " / ".join(f"`{o}`" for o in [*longs, *p.secondary_opts])
             short = ", ".join(f"`{o}`" for o in shorts) or "-"
             lines.append(
-                f"| {name} | {short} | {_type(p)} | {_default(p)} | {_cell(p.help or '')} |"
+                f"| {name} | {short} | {_type(p, ctx)} | {_default(p)} | {_cell(p.help or '')} |"
             )
         lines.append("")
     lines.append(END.format(name=f"confiture {path}"))
