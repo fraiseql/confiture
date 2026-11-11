@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed the dependency lock (#834). Notable updates: typer 0.29.1, sqlglot
+  30.31.0, fastapi 0.162.4, and the `docs` extra's pymdown-extensions 13.0 (the
+  strict docs build passes). typer 0.29 describes a parameter through its own type
+  descriptor rather than click's `type`, so the CLI reference generator reads that;
+  the generated reference is unchanged.
+- ruff 0.17.4 (#835) and ty 0.0.100 are pinned together in the lock, the
+  pre-commit hook, the CI workflows and the local Dagger pipeline. ty's
+  `unresolved-attribute` suppressions use its new name, `missing-attribute`.
+
 ## [1.48.0] - 2026-11-09
 
 ### Changed

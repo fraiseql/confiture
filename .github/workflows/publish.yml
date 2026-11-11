@@ -160,7 +160,7 @@ jobs:
       run: |
         uv venv
         # Pinned to match quality-gate.yml + [dependency-groups] / pre-commit.
-        uv pip install 'ruff==0.17.3'
+        uv pip install 'ruff==0.17.4'
     - name: Run ruff check
       run: uv run ruff check .
     - name: Run ruff format
@@ -184,7 +184,7 @@ jobs:
         # lockstep with quality-gate.yml's type-check job.
         uv venv
         uv sync --locked --no-install-project --all-extras
-        uv pip install 'ty==0.0.99'
+        uv pip install 'ty==0.0.100'
     - name: Run ty (Astral's type checker)
       run: uv run --no-sync ty check python/confiture/
 

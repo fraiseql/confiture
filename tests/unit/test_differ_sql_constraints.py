@@ -239,24 +239,24 @@ class TestANewTableIsGeneratedWhole:
 
     def test_the_columns_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
-        assert regenerated.columns == declared.columns  # ty: ignore[unresolved-attribute]
+        assert regenerated.columns == declared.columns  # ty: ignore[missing-attribute]
 
     def test_the_foreign_keys_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
-        assert regenerated.constraints_of("foreign_key") == declared.constraints_of("foreign_key")  # ty: ignore[unresolved-attribute]
+        assert regenerated.constraints_of("foreign_key") == declared.constraints_of("foreign_key")  # ty: ignore[missing-attribute]
 
     def test_the_check_constraints_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
         assert (
-            regenerated.constraints_of("check")  # ty: ignore[unresolved-attribute]
-            == declared.constraints_of("check")  # ty: ignore[unresolved-attribute]
+            regenerated.constraints_of("check")  # ty: ignore[missing-attribute]
+            == declared.constraints_of("check")  # ty: ignore[missing-attribute]
         )
 
     def test_the_unique_constraints_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
         assert (
-            regenerated.constraints_of("unique")  # ty: ignore[unresolved-attribute]
-            == declared.constraints_of("unique")  # ty: ignore[unresolved-attribute]
+            regenerated.constraints_of("unique")  # ty: ignore[missing-attribute]
+            == declared.constraints_of("unique")  # ty: ignore[missing-attribute]
         )
 
     def test_a_table_with_no_constraints_is_unchanged(self) -> None:

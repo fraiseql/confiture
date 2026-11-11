@@ -375,7 +375,7 @@ include = [
     "python/confiture/core/replica/classifier.py",
 ]
 [tool.ty.overrides.rules]
-unresolved-attribute = "ignore"
+missing-attribute = "ignore"
 
 [[tool.ty.overrides]]
 # The CLI prints through `cli.markup.Printer`: a computed `str` handed to it is a
@@ -389,5 +389,5 @@ invalid-argument-type = "error"
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
-    "ruff==0.17.3",
+    "ruff==0.17.4",
 ]
