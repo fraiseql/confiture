@@ -316,11 +316,13 @@ class ObjectRef
 
 A **bucket**: what makes two `CREATE` statements *candidates* for one object.
 
-`schema` is folded and defaulted, so an unqualified `CREATE VIEW v` and
+`schema` is defaulted, so an unqualified `CREATE VIEW v` and
 `CREATE VIEW public.v` are one object — what
-`DEFAULT_SCHEMA` is for. `name` is
-folded for the same reason; `display` keeps the spelling a change
-prints.
+`DEFAULT_SCHEMA` is for. `schema` and
+`name` are each folded as PostgreSQL folds an identifier, which the parser
+and the catalog have already done: an unquoted part lowercased, a quoted one
+kept, so `"Sales"."Tb"` is `('Sales', 'Tb')` and names the table.
+`display` keeps the spelling a change prints.
 
 **Key by the ref, or by** `identity`, **never by** `display`: equality
 and the hash leave `display` out, and each reader spells it its own way. The

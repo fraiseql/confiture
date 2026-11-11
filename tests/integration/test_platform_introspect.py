@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 from tests.unit.test_platform_leaks_no_driver_types import driver_objects
 
 from confiture import platform
+from confiture.core import live_catalog
 from confiture.core.schema_exporter import load_schema
 
 DDL = """
@@ -117,3 +118,21 @@ def test_a_live_table_answers_what_a_writer_may_supply(fresh_database: str) -> N
     assert len(platform.column_facts(model, "app.item", "qty").checks) == 1
     hints = platform.naming_hints(model, "app.item")
     assert (hints.surrogate_pk, hints.natural_id) == ("pk_item", "id")
+
+
+def test_a_quoted_schema_reads_back_as_the_tree_writes_it(fresh_database: str) -> None:
+    ddl = """
+    CREATE SCHEMA "Sales";
+    CREATE TABLE "Sales"."Tb" (id bigint PRIMARY KEY);
+    CREATE DOMAIN "Sales"."Money" AS numeric;
+    CREATE TABLE Plain (id bigint);
+    """
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(ddl)
+    live = platform.introspect(fresh_database, schemas=["Sales", "public"])
+    tree = platform.parse_schema(ddl)
+    assert {ref.identity for ref in live.tables} == {("Sales", "Tb"), ("public", "plain")}
+    assert {ref.identity for ref in live.tables} == {ref.identity for ref in tree.tables}
+    with psycopg.connect(fresh_database) as conn:
+        others = live_catalog.read(conn, schemas=["Sales"], other_objects=True).other_objects
+    assert ("Sales", "Money") in {ref.identity for ref in others}

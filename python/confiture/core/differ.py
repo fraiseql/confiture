@@ -421,7 +421,7 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
     wrote and never invents a qualifier; this decides only whether two
     statements are about one relation.
     """
-    return (schema or DEFAULT_SCHEMA).lower(), name
+    return schema or DEFAULT_SCHEMA, name
 
 
 def _declares(model: SchemaModel, ref: ObjectRef) -> bool:

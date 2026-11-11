@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pre-commit hook, the CI workflows and the local Dagger pipeline. ty's
   `unresolved-attribute` suppressions use its new name, `missing-attribute`.
 
+### Fixed
+
+- **A quoted schema keeps its case in an identity.** `ObjectRef.schema` was
+  lowercased on top of the parser's and the catalog's own folding, so
+  `"Sales"."Tb"` read as `('sales', 'Tb')`, which names no relation, and a
+  consumer composing SQL from the ref missed the table. A schema is now folded as
+  PostgreSQL folds an identifier, as the name already was: unquoted lowercased,
+  quoted kept, by the DDL reader, the live reader, the object list, the differ's
+  identity and `model_facts.resolve`. A `DROP` of a quoted name in the tree now
+  removes the object it names. Unqualified and `public.` still share one bucket.
+
 ## [1.48.0] - 2026-11-09
 
 ### Changed
