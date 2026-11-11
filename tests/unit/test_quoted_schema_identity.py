@@ -1,5 +1,9 @@
 """A schema is folded as PostgreSQL folds it: unquoted lowercased, quoted kept.
 
+The seam refuses a name that needs quotes (``DIFFER_403``,
+``test_seam_refuses_quoted_names``); this is the layer behind that refusal,
+read through ``read_schema``, which reads such a tree so lint can report it.
+
 An identity is the key a consumer composes SQL from, so it has to name the
 object. ``"Sales"."Tb"`` is table ``Tb`` in schema ``Sales``; ``sales`` is
 another schema, and ``('sales', 'Tb')`` names nothing. The parser already folds
@@ -10,9 +14,14 @@ parser (or the catalog) holds it, the same as the name. The unqualified and
 
 from confiture.core.ddl_objects import objects_in
 from confiture.core.model_facts import resolve
-from confiture.core.schema_model import routine_ref
+from confiture.core.schema_model import SchemaModel, routine_ref
+from confiture.core.schema_sources import read_schema
 from confiture.core.sql_lexer import parse_file
-from confiture.platform import parse_schema
+
+
+def parse_schema(sql: str) -> SchemaModel:
+    return read_schema(sql).model
+
 
 QUOTED = """
 CREATE SCHEMA "Sales";

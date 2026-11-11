@@ -9,12 +9,15 @@ driver's, and its wire is the published one.
 import json
 
 import psycopg
+import pytest
 from jsonschema import Draft202012Validator
 from tests.unit.test_platform_leaks_no_driver_types import driver_objects
 
 from confiture import platform
 from confiture.core import live_catalog
 from confiture.core.schema_exporter import load_schema
+from confiture.core.schema_sources import read_schema
+from confiture.exceptions import DifferError
 
 DDL = """
 CREATE SCHEMA app;
@@ -120,7 +123,10 @@ def test_a_live_table_answers_what_a_writer_may_supply(fresh_database: str) -> N
     assert (hints.surrogate_pk, hints.natural_id) == ("pk_item", "id")
 
 
-def test_a_quoted_schema_reads_back_as_the_tree_writes_it(fresh_database: str) -> None:
+def test_the_live_reader_keeps_a_quoted_schema_as_the_tree_reader_does(
+    fresh_database: str,
+) -> None:
+    """The layer behind the refusal: both readers fold a schema as PostgreSQL does."""
     ddl = """
     CREATE SCHEMA "Sales";
     CREATE TABLE "Sales"."Tb" (id bigint PRIMARY KEY);
@@ -129,10 +135,48 @@ def test_a_quoted_schema_reads_back_as_the_tree_writes_it(fresh_database: str) -
     """
     with psycopg.connect(fresh_database, autocommit=True) as conn:
         conn.execute(ddl)
-    live = platform.introspect(fresh_database, schemas=["Sales", "public"])
-    tree = platform.parse_schema(ddl)
+    with psycopg.connect(fresh_database) as conn:
+        live = live_catalog.read(conn, schemas=["Sales", "public"], other_objects=True)
+    tree = read_schema(ddl).model
     assert {ref.identity for ref in live.tables} == {("Sales", "Tb"), ("public", "plain")}
     assert {ref.identity for ref in live.tables} == {ref.identity for ref in tree.tables}
-    with psycopg.connect(fresh_database) as conn:
-        others = live_catalog.read(conn, schemas=["Sales"], other_objects=True).other_objects
-    assert ("Sales", "Money") in {ref.identity for ref in others}
+    assert ("Sales", "Money") in {ref.identity for ref in live.other_objects}
+
+
+@pytest.mark.parametrize(
+    ("ddl", "named"),
+    [
+        ('CREATE TABLE app."Tb" (id bigint)', '"Tb"'),
+        ('CREATE TABLE app.tb ("Id" bigint)', '"Id"'),
+        ('CREATE TABLE app.tb (id bigint); CREATE INDEX "Ix" ON app.tb (id)', '"Ix"'),
+        ('CREATE VIEW app."user" AS SELECT 1 AS x', '"user"'),
+        ('CREATE FUNCTION app."Fn"() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$', '"Fn"'),
+    ],
+)
+def test_introspect_refuses_a_name_that_needs_quotes(
+    fresh_database: str, ddl: str, named: str
+) -> None:
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute("CREATE SCHEMA app")
+        conn.execute(ddl)
+    with pytest.raises(DifferError) as refused:
+        platform.introspect(fresh_database, schemas=["app"])
+    assert refused.value.error_code == "DIFFER_403"
+    assert named in str(refused.value)
+
+
+def test_introspect_refuses_a_quoted_schema(fresh_database: str) -> None:
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute('CREATE SCHEMA "Sales"; CREATE TABLE "Sales".tb (id bigint)')
+    with pytest.raises(DifferError, match='"Sales"'):
+        platform.introspect(fresh_database)
+
+
+def test_introspect_reads_past_a_quoted_name_in_a_schema_it_was_not_asked_for(
+    fresh_database: str,
+) -> None:
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute("CREATE SCHEMA app; CREATE TABLE app.tb (id bigint)")
+        conn.execute('CREATE SCHEMA other; CREATE TABLE other."Tb" (id bigint)')
+    model = platform.introspect(fresh_database, schemas=["app"])
+    assert [ref.identity for ref in model.tables] == [("app", "tb")]

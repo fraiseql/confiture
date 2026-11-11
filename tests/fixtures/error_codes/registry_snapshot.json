@@ -126,7 +126,7 @@
     "resolution_hint": "Re-run with --allow-destructive, or set migration.destructive to gated or allow"
   },
   "DIFFER_403": {
-    "message_template": "A schema being compared names an object that needs quotes",
+    "message_template": "A schema being compared, parsed or introspected names an object that needs quotes",
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Rename it so it needs no quotes; `confiture lint` lists every such name (naming_003, naming_004)"

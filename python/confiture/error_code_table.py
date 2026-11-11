@@ -203,7 +203,7 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
     },
     {
         "code": "DIFFER_403",
-        "message_template": "A schema being compared names an object that needs quotes",
+        "message_template": "A schema being compared, parsed or introspected names an object that needs quotes",
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (

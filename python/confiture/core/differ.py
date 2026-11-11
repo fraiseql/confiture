@@ -397,8 +397,9 @@ def refuse_quoted_names(side: str, quoted: list[QuotedName]) -> None:
     first = quoted[0]
     more = len(quoted) - 1
     others = f" (and {more} more)" if more else ""
+    where = f" at {comment_text(first.file)}:{first.line}" if first.file else ""
     raise DifferError(
-        f"The {side} schema names {first.kind} {comment_text(first.spelled)}{others}, "
+        f"The {side} schema names {first.kind} {comment_text(first.spelled)}{where}{others}, "
         "which needs quotes: confiture supports a name only as PostgreSQL writes it bare",
         error_code="DIFFER_403",
         resolution_hint=(

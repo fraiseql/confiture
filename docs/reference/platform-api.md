@@ -36,10 +36,14 @@ spells. *env* reads the project's build instead: the files `confiture build
 --env <env> --schema-only` selects, in build order. `COPY … FROM stdin`
 data is blanked before parsing, so a tree that seeds inline still reads.
 
+A name that needs quotes is refused: confiture supports a name only as
+PostgreSQL writes it bare, and a consumer composes SQL from this model.
+
 **Raises**
 
 - `ValueError`: unless exactly one of *source* and *env* is given.
 - `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects the DDL, naming the file and line; `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
+- `DifferError`: `DIFFER_403` when the schema names an object that needs quotes, naming the first and where it is written.
 
 ### `introspect`
 
@@ -61,9 +65,13 @@ A bare `str` is one schema name. A schema the database does not have holds
 nothing, so it adds nothing: `schemas=["nope"]` is an empty model, not an
 error.
 
+A name that needs quotes in a schema it reads is refused, as
+`parse_schema` refuses one; a schema it does not read is not looked at.
+
 **Raises**
 
 - `ConfigurationError`: `CONFIG_006` when the URL does not connect.
+- `DifferError`: `DIFFER_403` when the database names an object that needs quotes in *schemas*, naming the first.
 - `TypeError`: a *database* that is neither a URL nor a `Connection`.
 
 ### `diff`

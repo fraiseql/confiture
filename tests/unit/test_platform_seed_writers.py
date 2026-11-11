@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from confiture import platform
+from confiture.core.schema_sources import read_schema
 
 EX06 = Path(__file__).resolve().parents[2] / "examples" / "06-prep-seed-validation"
 
@@ -32,7 +33,9 @@ CREATE TABLE app.item (
 
 @pytest.fixture(scope="module")
 def model() -> platform.SchemaModel:
-    return platform.parse_schema(DDL)
+    # Read past the seam's refusal of `"Label"` (DIFFER_403): what a writer does
+    # with a name that needs quotes is the second layer, tested on its own.
+    return read_schema(DDL).model
 
 
 ROW = {
