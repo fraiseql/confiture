@@ -11,9 +11,10 @@ mod hasher;
 
 use hasher::hash_files;
 
-/// Python module definition.
+/// Python module definition: `confiture._core`.
 #[pymodule]
-fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "_core")]
+fn core_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hash_files, m)?)?;
     Ok(())
 }
