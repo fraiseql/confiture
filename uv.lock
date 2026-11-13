@@ -298,7 +298,7 @@ wheels = [
 
 [[package]]
 name = "fraiseql-confiture"
-version = "1.48.0"
+version = "1.49.0"
 source = { editable = "." }
 dependencies = [
     { name = "pglast" },
