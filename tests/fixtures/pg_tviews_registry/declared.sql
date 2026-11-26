@@ -7,7 +7,7 @@ CREATE FUNCTION label_of(k bigint) RETURNS text LANGUAGE sql STABLE
 AS $f$ SELECT v FROM public.tb_setting s WHERE s.k = label_of.k $f$;
 SELECT tviews.pg_tviews_create_or_replace('tv_user', $q$
 SELECT u.pk_user, u.id,
-       jsonb_build_object('name', u.name, 'label', (SELECT v FROM tb_label LIMIT 1),
+       jsonb_build_object('name', u.name, 'label', (SELECT v FROM tb_label ORDER BY k LIMIT 1),
                           'setting', label_of(u.pk_user)) AS data
 FROM tb_user u$q$, options => '{"logged": false, "fillfactor": 90, "uncascaded_policy": "full_refresh",
   "uncascaded_tables": {"tb_label": "warn"}, "function_reads": {"public.label_of(bigint)": ["tb_setting"]},

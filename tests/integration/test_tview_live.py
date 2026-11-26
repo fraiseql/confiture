@@ -135,7 +135,7 @@ UNCASCADED = """
 CREATE TABLE tb_label (k int PRIMARY KEY, v text);
 CREATE TABLE tb_user (pk_user bigint PRIMARY KEY, id uuid NOT NULL UNIQUE, name text);
 SELECT tviews.pg_tviews_create_or_replace('tv_user', $q$
-SELECT u.pk_user, u.id, jsonb_build_object('label', (SELECT v FROM tb_label LIMIT 1)) AS data
+SELECT u.pk_user, u.id, jsonb_build_object('label', (SELECT v FROM tb_label ORDER BY k LIMIT 1)) AS data
 FROM tb_user u$q$, options => '{"uncascaded_policy": "full_refresh"}');
 """
 

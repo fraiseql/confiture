@@ -52,7 +52,7 @@
           "tb_label": "warn"
         }
       },
-      "query": "\nSELECT u.pk_user, u.id,\n       jsonb_build_object('name', u.name, 'label', (SELECT v FROM tb_label LIMIT 1),\n                          'setting', label_of(u.pk_user)) AS data\nFROM tb_user u",
+      "query": "\nSELECT u.pk_user, u.id,\n       jsonb_build_object('name', u.name, 'label', (SELECT v FROM tb_label ORDER BY k LIMIT 1),\n                          'setting', label_of(u.pk_user)) AS data\nFROM tb_user u",
       "references": {},
       "schema": "public",
       "time_dependent": false,
