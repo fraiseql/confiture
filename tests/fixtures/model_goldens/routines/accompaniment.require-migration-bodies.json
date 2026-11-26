@@ -121,7 +121,7 @@
     "ok": true,
     "command": "migrate validate",
     "parser": {
-      "pglast": "8.7",
+      "pglast": "8.9",
       "pg_major": 18
     }
   }
