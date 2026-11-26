@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed the dependency lock (#840). Notable updates: pglast 8.9, fastapi
+  0.165.0, sqlglot 30.33.0, psycopg 3.3.9, typer 0.29.2 and pytest-asyncio 1.5.0.
+  The `parser.pglast` stamp in every JSON payload now reads `8.9`. The model,
+  diff, drift and routine goldens moved by that line alone, and no expression is
+  spelled differently.
+- ruff 0.17.5 (#841) and ty 0.0.108 are pinned together in the lock, the
+  pre-commit hook, the CI workflows and the local Dagger pipeline. ty's
+  `invalid-return-type` suppression uses its new name, `invalid-explicit-return`.
+
 ## [1.49.0] - 2026-11-13
 
 ### Changed
