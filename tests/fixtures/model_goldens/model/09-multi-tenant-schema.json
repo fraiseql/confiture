@@ -61,6 +61,7 @@
           "text"
         ]
       ],
+      "standard_body": false,
       "volatility": "volatile"
     }
   ],

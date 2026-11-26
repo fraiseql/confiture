@@ -27,6 +27,7 @@ ROW = RoutineRow(
     result="record",
     returns_set=False,
     source=" SELECT x, z ",
+    standard_body=False,
     cost=100.0,
     arg_names=("x", "y", "z"),
     arg_modes=("i", "o", "b"),

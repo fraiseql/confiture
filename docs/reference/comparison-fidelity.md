@@ -55,7 +55,8 @@ PostgreSQL's deparser prints them, and two majors may print one expression diffe
 | index expression key | parse tree | exists | as stored |
 | partial index predicate | parse tree | exists | as stored |
 | view / materialized view query | as written | exists | as stored (deparsed) |
-| routine body | as written | as written (PostgreSQL keeps it verbatim) | as written |
+| routine body (`AS '…'`) | as written | as written (PostgreSQL keeps it verbatim) | as written |
+| routine body (SQL-standard: `RETURN …`, `BEGIN ATOMIC`) | as written (pglast's printing) | exists | as stored (deparsed) |
 | generated column expression | not compared | not compared | not compared |
 
 A named index whose keys, uniqueness or predicate change is dropped and created again, at

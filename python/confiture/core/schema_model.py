@@ -416,7 +416,11 @@ class Routine:
     ``TABLE`` parameters are in neither: PostgreSQL does not resolve a call by them.
 
     ``body`` is the text between the ``AS`` quotes, as written, and ``None`` where
-    that text is not SQL (``LANGUAGE c`` / ``internal``: a symbol). ``returns`` is
+    that text is not SQL (``LANGUAGE c`` / ``internal``: a symbol). A SQL-standard
+    body (``RETURN expr``, ``BEGIN ATOMIC … END``) has no quotes: PostgreSQL parses
+    it at ``CREATE`` and keeps it analysed (``prosqlbody``), so ``body`` is that body
+    printed — by pglast for a tree, by ``pg_get_function_sqlbody`` for a database —
+    and ``standard_body`` says so. ``returns`` is
     the result type as the reader spells it, ``None`` for a procedure.
     ``security_definer``, ``search_path_pinned`` and ``volatility`` are what
     PostgreSQL records — invoker, unpinned and ``volatile`` when nothing is written.
@@ -430,6 +434,7 @@ class Routine:
     returns: str | None = None
     language: str | None = None
     body: str | None = None
+    standard_body: bool = False
     security_definer: bool = False
     search_path_pinned: bool = False
     volatility: Volatility = "volatile"
@@ -1146,6 +1151,12 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "the catalog lists a table's constraints and indexes by name, a tree by where "
         "it declared them; which exist is the fact, not their order"
     ),
+    "standard_bodies": (
+        "a SQL-standard routine body (RETURN expr, BEGIN ATOMIC) is stored analysed and "
+        "read back through pg_get_function_sqlbody's deparse — qualified as search_path "
+        "needs, constants resolved — so what is compared is that one exists, unless the "
+        "tree is materialised and both bodies come through one deparser"
+    ),
     "routine_spellings": (
         "a routine's argument and result types as a file wrote them (`int8`, "
         "`RETURNS int4`) are spelling; the catalog knows format_type's (`bigint`, "
@@ -1284,8 +1295,14 @@ def _parity_table(table: Table, rules: frozenset[str]) -> Table:
 
 
 def parity_routine(routine: Routine, rules: frozenset[str] = ALL_PARITY_RULES) -> Routine:
-    """*routine* as *rules* compare it: identity by ``signature_key``, never its spelling."""
+    """*routine* as *rules* compare it: identity by ``signature_key``, never its spelling.
+
+    Under ``standard_bodies`` a SQL-standard body compares as present: the tree's is
+    pglast's printing, the database's PostgreSQL's analysed deparse.
+    """
     routine = replace(routine, schema=_fold_schema(routine.schema, rules))
+    if routine.standard_body and routine.body is not None and "standard_bodies" in rules:
+        routine = replace(routine, body=_EXPRESSION)
     if "routine_spellings" not in rules:
         return routine
     return replace(routine, signature="", returns=None)

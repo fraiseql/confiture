@@ -582,6 +582,7 @@
         "returns",
         "language",
         "body",
+        "standard_body",
         "security_definer",
         "search_path_pinned",
         "volatility"
@@ -642,6 +643,9 @@
             "string",
             "null"
           ]
+        },
+        "standard_body": {
+          "type": "boolean"
         },
         "security_definer": {
           "type": "boolean"

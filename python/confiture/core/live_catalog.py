@@ -1175,6 +1175,7 @@ class RoutineRow:
     result: str | None
     returns_set: bool
     source: str | None
+    standard_body: bool
     cost: float
     arg_names: tuple[str, ...]
     arg_modes: tuple[str, ...]
@@ -1280,7 +1281,8 @@ SELECT p.oid,
        l.lanname,
        pg_get_function_result(p.oid),
        p.proretset,
-       p.prosrc,
+       CASE WHEN p.prosqlbody IS NULL THEN p.prosrc ELSE pg_get_function_sqlbody(p.oid) END,
+       p.prosqlbody IS NOT NULL,
        p.procost,
        p.proargnames,
        p.proargmodes::text[],
@@ -1340,7 +1342,8 @@ def routine_of(row: RoutineRow) -> Routine:
     call is resolved by, ``VARIADIC`` included and ``OUT`` left out — and keyed
     through ``type_lattice.signature_from_type_names``, the canonicaliser the DDL
     side's keys come from. ``prosrc`` is the body where it is one: a C or
-    internal routine's is the name of a symbol.
+    internal routine's is the name of a symbol. A SQL-standard body has an empty
+    ``prosrc``: it is ``pg_get_function_sqlbody``'s deparse, ``standard_body`` set.
     """
     return Routine(
         name=row.name,
@@ -1351,6 +1354,7 @@ def routine_of(row: RoutineRow) -> Routine:
         returns=row.result,
         language=row.language,
         body=None if row.language in _SYMBOL_LANGUAGES else row.source,
+        standard_body=row.standard_body,
         security_definer=row.security_definer,
         search_path_pinned=row.search_path_pinned,
         volatility=_VOLATILITIES.get(row.volatility, "volatile"),
@@ -1728,6 +1732,7 @@ def _catalog_routines(
             result=result,
             returns_set=bool(returns_set),
             source=source,
+            standard_body=bool(standard_body),
             cost=float(cost),
             arg_names=tuple(arg_names or ()),
             arg_modes=tuple(arg_modes or ()),
@@ -1749,6 +1754,7 @@ def _catalog_routines(
             result,
             returns_set,
             source,
+            standard_body,
             cost,
             arg_names,
             arg_modes,

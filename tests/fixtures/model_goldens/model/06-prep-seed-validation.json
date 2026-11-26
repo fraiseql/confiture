@@ -36,6 +36,7 @@
       "security_definer": false,
       "signature": "",
       "signature_key": [],
+      "standard_body": false,
       "volatility": "volatile"
     }
   ],
