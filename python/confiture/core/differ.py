@@ -172,7 +172,7 @@ CATALOGUED = ComparisonPolicy("catalogued", renames=False, rules=ALL_PARITY_RULE
 MATERIALISED = ComparisonPolicy(
     "materialised",
     renames=False,
-    rules=ALL_PARITY_RULES - {"analysed_expressions", "view_definitions"},
+    rules=ALL_PARITY_RULES - {"analysed_expressions", "view_definitions", "standard_bodies"},
 )
 #: Two databases: both in PostgreSQL's spelling, nothing to normalise.
 EXACT = ComparisonPolicy("exact", renames=False, rules=frozenset())

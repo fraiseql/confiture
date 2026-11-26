@@ -452,8 +452,9 @@ closely an expression is compared. With a scratch server (`scratch_url` in the
 environment, `--scratch-url` on `drift` and `migrate diff`), `schema_sources.materialised_side`
 builds the tree into a throwaway database (`ExpectedSchemaDB`) and reads it back, and
 `MATERIALISED` compares PostgreSQL's reading with PostgreSQL's reading — every parity
-rule but `analysed_expressions` and `view_definitions`, so a CHECK, an index predicate
-and a view's query compare as stored. What the catalog reads by existence alone (a
+rule but `analysed_expressions`, `view_definitions` and `standard_bodies`, so a CHECK,
+an index predicate, a view's query and a `RETURN …` / `BEGIN ATOMIC` routine body
+compare as stored. What the catalog reads by existence alone (a
 domain, a type, an aggregate, a policy, …) keeps the tree's statement on that side, so
 only its existence is compared and a migration still creates it; the side carries the
 read's notes (`DIFFER_402`, `DIFFER_403`) too. A payload carries `"fidelity"` only when it is

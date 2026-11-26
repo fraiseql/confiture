@@ -46,6 +46,7 @@ from confiture.core.ddl_walk import (
     render_default,
     routine_body,
     routine_options,
+    standard_body,
     storage_pinned,
     tview_calls,
     tview_of,
@@ -721,6 +722,7 @@ def _inherited_names(stmt: Any) -> tuple[RelationName, ...]:
 def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     schema, name = split_names(stmt.funcname)
     language, body = routine_body(stmt)
+    sql_body = standard_body(stmt)
     options = routine_options(stmt)
     kind: RoutineKind = "procedure" if stmt.is_procedure else "function"
     return _object(
@@ -738,7 +740,8 @@ def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
             returns=RawStream()(stmt.returnType) if stmt.returnType is not None else None,
             language=language,
             # A C or internal routine's AS clause names a symbol, not a body.
-            body=None if language in _SYMBOL_LANGUAGES else body,
+            body=sql_body or (None if language in _SYMBOL_LANGUAGES else body),
+            standard_body=sql_body is not None,
             security_definer=options.security_definer,
             search_path_pinned=options.search_path_pinned,
             volatility=options.volatility,

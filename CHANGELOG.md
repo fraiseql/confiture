@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A SQL-standard routine body (`RETURN expr`, `BEGIN ATOMIC … END`) is compared,
+  and no longer reads as a change.** PostgreSQL keeps such a body analysed
+  (`prosqlbody`) and leaves `prosrc` empty, while the tree's model held no body for
+  it. So a tree and the database built from it disagreed (`None` against `''`):
+  `drift` and `migrate diff` against a database reported every such routine as
+  redefined, and one changed in the database looked no different. Both readers now
+  hold the body: the tree's as pglast prints it, the database's as
+  `pg_get_function_sqlbody` deparses it, with the new `Routine.standard_body` set.
+  Two trees compare it as written. A tree and a database compare that it exists,
+  under the new `standard_bodies` parity rule, because the server rewrites it
+  (`public.unaccent('"public".unaccent'::regdictionary, $1)` reads back
+  `unaccent('unaccent'::regdictionary, $1)`). With a scratch server
+  (`--scratch-url`) both bodies come through one deparser and compare exactly. The
+  text body-drift check (`migrate fix-signatures`, `validate`) leaves such a body to
+  that comparison. The model wire gains `standard_body` on every routine.
+
 ### Changed
 
 - Refreshed the dependency lock (#840). Notable updates: pglast 8.9, fastapi

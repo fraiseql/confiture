@@ -59,6 +59,7 @@ _ROW = RoutineRow(
     result="void",
     returns_set=False,
     source="",
+    standard_body=False,
     cost=100.0,
     arg_names=(),
     arg_modes=(),

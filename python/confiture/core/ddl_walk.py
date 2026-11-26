@@ -1382,6 +1382,21 @@ def routine_body(stmt: Any) -> tuple[str | None, str | None]:
     return language, body
 
 
+def standard_body(stmt: Any) -> str | None:
+    """A ``CreateFunctionStmt``'s SQL-standard body as pglast prints it, or ``None``.
+
+    ``RETURN expr`` is one ``ReturnStmt``; ``BEGIN ATOMIC … END`` a list of
+    statements (pglast nests it one level). A routine with an ``AS`` body has none.
+    """
+    body = getattr(stmt, "sql_body", None)
+    if body is None:
+        return None
+    if not isinstance(body, tuple | list):
+        return RawStream()(body)
+    statements = [s for part in body for s in (part if isinstance(part, tuple | list) else (part,))]
+    return " ".join(["BEGIN ATOMIC", *(f"{RawStream()(s)};" for s in statements), "END"])
+
+
 #: ``IMMUTABLE`` / ``STABLE`` / ``VOLATILE`` as the parser spells the option.
 _VOLATILITIES: dict[str, Volatility] = {
     "immutable": "immutable",

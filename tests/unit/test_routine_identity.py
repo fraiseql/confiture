@@ -181,6 +181,7 @@ class TestABodyIsTheTextBetweenTheQuotes:
             result="integer",
             returns_set=False,
             source="SELECT 1",
+            standard_body=False,
             cost=1.0,
             arg_names=("a",),
             arg_modes=(),

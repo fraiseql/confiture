@@ -78,6 +78,7 @@ CREATE TABLE child (
 CREATE INDEX child_s ON child (lower(s));
 CREATE SEQUENCE seq MINVALUE 1 MAXVALUE 9223372036854775807;
 CREATE FUNCTION f(a int8) RETURNS int4 LANGUAGE sql AS 'select 1';
+CREATE FUNCTION g(a int) RETURNS int LANGUAGE sql RETURN a + 1;
 CREATE VIEW v AS SELECT 1 AS one;
 """
 
@@ -240,7 +241,11 @@ def test_each_policy_says_how_closely_it_reads_an_expression(policy, fidelity) -
 
 def test_a_materialised_tree_compares_what_postgresql_analyses_as_stored() -> None:
     """Both sides are PostgreSQL's spelling: only what the catalog cannot say is a rule."""
-    assert MATERIALISED.rules == ALL_PARITY_RULES - {"analysed_expressions", "view_definitions"}
+    assert MATERIALISED.rules == ALL_PARITY_RULES - {
+        "analysed_expressions",
+        "view_definitions",
+        "standard_bodies",
+    }
     stored = "CREATE TABLE t (a INT, CHECK ((a > 0)));"
     other = "CREATE TABLE t (a INT, CHECK ((a > 1)));"
     side = Side.of(read_text(stored))

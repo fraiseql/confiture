@@ -597,7 +597,11 @@ types canonicalised, which is what makes two routines one. `OUT` and
 `TABLE` parameters are in neither: PostgreSQL does not resolve a call by them.
 
 `body` is the text between the `AS` quotes, as written, and `None` where
-that text is not SQL (`LANGUAGE c` / `internal`: a symbol). `returns` is
+that text is not SQL (`LANGUAGE c` / `internal`: a symbol). A SQL-standard
+body (`RETURN expr`, `BEGIN ATOMIC … END`) has no quotes: PostgreSQL parses
+it at `CREATE` and keeps it analysed (`prosqlbody`), so `body` is that body
+printed — by pglast for a tree, by `pg_get_function_sqlbody` for a database —
+and `standard_body` says so. `returns` is
 the result type as the reader spells it, `None` for a procedure.
 `security_definer`, `search_path_pinned` and `volatility` are what
 PostgreSQL records — invoker, unpinned and `volatile` when nothing is written.
@@ -612,6 +616,7 @@ PostgreSQL records — invoker, unpinned and `volatile` when nothing is written.
 | `returns` | `str \| None` | `None` |
 | `language` | `str \| None` | `None` |
 | `body` | `str \| None` | `None` |
+| `standard_body` | `bool` | `False` |
 | `security_definer` | `bool` | `False` |
 | `search_path_pinned` | `bool` | `False` |
 | `volatility` | `Volatility` | `'volatile'` |

@@ -181,7 +181,8 @@ class FunctionBodyDriftDetector:
 
         A routine with no body on either side is counted in ``functions_checked``
         but never reported as drift (a LANGUAGE C function's ``AS`` clause is a
-        symbol, not a body).
+        symbol, not a body), nor is one with a SQL-standard body, which the two
+        sides print differently (``SchemaDiffer`` compares it).
 
         Args:
             source: The expected routines — the DDL's, or a migration replay's.
@@ -195,7 +196,12 @@ class FunctionBodyDriftDetector:
         drifts = [
             self._drift(actual, expected.body, actual.body)
             for actual, expected in sorted(changed, key=lambda pair: printed_signature(pair[0]))
-            if expected.body is not None and actual.body is not None
+            if expected.body is not None
+            and actual.body is not None
+            # A SQL-standard body is pglast's printing on one side and PostgreSQL's
+            # analysed deparse on the other: the engine compares it (present, or
+            # exactly when the tree is materialised), never this text.
+            and not (expected.standard_body or actual.standard_body)
         ]
 
         elapsed = (time.monotonic() - start) * 1000

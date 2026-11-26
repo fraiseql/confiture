@@ -277,6 +277,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("returns", "str | None"),
         ("language", "str | None"),
         ("body", "str | None"),
+        ("standard_body", "bool"),
         ("security_definer", "bool"),
         ("search_path_pinned", "bool"),
         ("volatility", "Volatility"),
